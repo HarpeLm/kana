@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import { useDroppedFiles } from "../hooks/useDroppedFiles";
 import { pickFiles, withAttachments } from "../lib/attachments";
@@ -14,9 +14,12 @@ interface ComposerProps {
   onStop: () => void;
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
+  /** Remplace le mode, à gauche sous la ligne ; le mode passe alors à droite. */
+  footerLeft?: ReactNode;
+  placeholder?: string;
 }
 
-export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange }: ComposerProps) {
+export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange, footerLeft, placeholder }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
 
@@ -63,7 +66,7 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) submit();
             }}
-            placeholder={dragging ? "Dépose les fichiers ici" : "Demander à Kana d'écrire, refactorer ou déboguer..."}
+            placeholder={dragging ? "Dépose les fichiers ici" : (placeholder ?? "Demander à Kana d'écrire, refactorer ou déboguer...")}
             className="min-w-0 flex-1 bg-transparent text-[15px] text-[#ecebe4] placeholder-[#7e7d76] outline-none"
           />
           {busy ? (
@@ -86,8 +89,11 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
           )}
         </div>
         <div className="mt-1.5 flex items-center justify-between gap-3">
-          <ModeMenu mode={mode} onChange={onModeChange} />
-          <span className="pr-3 text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>
+          {footerLeft ?? <ModeMenu mode={mode} onChange={onModeChange} />}
+          <div className="flex items-center gap-1">
+            {footerLeft && <ModeMenu mode={mode} onChange={onModeChange} align="right" />}
+            <span className="pr-3 text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>
+          </div>
         </div>
       </div>
     </div>
