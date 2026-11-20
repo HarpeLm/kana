@@ -5,6 +5,7 @@ mod auth;
 mod client;
 mod error;
 mod event;
+mod mcp;
 mod protocol;
 mod reader;
 
@@ -13,3 +14,4 @@ pub use auth::AuthMethod;
 pub use client::AcpClient;
 pub use error::AcpError;
 pub use event::{AcpEvent, PermissionOption};
+pub use mcp::McpServerConfig;
