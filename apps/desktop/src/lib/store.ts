@@ -32,6 +32,8 @@ export async function loadStoredConversations(): Promise<Conversation[]> {
     branch: row.branch ?? undefined,
     forkedFrom: row.forkedFrom ?? undefined,
     forkContext: row.forkContext ?? undefined,
+    projectPath: row.projectPath ?? undefined,
+    useWorktree: row.useWorktree ?? true,
   }));
 }
 
@@ -54,6 +56,8 @@ export async function saveStoredConversations(items: Conversation[]): Promise<vo
       branch: c.branch ?? null,
       forkedFrom: c.forkedFrom ?? null,
       forkContext: c.forkContext ?? null,
+      projectPath: c.projectPath ?? null,
+      useWorktree: c.useWorktree ?? true,
     })),
   });
 }
