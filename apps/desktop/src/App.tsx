@@ -62,6 +62,7 @@ export default function App() {
   // Le terminal est monté à la première ouverture puis gardé : son shell survit quand on le masque.
   const [terminalOpened, setTerminalOpened] = useState(false);
   const [terminalMaximized, setTerminalMaximized] = useState(false);
+  const [filesMaximized, setFilesMaximized] = useState(false);
   const terminalPanel = useResizableWidth({
     storageKey: "kana-terminal-width",
     min: 320,
@@ -70,6 +71,7 @@ export default function App() {
     from: "right",
   });
   const terminalFills = showTerminal && terminalMaximized;
+  const filesFill = showFiles && filesMaximized && !terminalFills;
   const terminalIsSide = showTerminal && !terminalMaximized;
   const diffPanel = useResizableWidth({
     storageKey: "kana-diff-width",
@@ -81,13 +83,13 @@ export default function App() {
   });
   const filesPanel = useResizableWidth({
     storageKey: "kana-files-width",
-    min: 300,
-    max: 800,
-    fallback: 420,
+    min: 420,
+    max: 1100,
+    fallback: 700,
     from: "right",
     offsetRight:
       (terminalIsSide ? terminalPanel.width : 0) +
-      (showDiff && !terminalFills ? diffPanel.width : 0),
+      (showDiff && !terminalFills && !filesFill ? diffPanel.width : 0),
   });
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
@@ -154,7 +156,7 @@ export default function App() {
       <div className="flex min-w-0 flex-1 overflow-hidden bg-[#181817]">
       <div
         className={`flex min-w-0 flex-1 flex-col overflow-hidden ${
-          showTerminal && terminalMaximized ? "hidden" : ""
+          terminalFills || filesFill ? "hidden" : ""
         }`}
       >
         <Header
@@ -227,14 +229,19 @@ export default function App() {
 
         <FilesDock
           visible={showFiles && !terminalFills}
+          maximized={filesMaximized}
           width={filesPanel.width}
           dragging={filesPanel.dragging}
           onResizeStart={filesPanel.startDrag}
-          onClose={() => setShowFiles(false)}
+          onToggleMaximize={() => setFilesMaximized((v) => !v)}
+          onClose={() => {
+            setShowFiles(false);
+            setFilesMaximized(false);
+          }}
         />
 
         <DiffDock
-          visible={showDiff && !terminalFills}
+          visible={showDiff && !terminalFills && !filesFill}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
           onResizeStart={diffPanel.startDrag}
