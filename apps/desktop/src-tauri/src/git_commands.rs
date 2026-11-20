@@ -2,17 +2,40 @@
 
 use std::path::PathBuf;
 
-use kana_git::DiffReport;
+use kana_git::{DiffReport, FileList, FilePreview};
 
-/// Les changements du dépôt. Sans chemin, on part du dossier où l'app a été lancée.
+/// Dossier d'où chercher le dépôt : celui qu'on demande, sinon celui où l'app a été lancée.
+fn start_dir(path: Option<String>) -> Result<PathBuf, String> {
+    path.map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or_else(|| "dossier de départ introuvable".to_string())
+}
+
+/// Les changements du dépôt.
 #[tauri::command]
 pub async fn git_diff(path: Option<String>) -> Result<DiffReport, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let start = path
-            .map(PathBuf::from)
-            .or_else(|| std::env::current_dir().ok())
-            .ok_or_else(|| "dossier de départ introuvable".to_string())?;
-        kana_git::diff(&start).map_err(|e| e.to_string())
+        kana_git::diff(&start_dir(path)?).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Les fichiers du dépôt (ceux que `.gitignore` écarte sont exclus).
+#[tauri::command]
+pub async fn repo_files(path: Option<String>) -> Result<FileList, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::list_files(&start_dir(path)?).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Le début d'un fichier du dépôt, pour l'aperçu.
+#[tauri::command]
+pub async fn read_repo_file(path: Option<String>, file: String) -> Result<FilePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::read_preview(&start_dir(path)?, &file).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
