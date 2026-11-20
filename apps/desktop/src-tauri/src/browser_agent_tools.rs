@@ -6,7 +6,10 @@ use kana_mcp::ToolDriver;
 use serde_json::Value;
 use tauri::Webview;
 
-use crate::{browser::parse_web_url, browser_agent::BrowserAgent};
+use crate::{
+    browser::parse_web_url,
+    browser_agent::{BrowserAgent, debug_log},
+};
 
 fn js_string(value: &str) -> String {
     serde_json::to_string(value).expect("une chaîne se sérialise toujours")
@@ -116,7 +119,22 @@ impl BrowserAgent {
 }
 
 impl ToolDriver for BrowserAgent {
+    fn note(&self, event: &str) {
+        debug_log(event);
+    }
+
     fn call(&self, name: &str, arguments: &Value) -> Result<String, String> {
+        let result = self.run(name, arguments);
+        debug_log(&match &result {
+            Ok(text) => format!("outil {name} : ok ({} caractères)", text.len()),
+            Err(error) => format!("outil {name} : erreur : {error}"),
+        });
+        result
+    }
+}
+
+impl BrowserAgent {
+    fn run(&self, name: &str, arguments: &Value) -> Result<String, String> {
         match name {
             "browser_navigate" => self.navigate(arguments),
             "browser_wait" => {
