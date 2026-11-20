@@ -74,6 +74,17 @@ struct ApprovalRequest {
     detail: String,
 }
 
+/// Journal de diagnostic, écrit seulement dans les versions de développement.
+pub(crate) fn debug_log(line: &str) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/kana-debug.log") {
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 pub struct BrowserAgent {
     pub(crate) app: AppHandle,
 }
@@ -96,6 +107,7 @@ impl BrowserAgent {
                 return Ok(webview);
             }
             if attempt == 0 {
+                debug_log("navigateur : demande d'ouverture du Globe");
                 let _ = self.app.emit("browser-agent-open", ());
             }
             thread::sleep(OPEN_STEP);
@@ -158,11 +170,13 @@ impl BrowserAgent {
         let (sender, receiver) = mpsc::channel();
         state.pending.lock().unwrap().insert(id.clone(), sender);
         let request = ApprovalRequest { request_id: id.clone(), kind, host: host.to_owned(), detail: detail.to_owned() };
+        debug_log(&format!("accord demandé : {kind} {host} {detail}"));
         if self.app.emit("browser-agent-approval", request).is_err() {
             state.pending.lock().unwrap().remove(&id);
             return false;
         }
         let answer = receiver.recv_timeout(APPROVAL_TIMEOUT).unwrap_or(false);
+        debug_log(&format!("accord reçu : {answer}"));
         state.pending.lock().unwrap().remove(&id);
         answer
     }
