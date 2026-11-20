@@ -30,6 +30,8 @@ export interface FilePreview {
 const SAMPLE_FILES = [
   "README.md",
   "Cargo.toml",
+  "Cargo.lock",
+  ".gitignore",
   "crates/kana-acp/src/lib.rs",
   "crates/kana-acp/src/client.rs",
   "crates/kana-git/src/lib.rs",
@@ -43,8 +45,8 @@ function sampleOf(path: string) {
   if (!sampleTexts.has(path)) {
     const text = path.endsWith(".md")
       ? `# Exemple\n\nAperçu de **${path}**.\n\n- un\n- deux\n\n\`\`\`rust\nfn main() {}\n\`\`\`\n`
-      : path.endsWith(".toml")
-        ? `[package]\nname = "kana"\nversion = "0.1.0"\n\n[dependencies]\nserde = "1"\n`
+      : path.endsWith(".toml") || path.endsWith(".lock")
+        ? `# Exemple\nversion = 4\n\n[[package]]\nname = "kana"\nversion = "0.1.0"\ndependencies = [\n "serde",\n]\nactive = true\n`
         : `// Aperçu d'exemple de ${path}\nfn main() {\n    println!("bonjour");\n}\n`;
     sampleTexts.set(path, { text, modified: Date.now() });
   }
