@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
-import { ArrowUp, FileText, Plus, Square, X } from "lucide-react";
+import { ArrowUp, FileText, Square, X } from "lucide-react";
 import { fileName, pickFiles, withAttachments } from "../lib/attachments";
+import type { PermissionMode } from "../lib/permissionMode";
+import ModeMenu from "./ModeMenu";
+import PlusMenu from "./PlusMenu";
 
 interface ComposerProps {
   agentLabel: string;
   busy: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
+  mode: PermissionMode;
+  onModeChange: (mode: PermissionMode) => void;
 }
 
-export default function Composer({ agentLabel, busy, onSend, onStop }: ComposerProps) {
+export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
 
-  const attach = () => {
-    pickFiles()
+  const attach = (directory = false) => {
+    pickFiles(directory)
       .then((paths) => setFiles((current) => [...new Set([...current, ...paths])]))
       .catch(() => {});
   };
@@ -64,15 +69,7 @@ export default function Composer({ agentLabel, busy, onSend, onStop }: ComposerP
           </ul>
         )}
         <div className="flex items-center gap-2 rounded-full border border-[#2f2f2d] bg-[#232322] py-2 pl-2.5 pr-2.5 transition focus-within:border-[#454542]">
-          <button
-            type="button"
-            onClick={attach}
-            title="Joindre des fichiers (⌘U)"
-            aria-label="Joindre des fichiers"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#a3a29a] transition hover:bg-[#2e2e2c] hover:text-[#ecebe4]"
-          >
-            <Plus className="h-[18px] w-[18px]" strokeWidth={1.8} />
-          </button>
+          <PlusMenu onAddFiles={() => attach()} onAddFolder={() => attach(true)} onSlash={() => setText((t) => (t ? t : "/"))} />
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -101,7 +98,10 @@ export default function Composer({ agentLabel, busy, onSend, onStop }: ComposerP
             </button>
           )}
         </div>
-        <p className="mt-2 pr-3 text-right text-[12px] text-[#8c8b83]">{agentLabel} · ACP</p>
+        <div className="mt-1.5 flex items-center justify-end gap-1 pr-1">
+          <span className="text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>
+          <ModeMenu mode={mode} onChange={onModeChange} />
+        </div>
       </div>
     </div>
   );
