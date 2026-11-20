@@ -36,6 +36,7 @@
     "marked": "^18.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "simple-icons": "^16.38.0",
     "tailwindcss": "^4.3.5"
   },
   "devDependencies": {
