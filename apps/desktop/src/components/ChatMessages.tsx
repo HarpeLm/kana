@@ -1,19 +1,13 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../lib/chatState";
-import { toolLabel } from "../lib/toolLabel";
 import ChatMarkdown from "./ChatMarkdown";
+import ToolGroup from "./ToolGroup";
 
 interface ChatMessagesProps {
   messages: ChatMessage[];
   agentLabel: string;
   onOpenLink: (url: string) => void;
 }
-
-const toolColor: Record<string, string> = {
-  completed: "text-emerald-400",
-  failed: "text-red-400",
-  in_progress: "text-[#e69b80]",
-};
 
 function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLink: (url: string) => void }) {
   return (
@@ -24,18 +18,7 @@ function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLin
           <p className="mt-1 whitespace-pre-wrap">{message.thought}</p>
         </details>
       )}
-      {message.tools.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
-          {message.tools.map((tool) => (
-            <li
-              key={tool.id}
-              className="rounded-md border border-[#2c2c29] bg-[#1e1e1c] px-2 py-0.5 font-mono text-[12px] text-[#a3a29a]"
-            >
-              <span className={toolColor[tool.status] ?? "text-[#8c8b83]"}>●</span> {toolLabel(tool)}
-            </li>
-          ))}
-        </ul>
-      )}
+      {message.tools.length > 0 && <ToolGroup tools={message.tools} />}
       {message.text && <ChatMarkdown source={message.text} onOpenLink={onOpenLink} />}
     </div>
   );
@@ -50,7 +33,7 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink }: ChatM
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-6 select-text">
-      <div className="mx-auto max-w-[740px] space-y-5 text-[14px] leading-[1.6]">
+      <div className="mx-auto max-w-[740px] space-y-5 text-[15px] leading-[1.7]">
         {messages.length === 0 && (
           <p className="pt-10 text-center text-[13px] text-[#7e7d76]">
             Écris un message pour démarrer la conversation avec {agentLabel}.
