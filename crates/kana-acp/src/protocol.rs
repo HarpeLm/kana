@@ -34,8 +34,9 @@ pub fn initialize_params() -> Value {
     })
 }
 
-pub fn new_session_params(cwd: &Path) -> Value {
-    json!({ "cwd": cwd.to_string_lossy(), "mcpServers": [] })
+/// `mcp_servers` : les serveurs MCP déjà au format ACP, que l'agent branchera à sa session.
+pub fn new_session_params(cwd: &Path, mcp_servers: Vec<Value>) -> Value {
+    json!({ "cwd": cwd.to_string_lossy(), "mcpServers": mcp_servers })
 }
 
 pub fn prompt_params(session_id: &str, text: &str) -> Value {
@@ -60,6 +61,14 @@ mod tests {
         assert_eq!(params["sessionId"], "s1");
         assert_eq!(params["prompt"][0]["type"], "text");
         assert_eq!(params["prompt"][0]["text"], "salut");
+    }
+
+    #[test]
+    fn new_session_carries_the_mcp_servers() {
+        let params = new_session_params(Path::new("/tmp"), vec![json!({ "name": "x" })]);
+        assert_eq!(params["cwd"], "/tmp");
+        assert_eq!(params["mcpServers"][0]["name"], "x");
+        assert!(new_session_params(Path::new("/tmp"), vec![])["mcpServers"].as_array().unwrap().is_empty());
     }
 
     #[test]
