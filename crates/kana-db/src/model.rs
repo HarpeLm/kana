@@ -29,6 +29,16 @@ pub struct StoredConversation {
     /// Résumé de la conversation d'origine, à glisser dans le premier message d'une bifurcation.
     #[serde(default)]
     pub fork_context: Option<String>,
+    /// Dossier du projet de la conversation (`none` : sans projet).
+    #[serde(default)]
+    pub project_path: Option<String>,
+    /// La conversation travaille dans son propre dossier de travail git (par défaut oui).
+    #[serde(default = "default_true")]
+    pub use_worktree: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Un message d'une conversation.
