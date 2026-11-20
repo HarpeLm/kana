@@ -7,6 +7,7 @@ import Header from "./components/Header";
 import ChatView from "./components/ChatView";
 import RightPanel from "./components/RightPanel";
 import RelayView from "./components/RelayView";
+import SettingsView from "./components/SettingsView";
 
 export default function App() {
   const [view, setView] = useState<View>("workspace");
@@ -42,12 +43,13 @@ export default function App() {
             setView("workspace");
           }}
           onOpenRelay={() => setView("relay")}
+          onOpenSettings={() => setView("settings")}
         />
       )}
 
       <div className="flex flex-1 flex-col overflow-hidden bg-[#181817]">
         <Header
-          title={thread.branch}
+          title={view === "settings" ? "Réglages" : thread.branch}
           toolbar={{
             onToggleSidebar: toggle(setShowSidebar),
             showTerminal,
@@ -73,7 +75,9 @@ export default function App() {
           }}
         />
 
-        {view === "workspace" ? (
+        {view === "settings" ? (
+          <SettingsView />
+        ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <ChatView
               agentLabel={thread.agent}
