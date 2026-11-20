@@ -12,7 +12,13 @@ export interface PermissionOption {
 export type AcpEvent =
   | { kind: "message"; text: string }
   | { kind: "thought"; text: string }
-  | { kind: "tool_call"; id: string; title: string | null; status: string | null }
+  | {
+      kind: "tool_call";
+      id: string;
+      title: string | null;
+      status: string | null;
+      raw_input?: unknown;
+    }
   | { kind: "permission"; request_id: string; title: string; options: PermissionOption[] }
   | { kind: "done"; stop_reason: string }
   | { kind: "error"; message: string }
