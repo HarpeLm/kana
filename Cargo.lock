@@ -2108,8 +2108,10 @@ dependencies = [
 name = "kana-mcp"
 version = "0.1.0"
 dependencies = [
+ "kana-acp",
  "serde_json",
  "tiny_http",
+ "tokio",
 ]
 
 [[package]]
