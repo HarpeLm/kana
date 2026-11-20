@@ -1,7 +1,7 @@
 //! Tests de bout en bout avec un faux agent écrit en shell.
 //! Les identifiants JSON-RPC du client sont déterministes : 1 = initialize, 2 = session/new, 3 = prompt.
 
-use kana_acp::{AcpClient, AcpEvent, AgentSpec};
+use kana_acp::{AcpClient, AcpEvent, AgentSpec, McpServerConfig};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 fn shell_agent(script: &str) -> AgentSpec {
@@ -134,4 +134,46 @@ read line; echo '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"'$KANA_TEST_KEY'
     let spec = shell_agent(script).with_env("KANA_TEST_KEY", "secret-123");
     let (client, _events) = AcpClient::spawn(&spec, &std::env::temp_dir()).await.unwrap();
     assert_eq!(client.session_id(), "secret-123");
+}
+
+/// L'agent annonce (ou non) le support HTTP, puis répond avec un identifiant de session qui dit
+/// s'il a reçu le serveur MCP dans `session/new`.
+fn mcp_probe_script(http: bool) -> String {
+    format!(
+        r#"
+read line; echo '{{"jsonrpc":"2.0","id":1,"result":{{"protocolVersion":1,"agentCapabilities":{{"mcpCapabilities":{{"http":{http}}}}}}}}}'
+read line
+# serde_json trie les clés : « headers » (donc le jeton) peut précéder « name ».
+case "$line" in *kana-browser*Bearer*|*Bearer*kana-browser*) sid=avec-mcp;; *) sid=sans-mcp;; esac
+echo '{{"jsonrpc":"2.0","id":2,"result":{{"sessionId":"'$sid'"}}}}'
+"#
+    )
+}
+
+fn browser_server() -> Vec<McpServerConfig> {
+    vec![McpServerConfig::http("kana-browser", "http://127.0.0.1:9/mcp").with_header("Authorization", "Bearer jeton")]
+}
+
+#[tokio::test]
+async fn mcp_server_is_offered_to_an_agent_that_supports_http() {
+    let (client, _events) = AcpClient::spawn_with_mcp(
+        &shell_agent(&mcp_probe_script(true)),
+        &std::env::temp_dir(),
+        &browser_server(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(client.session_id(), "avec-mcp");
+}
+
+#[tokio::test]
+async fn mcp_server_is_not_sent_to_an_agent_without_http_support() {
+    let (client, _events) = AcpClient::spawn_with_mcp(
+        &shell_agent(&mcp_probe_script(false)),
+        &std::env::temp_dir(),
+        &browser_server(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(client.session_id(), "sans-mcp");
 }
