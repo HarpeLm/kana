@@ -5,9 +5,11 @@ mod model;
 mod parse;
 mod run;
 mod status;
+mod worktree;
 
 pub use files::{FileList, FilePreview, list_files, read_preview, write_text};
 pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
 pub use parse::parse_diff;
 pub use run::{GitError, diff, repo_root};
 pub use status::{ChangedFile, changed_files, parse_status};
+pub use worktree::{add_worktree, current_branch, remove_worktree};
