@@ -75,7 +75,7 @@ impl Store {
     fn from_connection(conn: Connection) -> Result<Self, StoreError> {
         conn.execute_batch(SCHEMA)?;
         // Colonnes ajoutées après la première version de la base : ignorées si elles existent déjà.
-        for column in ["project_path TEXT", "use_worktree INTEGER NOT NULL DEFAULT 1"] {
+        for column in ["project_path TEXT", "use_worktree INTEGER NOT NULL DEFAULT 1", "model_id TEXT"] {
             let _ = conn.execute(&format!("ALTER TABLE conversations ADD COLUMN {column}"), []);
         }
         Ok(Self { conn: Mutex::new(conn) })
@@ -90,7 +90,7 @@ impl Store {
         let conn = self.lock()?;
         let mut statement = conn.prepare(
             "SELECT id, title, project, agent_id, pinned, unread, archived, opened_at,
-                    worktree, branch, forked_from, fork_context, project_path, use_worktree
+                    worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id
              FROM conversations ORDER BY position",
         )?;
         let rows = statement.query_map([], |row| {
@@ -109,6 +109,7 @@ impl Store {
                 fork_context: row.get(11)?,
                 project_path: row.get(12)?,
                 use_worktree: row.get(13)?,
+                model_id: row.get(14)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -123,21 +124,22 @@ impl Store {
             let mut upsert = tx.prepare(
                 "INSERT INTO conversations
                     (id, position, title, project, agent_id, pinned, unread, archived, opened_at,
-                     worktree, branch, forked_from, fork_context, project_path, use_worktree)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                     worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                  ON CONFLICT(id) DO UPDATE SET
                     position = excluded.position, title = excluded.title, project = excluded.project,
                     agent_id = excluded.agent_id, pinned = excluded.pinned, unread = excluded.unread,
                     archived = excluded.archived, opened_at = excluded.opened_at,
                     worktree = excluded.worktree, branch = excluded.branch,
                     forked_from = excluded.forked_from, fork_context = excluded.fork_context,
-                    project_path = excluded.project_path, use_worktree = excluded.use_worktree",
+                    project_path = excluded.project_path, use_worktree = excluded.use_worktree,
+                    model_id = excluded.model_id",
             )?;
             for (position, c) in items.iter().enumerate() {
                 upsert.execute(params![
                     c.id, position as i64, c.title, c.project, c.agent_id, c.pinned, c.unread,
                     c.archived, c.opened_at, c.worktree, c.branch, c.forked_from, c.fork_context,
-                    c.project_path, c.use_worktree,
+                    c.project_path, c.use_worktree, c.model_id,
                 ])?;
             }
         }
@@ -253,6 +255,7 @@ mod tests {
             fork_context: None,
             project_path: Some("/a/kana".into()),
             use_worktree: true,
+            model_id: Some("m".into()),
         }
     }
 
