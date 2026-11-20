@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { ChatState } from "../lib/chatState";
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
@@ -17,9 +16,6 @@ interface ChatViewProps {
 }
 
 export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink, mode, onModeChange }: ChatViewProps) {
-  // Modifier un message le remet dans la zone de saisie ; `id` change à chaque demande.
-  const [draft, setDraft] = useState<{ id: number; text: string } | null>(null);
-
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
       <ChatMessages
@@ -27,8 +23,7 @@ export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, o
         agentLabel={agentLabel}
         onOpenLink={onOpenLink}
         busy={chat.busy}
-        onRetry={onSend}
-        onEdit={(text) => setDraft((d) => ({ id: (d?.id ?? 0) + 1, text }))}
+        onSend={onSend}
       />
 
       {chat.permissions.length > 0 && (
@@ -41,7 +36,7 @@ export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, o
         </div>
       )}
 
-      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} draft={draft} />
+      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
     </main>
   );
 }
