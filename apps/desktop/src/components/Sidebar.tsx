@@ -106,7 +106,7 @@ export default function Sidebar({
           onCustomize={onOpenSettings}
         />
 
-        <div ref={listArea} className="flex-1 overflow-y-auto px-2 pb-3">
+        <div ref={listArea} className="relative flex-1 overflow-y-auto px-2 pb-3">
           {newSection && (
             <div className="mt-2">
               <RenameInput
