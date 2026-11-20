@@ -17,6 +17,7 @@ import {
 } from "../lib/browser";
 import { setActiveBrowserTab } from "../lib/browserAgent";
 import { inTauri } from "../lib/env";
+import { recordFavicon } from "../lib/favicons";
 import AgentBanner from "./AgentBanner";
 import BrowserBar from "./BrowserBar";
 import SidePane from "./SidePane";
@@ -118,6 +119,7 @@ export default function BrowserDock({
       onTitle: setTitle,
       onLoading: setLoading,
       onNewTab: (url) => add(url),
+      onFavicon: recordFavicon,
     }).then((unlisten) => (cancelled ? unlisten() : (off = unlisten)));
     return () => {
       cancelled = true;
