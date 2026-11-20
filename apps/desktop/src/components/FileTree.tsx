@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, File, FileCode, FileText, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { buildTree, filterPaths, visibleRows } from "../lib/fileTree";
 import type { ChangeStatus, ChangedFile } from "../lib/files";
-import { languageOf } from "../lib/fileKinds";
+import FileIcon from "./FileIcon";
 
 interface FileTreeProps {
   files: string[];
@@ -31,13 +31,6 @@ const STATUS_DOT: Record<ChangeStatus, string> = {
   renamed: "bg-[#6aa6e8]",
   deleted: "bg-red-400",
 };
-
-function FileIcon({ path }: { path: string }) {
-  const language = languageOf(path);
-  if (language === "markdown") return <FileText className={`${ICON} text-[#9a9992]`} strokeWidth={1.6} />;
-  if (language === "plain") return <File className={`${ICON} text-[#9a9992]`} strokeWidth={1.6} />;
-  return <FileCode className={`${ICON} text-[#9a9992]`} strokeWidth={1.6} />;
-}
 
 /** Arbre des fichiers. Les fichiers modifiés sont colorés, et leurs dossiers portent un point. */
 export default function FileTree({ files, changes, activePath, onOpen, collapseSignal }: FileTreeProps) {
