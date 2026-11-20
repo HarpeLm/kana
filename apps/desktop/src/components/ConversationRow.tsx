@@ -31,9 +31,11 @@ export default function ConversationRow({
   onCancelRename,
   onDelete,
 }: ConversationRowProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+  const menuOpen = menuAnchor !== null;
   const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, menuOpen, () => setMenuOpen(false));
+  const closeMenu = () => setMenuAnchor(null);
+  useClickOutside(ref, menuOpen, closeMenu);
 
   if (editing) {
     return (
@@ -60,7 +62,9 @@ export default function ConversationRow({
 
       <button
         title="Plus"
-        onClick={() => setMenuOpen((v) => !v)}
+        onClick={(e) =>
+          setMenuAnchor(menuOpen ? null : e.currentTarget.getBoundingClientRect())
+        }
         className={`absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[#c4c3bc] transition hover:bg-[#383835] ${
           selected || menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
@@ -68,14 +72,15 @@ export default function ConversationRow({
         <MoreHorizontal className="h-[16px] w-[16px]" strokeWidth={1.6} />
       </button>
 
-      {menuOpen && (
+      {menuAnchor && (
         <ConversationMenu
           pinned={conversation.pinned}
+          anchor={menuAnchor}
           align="right"
           onPin={() => onPin(conversation.id)}
           onRename={() => onStartRename(conversation.id)}
           onDelete={() => onDelete(conversation.id)}
-          onClose={() => setMenuOpen(false)}
+          onClose={closeMenu}
         />
       )}
     </div>
