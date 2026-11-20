@@ -37,6 +37,7 @@ pub async fn start_agent(
     thread_id: String,
     agent: String,
     cwd: Option<String>,
+    model: Option<String>,
 ) -> Result<(), String> {
     if sessions.get(&thread_id).await.is_some() {
         return Ok(());
@@ -59,6 +60,13 @@ pub async fn start_agent(
             }
             other => other.to_string(),
         })?;
+    // Le modèle choisi pour la conversation, s'il diffère de celui que l'agent propose par défaut.
+    if let Some(model) = model {
+        let known = client.models();
+        if known.current.as_deref() != Some(model.as_str()) && known.available.iter().any(|m| m.id == model) {
+            let _ = client.set_model(&model).await;
+        }
+    }
     sessions.insert(thread_id.clone(), Arc::new(client)).await;
 
     tauri::async_runtime::spawn(async move {
@@ -87,6 +95,17 @@ pub async fn send_prompt(
         let _ = client.prompt(&text).await;
     });
     Ok(())
+}
+
+/// Change le modèle d'un agent déjà lancé.
+#[tauri::command]
+pub async fn set_model(
+    sessions: State<'_, AgentSessions>,
+    thread_id: String,
+    model: String,
+) -> Result<(), String> {
+    let client = client_of(&sessions, &thread_id).await?;
+    client.set_model(&model).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
