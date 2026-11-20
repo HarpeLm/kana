@@ -5,12 +5,16 @@ mod browser;
 mod browser_agent;
 mod browser_agent_tools;
 mod browser_commands;
+mod db_commands;
 mod git_commands;
 mod secrets;
 mod settings_commands;
 mod state;
 mod terminal_commands;
 mod terminals;
+mod worktree_commands;
+
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,10 +26,17 @@ pub fn run() {
         .manage(browser_agent::AgentState::default())
         .setup(|app| {
             start_browser_mcp(app.handle())?;
+            app.manage(db_commands::open_store(app.handle())?);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             attachment_commands::image_preview,
+            db_commands::db_load_conversations,
+            db_commands::db_save_conversations,
+            db_commands::db_load_messages,
+            db_commands::db_save_messages,
+            worktree_commands::create_worktree,
+            worktree_commands::remove_worktree,
             agent_commands::start_agent,
             agent_commands::send_prompt,
             agent_commands::cancel_prompt,
