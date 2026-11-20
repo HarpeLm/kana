@@ -98,9 +98,9 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
             </button>
           )}
         </div>
-        <div className="mt-1.5 flex items-center justify-end gap-1 pr-1">
-          <span className="text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>
+        <div className="mt-1.5 flex items-center justify-between gap-3">
           <ModeMenu mode={mode} onChange={onModeChange} />
+          <span className="pr-3 text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>
         </div>
       </div>
     </div>
