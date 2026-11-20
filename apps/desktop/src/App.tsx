@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   List,
@@ -6,6 +6,8 @@ import {
   Globe,
   Folder,
   MoreHorizontal,
+  Shapes,
+  Code,
 } from "lucide-react";
 
 type View = "workspace" | "relay";
@@ -47,17 +49,35 @@ export default function App() {
   const [selectedThread, setSelectedThread] = useState("1");
   const [prompt, setPrompt] = useState("");
 
-  // États des 6 boutons en haut à droite
+  // États des boutons en haut à droite
   const [showSidebar, setShowSidebar] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
   const [showDiff, setShowDiff] = useState(true);
   const [showBrowser, setShowBrowser] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
 
+  // Menu "..." + ses 2 entrées
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showArtifacts, setShowArtifacts] = useState(false);
+  const [showBackgroundTasks, setShowBackgroundTasks] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
   // Options Quota Relay
   const [autoRelay, setAutoRelay] = useState(true);
   const [injectSummary, setInjectSummary] = useState(true);
   const [attachDiff, setAttachDiff] = useState(true);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    }
+    if (showMoreMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showMoreMenu]);
 
   const btnClass = (active: boolean) =>
     `flex h-7 w-7 items-center justify-center rounded-md transition ${
@@ -66,9 +86,11 @@ export default function App() {
         : "text-[#9c9b93] hover:bg-[#2c2c29] hover:text-[#ecebe4]"
     }`;
 
+  const showRightPanel = showDiff || showTerminal || showArtifacts || showBackgroundTasks;
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#212120] text-[#ecebe4] text-[13px] select-none">
-      {/* Barre supérieure : titre simple à gauche, uniquement les 6 icônes à droite */}
+      {/* Barre supérieure */}
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-[#333330] bg-[#212120] px-4">
         <div className="flex items-center gap-2.5">
           <span className="font-medium text-[#ecebe4]">
@@ -79,7 +101,7 @@ export default function App() {
           </span>
         </div>
 
-        {/* Uniques icônes de l'app : les 6 boutons en haut à droite */}
+        {/* Les 6 icônes en haut à droite */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setShowSidebar((v) => !v)}
@@ -121,13 +143,54 @@ export default function App() {
             <Folder className="h-4 w-4" />
           </button>
 
-          <button
-            onClick={() => setView(view === "workspace" ? "relay" : "workspace")}
-            className={btnClass(view === "relay")}
-            title="Quota Relay & Paramètres"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+          {/* Bouton "..." + menu déroulant */}
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              onClick={() => setShowMoreMenu((v) => !v)}
+              className={btnClass(showMoreMenu || showArtifacts || showBackgroundTasks)}
+              title="Plus"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+
+            {showMoreMenu && (
+              <div className="absolute right-0 top-9 z-50 w-56 rounded-xl border border-[#3a3a36] bg-[#282825] p-1.5 shadow-2xl">
+                <button
+                  onClick={() => {
+                    setShowArtifacts((v) => !v);
+                    setShowMoreMenu(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] transition ${
+                    showArtifacts
+                      ? "bg-[#353531] text-[#ecebe4]"
+                      : "text-[#dcdbd3] hover:bg-[#32322e]"
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Shapes className="h-4 w-4 text-[#a3a29a]" />
+                    Artéfacts
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowBackgroundTasks((v) => !v);
+                    setShowMoreMenu(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] transition ${
+                    showBackgroundTasks
+                      ? "bg-[#353531] text-[#ecebe4]"
+                      : "text-[#dcdbd3] hover:bg-[#32322e]"
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Code className="h-4 w-4 text-[#a3a29a]" />
+                    Tâches en arrière-plan
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -238,9 +301,29 @@ export default function App() {
               </div>
             </main>
 
-            {/* Colonne droite : Diff / Terminal */}
-            {(showDiff || showTerminal) && (
+            {/* Colonne droite : Diff / Artéfacts / Tâches en arrière-plan / Terminal */}
+            {showRightPanel && (
               <section className="flex w-[420px] shrink-0 flex-col bg-[#1d1d1b]">
+                {showArtifacts && (
+                  <div className="border-b border-[#333330] p-4">
+                    <div className="mb-2 text-xs font-medium text-[#ecebe4]">Artéfacts</div>
+                    <div className="text-xs text-[#8c8b83]">
+                      Aucun artéfact généré dans cette session.
+                    </div>
+                  </div>
+                )}
+
+                {showBackgroundTasks && (
+                  <div className="border-b border-[#333330] p-4">
+                    <div className="mb-2 text-xs font-medium text-[#ecebe4]">
+                      Tâches en arrière-plan
+                    </div>
+                    <div className="text-xs text-[#8c8b83]">
+                      Aucune tâche active en arrière-plan.
+                    </div>
+                  </div>
+                )}
+
                 {showDiff && (
                   <div className="flex flex-1 flex-col overflow-hidden">
                     <div className="border-b border-[#333330] px-4 py-2.5 font-mono text-xs text-[#a3a29a]">
