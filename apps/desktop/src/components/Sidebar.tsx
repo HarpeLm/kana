@@ -1,15 +1,22 @@
 import { useState, type PointerEvent } from "react";
 import { Settings } from "lucide-react";
 import type { View } from "../data";
-import { groupConversations, type Conversation } from "../lib/conversations";
+import {
+  ARCHIVED_GROUP,
+  groupConversations,
+  sectionsOf,
+  type Conversation,
+} from "../lib/conversations";
+import type { ConversationActions } from "./conversationActions";
 import ConversationGroup from "./ConversationGroup";
-import ConversationRow, { type ConversationActions } from "./ConversationRow";
+import ConversationRow from "./ConversationRow";
 import NavButtons, { type NavButtonsProps } from "./NavButtons";
 import SidebarNav from "./SidebarNav";
 import SidebarResizer from "./SidebarResizer";
 
-interface SidebarProps extends ConversationActions {
+interface SidebarProps {
   conversations: Conversation[];
+  actions: ConversationActions;
   selectedId: string;
   editingId: string | null;
   view: View;
@@ -27,6 +34,7 @@ interface SidebarProps extends ConversationActions {
 
 export default function Sidebar({
   conversations,
+  actions,
   selectedId,
   editingId,
   view,
@@ -39,11 +47,11 @@ export default function Sidebar({
   onArtifacts,
   onOpenScheduled,
   onOpenSettings,
-  ...actions
 }: SidebarProps) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const groups = groupConversations(conversations, query);
+  const sections = sectionsOf(conversations);
 
   const toggleSearch = () => {
     setSearching((v) => !v);
@@ -99,14 +107,19 @@ export default function Sidebar({
           <p className="px-[10px] pt-4 text-[13px] text-[#7e7d76]">Aucune conversation trouvée.</p>
         )}
         {groups.map((group) => (
-          <ConversationGroup key={group.name} name={group.name}>
+          <ConversationGroup
+            key={group.name}
+            name={group.name}
+            defaultCollapsed={group.name === ARCHIVED_GROUP}
+          >
             {group.items.map((conversation) => (
               <ConversationRow
                 key={conversation.id}
                 conversation={conversation}
                 selected={view === "workspace" && conversation.id === selectedId}
                 editing={conversation.id === editingId}
-                {...actions}
+                sections={sections}
+                actions={actions}
               />
             ))}
           </ConversationGroup>
