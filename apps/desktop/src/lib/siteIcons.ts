@@ -1,0 +1,66 @@
+import {
+  siAnthropic,
+  siCloudflare,
+  siDiscord,
+  siDocsdotrs,
+  siDuckduckgo,
+  siFigma,
+  siGithub,
+  siGitlab,
+  siGoogle,
+  siHuggingface,
+  siLinear,
+  siMdnwebdocs,
+  siNotion,
+  siNpm,
+  siReact,
+  siReddit,
+  siRust,
+  siStackoverflow,
+  siTauri,
+  siVercel,
+  siWikipedia,
+  siX,
+  siYcombinator,
+  siYoutube,
+} from "simple-icons";
+
+/** Icônes embarquées dans l'app pour les sites courants : instantanées, sans requête réseau. */
+const SITES: [domain: string, path: string][] = [
+  ["github.com", siGithub.path],
+  ["githubusercontent.com", siGithub.path],
+  ["gitlab.com", siGitlab.path],
+  ["npmjs.com", siNpm.path],
+  ["crates.io", siRust.path],
+  ["rust-lang.org", siRust.path],
+  ["docs.rs", siDocsdotrs.path],
+  ["stackoverflow.com", siStackoverflow.path],
+  ["stackexchange.com", siStackoverflow.path],
+  ["wikipedia.org", siWikipedia.path],
+  ["youtube.com", siYoutube.path],
+  ["youtu.be", siYoutube.path],
+  ["x.com", siX.path],
+  ["twitter.com", siX.path],
+  ["reddit.com", siReddit.path],
+  ["news.ycombinator.com", siYcombinator.path],
+  ["developer.mozilla.org", siMdnwebdocs.path],
+  ["discord.com", siDiscord.path],
+  ["notion.so", siNotion.path],
+  ["figma.com", siFigma.path],
+  ["linear.app", siLinear.path],
+  ["google.com", siGoogle.path],
+  ["anthropic.com", siAnthropic.path],
+  ["claude.ai", siAnthropic.path],
+  ["huggingface.co", siHuggingface.path],
+  ["duckduckgo.com", siDuckduckgo.path],
+  ["vercel.com", siVercel.path],
+  ["cloudflare.com", siCloudflare.path],
+  ["tauri.app", siTauri.path],
+  ["react.dev", siReact.path],
+];
+
+/** Le tracé SVG (viewBox 24×24) de l'icône d'un site connu, ou `null`. */
+export function siteIconPath(host: string): string | null {
+  const name = host.toLowerCase().replace(/^www\./, "");
+  return SITES.find(([domain]) => name === domain || name.endsWith(`.${domain}`))?.[1] ?? null;
+}
