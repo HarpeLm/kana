@@ -32,6 +32,9 @@ pub struct StoredConversation {
     /// Dossier du projet de la conversation (`none` : sans projet).
     #[serde(default)]
     pub project_path: Option<String>,
+    /// Modèle choisi pour cette conversation (sinon celui que l'agent propose par défaut).
+    #[serde(default)]
+    pub model_id: Option<String>,
     /// La conversation travaille dans son propre dossier de travail git (par défaut oui).
     #[serde(default = "default_true")]
     pub use_worktree: bool,
