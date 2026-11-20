@@ -53,9 +53,9 @@ function sampleOf(path: string) {
   return sampleTexts.get(path)!;
 }
 
-/** Les fichiers du dépôt où l'app a été lancée. */
-export function loadFileList(): Promise<FileList> {
-  if (inTauri) return invoke("repo_files", { path: null });
+/** Les fichiers du dépôt de `root` (le dossier de travail d'une conversation), sinon du dépôt de lancement. */
+export function loadFileList(root?: string): Promise<FileList> {
+  if (inTauri) return invoke("repo_files", { path: root ?? null });
   return Promise.resolve({
     root: "exemple (navigateur)",
     files: SAMPLE_FILES,
@@ -65,8 +65,8 @@ export function loadFileList(): Promise<FileList> {
 }
 
 /** Le début d'un fichier du dépôt. */
-export function loadFilePreview(file: string): Promise<FilePreview> {
-  if (inTauri) return invoke("read_repo_file", { path: null, file });
+export function loadFilePreview(file: string, root?: string): Promise<FilePreview> {
+  if (inTauri) return invoke("read_repo_file", { path: root ?? null, file });
   const sample = sampleOf(file);
   return Promise.resolve({
     path: file,
@@ -87,8 +87,9 @@ export function writeFile(
   file: string,
   content: string,
   expectedModified: number | null,
+  root?: string,
 ): Promise<number> {
-  if (inTauri) return invoke("write_repo_file", { path: null, file, content, expectedModified });
+  if (inTauri) return invoke("write_repo_file", { path: root ?? null, file, content, expectedModified });
   const modified = Date.now();
   sampleTexts.set(file, { text: content, modified });
   return Promise.resolve(modified);
