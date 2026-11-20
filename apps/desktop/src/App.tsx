@@ -127,6 +127,7 @@ export default function App({ startup }: { startup: Startup }) {
     onSelectProject: selectProject,
     onOpenFolder: () => void openFolder(),
     onCreateProject: createNewProject,
+    onRemoveProject: (project: Project) => projectList.remove(project.path),
     onToggleWorktree: (value: boolean) => setUseWorktree(selected.id, value),
   };
 
