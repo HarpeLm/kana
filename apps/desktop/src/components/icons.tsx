@@ -34,8 +34,8 @@ export function DiffBoxIcon({ className }: IconProps) {
 export function ArtifactsIcon({ className }: IconProps) {
   return (
     <Svg className={className}>
-      <rect x="4" y="6" width="11" height="13" rx="2.5" />
-      <path d="M15 9h2.5A2.5 2.5 0 0 1 20 11.5v5A2.5 2.5 0 0 1 17.5 19H15" />
+      <rect x="3" y="7" width="12" height="14" rx="3" />
+      <path d="M9 7V6a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-3" />
     </Svg>
   );
 }
