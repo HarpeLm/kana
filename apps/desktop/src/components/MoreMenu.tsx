@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { MoreHorizontal, Smartphone } from "lucide-react";
+import { useClickOutside } from "../hooks/useClickOutside";
 import ToolbarButton from "./ToolbarButton";
 import { ArtifactsIcon, BackgroundTasksIcon, SideChatIcon } from "./icons";
 
@@ -28,14 +29,7 @@ export default function MoreMenu(props: MoreMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  useClickOutside(ref, open, () => setOpen(false));
 
   const iconClass = "h-[18px] w-[18px]";
   const items: MenuItem[] = [
