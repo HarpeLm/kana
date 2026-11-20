@@ -18,7 +18,7 @@ function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLin
           <p className="mt-1 whitespace-pre-wrap">{message.thought}</p>
         </details>
       )}
-      {message.tools.length > 0 && <ToolGroup tools={message.tools} />}
+      {message.tools.length > 0 && <ToolGroup tools={message.tools} startedAt={message.startedAt} endedAt={message.endedAt} />}
       {message.text && <ChatMarkdown source={message.text} onOpenLink={onOpenLink} />}
     </div>
   );
@@ -42,14 +42,14 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink }: ChatM
         {messages.map((message) =>
           message.role === "user" ? (
             <div key={message.id} className="flex justify-end">
-              <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-[#2a2a27] px-3.5 py-2 text-[#ecebe4]">
+              <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] bg-[#1f4fb5] px-4 py-2.5 text-[#f4f6fc]">
                 {message.text}
               </p>
             </div>
           ) : message.role === "error" ? (
             <div
               key={message.id}
-              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-[13px] text-red-300"
+              className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-[13px] text-red-300"
             >
               {message.text}
             </div>
