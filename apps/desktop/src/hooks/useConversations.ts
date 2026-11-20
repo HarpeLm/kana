@@ -101,6 +101,38 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Marque une conversation comme active à l'instant (elle remonte dans le tri par activité). */
+  const touch = useCallback((id: string) => patch(id, (c) => ({ ...c, openedAt: Date.now() })), [patch]);
+
+  /** Crée une conversation vide directement dans un dossier (une section de la barre latérale). */
+  const createIn = useCallback(
+    (project: string, projectPath: string | undefined) => {
+      const conversation: Conversation = {
+        ...makeConversation(project, selected?.agentId ?? DEFAULT_AGENT),
+        projectPath,
+        modelId: selected?.modelId,
+      };
+      setItems((list) => [conversation, ...list]);
+      setSelectedId(conversation.id);
+    },
+    [selected],
+  );
+
+  /** Déplace un dossier avant ou après un autre : ses conversations suivent. */
+  const moveSection = useCallback((from: string, to: string) => {
+    if (from === to) return;
+    setItems((list) => {
+      const order = Array.from(new Set(list.map((c) => c.project)));
+      const fromIndex = order.indexOf(from);
+      const toIndex = order.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return list;
+      order.splice(fromIndex, 1);
+      order.splice(toIndex, 0, from);
+      // Le tri est stable : l'ordre des conversations d'un même dossier ne change pas.
+      return [...list].sort((a, b) => order.indexOf(a.project) - order.indexOf(b.project));
+    });
+  }, []);
+
   /** Choisit le fournisseur (l'agent) et le modèle d'une conversation. */
   const setAgent = useCallback(
     (id: string, agentId: string, modelId?: string) => patch(id, (c) => ({ ...c, agentId, modelId })),
@@ -178,6 +210,9 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     setProject,
     setUseWorktree,
     setAgent,
+    createIn,
+    moveSection,
+    touch,
     fork,
   };
 }
