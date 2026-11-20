@@ -65,6 +65,7 @@ async fn main() {
                     }
                     AcpEvent::Done { stop_reason } => return println!("\n[{t:.1}s fin : {stop_reason}]"),
                     AcpEvent::Error { message } => return eprintln!("[erreur] {message}"),
+                    AcpEvent::Plan { entries } => eprintln!("[{t:.1}s plan : {} étapes]", entries.len()),
                     AcpEvent::Closed => return,
                 }
             }
