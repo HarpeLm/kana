@@ -40,3 +40,20 @@ pub async fn read_repo_file(path: Option<String>, file: String) -> Result<FilePr
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Enregistre un fichier existant du dépôt. Si `expected_modified` ne correspond plus à la date du
+/// fichier, rien n'est écrit : il a été modifié ailleurs. Renvoie la nouvelle date de modification.
+#[tauri::command]
+pub async fn write_repo_file(
+    path: Option<String>,
+    file: String,
+    content: String,
+    expected_modified: Option<u64>,
+) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::write_text(&start_dir(path)?, &file, &content, expected_modified)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
