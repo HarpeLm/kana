@@ -3,12 +3,18 @@ import { ChevronDown } from "lucide-react";
 
 interface ConversationGroupProps {
   name: string;
+  /** Replié à l'affichage (utilisé pour les conversations archivées). */
+  defaultCollapsed?: boolean;
   children: ReactNode;
 }
 
-/** Groupe repliable de conversations (un projet, ou les épinglées). */
-export default function ConversationGroup({ name, children }: ConversationGroupProps) {
-  const [collapsed, setCollapsed] = useState(false);
+/** Groupe repliable de conversations (un projet, les épinglées ou les archivées). */
+export default function ConversationGroup({
+  name,
+  defaultCollapsed = false,
+  children,
+}: ConversationGroupProps) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
     <section className="mt-5 first:mt-2">
