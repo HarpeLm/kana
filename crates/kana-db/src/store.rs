@@ -74,6 +74,10 @@ impl Store {
 
     fn from_connection(conn: Connection) -> Result<Self, StoreError> {
         conn.execute_batch(SCHEMA)?;
+        // Colonnes ajoutées après la première version de la base : ignorées si elles existent déjà.
+        for column in ["project_path TEXT", "use_worktree INTEGER NOT NULL DEFAULT 1"] {
+            let _ = conn.execute(&format!("ALTER TABLE conversations ADD COLUMN {column}"), []);
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -86,7 +90,7 @@ impl Store {
         let conn = self.lock()?;
         let mut statement = conn.prepare(
             "SELECT id, title, project, agent_id, pinned, unread, archived, opened_at,
-                    worktree, branch, forked_from, fork_context
+                    worktree, branch, forked_from, fork_context, project_path, use_worktree
              FROM conversations ORDER BY position",
         )?;
         let rows = statement.query_map([], |row| {
@@ -103,6 +107,8 @@ impl Store {
                 branch: row.get(9)?,
                 forked_from: row.get(10)?,
                 fork_context: row.get(11)?,
+                project_path: row.get(12)?,
+                use_worktree: row.get(13)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -117,19 +123,21 @@ impl Store {
             let mut upsert = tx.prepare(
                 "INSERT INTO conversations
                     (id, position, title, project, agent_id, pinned, unread, archived, opened_at,
-                     worktree, branch, forked_from, fork_context)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                     worktree, branch, forked_from, fork_context, project_path, use_worktree)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                  ON CONFLICT(id) DO UPDATE SET
                     position = excluded.position, title = excluded.title, project = excluded.project,
                     agent_id = excluded.agent_id, pinned = excluded.pinned, unread = excluded.unread,
                     archived = excluded.archived, opened_at = excluded.opened_at,
                     worktree = excluded.worktree, branch = excluded.branch,
-                    forked_from = excluded.forked_from, fork_context = excluded.fork_context",
+                    forked_from = excluded.forked_from, fork_context = excluded.fork_context,
+                    project_path = excluded.project_path, use_worktree = excluded.use_worktree",
             )?;
             for (position, c) in items.iter().enumerate() {
                 upsert.execute(params![
                     c.id, position as i64, c.title, c.project, c.agent_id, c.pinned, c.unread,
                     c.archived, c.opened_at, c.worktree, c.branch, c.forked_from, c.fork_context,
+                    c.project_path, c.use_worktree,
                 ])?;
             }
         }
@@ -243,6 +251,8 @@ mod tests {
             branch: None,
             forked_from: None,
             fork_context: None,
+            project_path: Some("/a/kana".into()),
+            use_worktree: true,
         }
     }
 
@@ -289,6 +299,29 @@ mod tests {
         // Une seconde sauvegarde remplace la première.
         store.save_messages("a", &messages[..1]).unwrap();
         assert_eq!(store.messages("a").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn an_older_database_gets_the_new_columns() {
+        let path = std::env::temp_dir().join(format!("kana-old-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            let old = Connection::open(&path).unwrap();
+            old.execute_batch(
+                "CREATE TABLE conversations (
+                    id TEXT PRIMARY KEY, position INTEGER NOT NULL, title TEXT NOT NULL,
+                    project TEXT NOT NULL, agent_id TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0,
+                    unread INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
+                    opened_at INTEGER, worktree TEXT, branch TEXT, forked_from TEXT, fork_context TEXT);
+                 INSERT INTO conversations (id, position, title, project, agent_id) VALUES ('a', 0, 't', 'p', 'x');",
+            )
+            .unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        let items = store.conversations().unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(items[0].use_worktree);
+        assert_eq!(items[0].project_path, None);
     }
 
     #[test]
