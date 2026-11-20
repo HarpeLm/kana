@@ -8,6 +8,8 @@ interface ConversationMenuItemProps {
   /** Ouvre un sous-menu : une flèche remplace le raccourci. */
   submenu?: boolean;
   danger?: boolean;
+  /** Grisé et sans effet. */
+  disabled?: boolean;
   onMouseEnter?: () => void;
 }
 
@@ -21,13 +23,15 @@ export default function ConversationMenuItem({
   shortcut,
   submenu,
   danger,
+  disabled,
   onMouseEnter,
 }: ConversationMenuItemProps) {
   return (
     <button
       onClick={onClick}
       onMouseEnter={onMouseEnter}
-      className={`flex h-7 w-full items-center justify-between rounded-lg px-3 text-left text-[14px] transition hover:bg-[#383835] ${
+      disabled={disabled}
+      className={`flex h-7 w-full items-center justify-between rounded-lg px-3 text-left text-[14px] transition enabled:hover:bg-[#383835] disabled:text-[#6c6b65] ${
         danger ? "text-[#f0a090]" : "text-[#e6e5df]"
       }`}
     >
