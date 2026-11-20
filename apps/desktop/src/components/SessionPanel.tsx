@@ -109,8 +109,8 @@ export default function SessionPanel({
   };
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col overflow-y-auto p-3">
-      <div className="flex flex-col gap-4 rounded-2xl bg-[#232321] p-4">
+    <aside className="flex w-[360px] shrink-0 flex-col p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl bg-[#232321] p-4">
       <Card title="Environnement">
         <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
         <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
@@ -119,13 +119,11 @@ export default function SessionPanel({
             <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>
           )}
         </Row>
-        {summary?.branch && (
-          <Row icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}>
-            {summary.branch}
-            {summary.base && summary.branch !== summary.base && (
-              <span className="text-[#8c8b83]"> · depuis {summary.base}</span>
-            )}
-          </Row>
+        {(summary?.base ?? summary?.branch) && (
+          // Comme dans Claude : la branche du projet. Le travail de l'agent est sur sa propre branche.
+          <div title={summary?.branch && summary.branch !== summary.base ? `Le travail est sur la branche ${summary.branch}` : undefined}>
+            <Row icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}>{summary?.base ?? summary?.branch}</Row>
+          </div>
         )}
       </Card>
 
