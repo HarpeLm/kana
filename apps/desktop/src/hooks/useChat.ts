@@ -23,6 +23,8 @@ export interface PreparedThread {
   cwd?: string;
   /** Texte à placer devant le message (contexte d'une bifurcation). */
   preface?: string;
+  /** Modèle choisi pour la conversation. */
+  model?: string;
 }
 
 /** Un outil resté « en cours » quand l'app s'est arrêtée n'a jamais fini : on le montre comme interrompu. */
@@ -121,8 +123,8 @@ export function useChat(
     async (text: string) => {
       update(threadId, (chat) => addUserMessage(chat, text));
       try {
-        const { cwd, preface } = await prepareRef.current(threadId);
-        await startAgent(threadId, agentId, cwd);
+        const { cwd, preface, model } = await prepareRef.current(threadId);
+        await startAgent(threadId, agentId, cwd, model);
         await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
