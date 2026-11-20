@@ -22,6 +22,8 @@ pub enum AcpEvent {
         id: String,
         title: Option<String>,
         status: Option<String>,
+        /// Ce que l'outil reçoit en paramètre (adresse, élément…), tel que l'agent l'annonce.
+        raw_input: Option<Value>,
     },
     /// L'agent demande l'autorisation d'agir ; répondre avec `resolve_permission`.
     Permission {
@@ -52,6 +54,7 @@ impl AcpEvent {
                 id: string_of(&update["toolCallId"])?,
                 title: string_of(&update["title"]),
                 status: string_of(&update["status"]),
+                raw_input: update.get("rawInput").filter(|v| !v.is_null()).cloned(),
             }),
             _ => None,
         }
@@ -111,7 +114,8 @@ mod tests {
             Some(AcpEvent::ToolCall {
                 id: "t1".into(),
                 title: None,
-                status: Some("completed".into())
+                status: Some("completed".into()),
+                raw_input: None
             })
         );
     }
