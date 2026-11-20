@@ -1,17 +1,23 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../lib/chatState";
 import ChatMarkdown from "./ChatMarkdown";
+import MessageActions from "./MessageActions";
 import ToolGroup from "./ToolGroup";
 
 interface ChatMessagesProps {
   messages: ChatMessage[];
   agentLabel: string;
   onOpenLink: (url: string) => void;
+  busy: boolean;
+  /** Renvoyer un message de l'utilisateur. */
+  onRetry: (text: string) => void;
+  /** Remettre un message de l'utilisateur dans la zone de saisie. */
+  onEdit: (text: string) => void;
 }
 
 function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLink: (url: string) => void }) {
   return (
-    <div className="space-y-2 text-[#dfded8]">
+    <div className="group/message space-y-2 text-[#dfded8]">
       {message.thought && (
         <details className="text-[13px] text-[#8c8b83]">
           <summary className="cursor-pointer select-none">Réflexion</summary>
@@ -20,11 +26,12 @@ function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLin
       )}
       {message.tools.length > 0 && <ToolGroup tools={message.tools} startedAt={message.startedAt} endedAt={message.endedAt} />}
       {message.text && <ChatMarkdown source={message.text} onOpenLink={onOpenLink} />}
+      {message.text && <MessageActions text={message.text} at={message.endedAt ?? message.startedAt} />}
     </div>
   );
 }
 
-export default function ChatMessages({ messages, agentLabel, onOpenLink }: ChatMessagesProps) {
+export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onRetry, onEdit }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,10 +48,17 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink }: ChatM
         )}
         {messages.map((message) =>
           message.role === "user" ? (
-            <div key={message.id} className="flex justify-end">
+            <div key={message.id} className="group/message flex flex-col items-end gap-1">
               <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] bg-[#1f4fb5] px-4 py-2.5 text-[#f4f6fc]">
                 {message.text}
               </p>
+              <MessageActions
+                text={message.text}
+                at={message.startedAt}
+                align="right"
+                onRetry={busy ? undefined : () => onRetry(message.text)}
+                onEdit={() => onEdit(message.text)}
+              />
             </div>
           ) : message.role === "error" ? (
             <div
