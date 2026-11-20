@@ -1,6 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./env";
 
+export interface FileStat {
+  path: string;
+  additions: number;
+  deletions: number;
+  status: "added" | "modified" | "deleted" | string;
+}
+
+export interface CommitInfo {
+  hash: string;
+  subject: string;
+}
+
 export interface BranchSummary {
   branch: string | null;
   base: string | null;
@@ -8,6 +20,8 @@ export interface BranchSummary {
   deletions: number;
   files: number;
   ahead: number;
+  changed: FileStat[];
+  commits: CommitInfo[];
   dirty: boolean;
   has_remote: boolean;
 }
@@ -32,6 +46,11 @@ const SAMPLE_SUMMARY: BranchSummary = {
   deletions: 0,
   files: 2,
   ahead: 1,
+  changed: [
+    { path: "src/main.rs", additions: 8, deletions: 0, status: "modified" },
+    { path: "src/panneau.rs", additions: 3, deletions: 0, status: "added" },
+  ],
+  commits: [{ hash: "a1b2c3d", subject: "ajoute le panneau" }],
   dirty: true,
   has_remote: true,
 };
