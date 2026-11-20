@@ -21,6 +21,7 @@ use crate::{
     error::AcpError,
     event::AcpEvent,
     mcp::{McpServerConfig, supports_http},
+    models::AgentModels,
     protocol, reader,
 };
 
@@ -54,6 +55,7 @@ pub struct AcpClient {
     shared: Arc<Shared>,
     next_id: AtomicU64,
     session_id: String,
+    models: AgentModels,
     _child: Child,
 }
 
@@ -121,6 +123,7 @@ impl AcpClient {
             shared,
             next_id: AtomicU64::new(1),
             session_id: String::new(),
+            models: AgentModels::default(),
             _child: child,
         };
         let init = client.request("initialize", protocol::initialize_params()).await?;
@@ -143,6 +146,7 @@ impl AcpClient {
             }
             other => other?,
         };
+        client.models = AgentModels::from_session(&session);
         client.session_id = session["sessionId"]
             .as_str()
             .ok_or_else(|| AcpError::Protocol("session/new sans sessionId".into()))?
@@ -152,6 +156,25 @@ impl AcpClient {
 
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// Les modèles que l'agent propose (liste vide s'il n'a pas de choix).
+    pub fn models(&self) -> &AgentModels {
+        &self.models
+    }
+
+    /// Change le modèle utilisé par l'agent pour la suite de la session.
+    pub async fn set_model(&self, model_id: &str) -> Result<(), AcpError> {
+        match &self.models.config_id {
+            Some(config_id) => {
+                let params = json!({ "sessionId": self.session_id, "configId": config_id, "value": model_id });
+                self.request("session/set_config_option", params).await.map(|_| ())
+            }
+            None => {
+                let params = json!({ "sessionId": self.session_id, "modelId": model_id });
+                self.request("session/set_model", params).await.map(|_| ())
+            }
+        }
     }
 
     /// Envoie un message à l'agent et attend la fin de son tour.
