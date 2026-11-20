@@ -103,9 +103,12 @@ export default function BrowserDock({ visible, suspended, width, dragging, onRes
   }, [active.url, active.id, editing]);
 
   const closeTab = (id: string) => {
+    const wasLast = tabs.length === 1;
     close(id);
     created.current.delete(id);
     closeBrowser(id).catch(ignore);
+    // Fermer le dernier onglet ferme le volet ; il rouvrira sur un onglet neuf.
+    if (wasLast) onClose();
   };
 
   const submit = () => {
@@ -131,6 +134,7 @@ export default function BrowserDock({ visible, suspended, width, dragging, onRes
             onClose={closeTab}
             onAdd={() => add()}
             addLabel="Nouvel onglet"
+            closeLast
           />
           <ToolbarButton title="Fermer le navigateur" onClick={onClose}>
             <X className="h-[17px] w-[17px]" strokeWidth={1.6} />
