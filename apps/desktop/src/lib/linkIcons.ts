@@ -65,6 +65,26 @@ export function shortAddress(text: string): string {
   return text.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 }
 
+/**
+ * Libellé court d'une adresse GitHub brute : `kana` pour un dépôt, `kana#12` pour une issue ou une
+ * pull request, `main.rs` pour un fichier. Les autres adresses sont seulement débarrassées de `https://`.
+ */
+export function shortLabel(address: string): string {
+  try {
+    const url = new URL(address);
+    if (url.host === "github.com" || url.host === "www.github.com") {
+      const [owner, repo, kind, ...rest] = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+      if (owner && !repo) return owner;
+      if (repo && !kind) return repo;
+      if (repo && (kind === "issues" || kind === "pull") && /^\d+$/.test(rest[0] ?? "")) return `${repo}#${rest[0]}`;
+      if (repo && (kind === "blob" || kind === "tree") && rest.length > 1) return rest[rest.length - 1];
+    }
+  } catch {
+    // adresse illisible : on la montre telle quelle
+  }
+  return shortAddress(address);
+}
+
 /** Ajoute une icône devant chaque lien web du HTML (déjà nettoyé). */
 export function addLinkIcons(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -73,7 +93,7 @@ export function addLinkIcons(html: string): string {
     if (!icon) return;
     // Un lien dont le texte est l'adresse elle-même s'affiche sans « https:// ».
     if (link.children.length === 0 && /^https?:\/\//i.test(link.textContent ?? "")) {
-      link.textContent = shortAddress(link.textContent ?? "");
+      link.textContent = shortLabel(link.textContent ?? "");
     }
     link.prepend(icon);
   });
