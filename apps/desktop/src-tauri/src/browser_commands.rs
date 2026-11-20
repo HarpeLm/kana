@@ -33,7 +33,7 @@ fn report_favicon(webview: &tauri::Webview, app: AppHandle, page: String) {
     let _ = webview.eval_with_callback(FAVICON_JS, move |raw| {
         let Ok(icon) = serde_json::from_str::<String>(&raw) else { return };
         if icon.starts_with("http://") || icon.starts_with("https://") {
-            let _ = app.emit("browser-favicon", FaviconEvent { page, icon });
+            let _ = app.emit("browser-favicon", FaviconEvent { page: page.clone(), icon });
         }
     });
 }
