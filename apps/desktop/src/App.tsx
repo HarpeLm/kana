@@ -11,6 +11,7 @@ import Header from "./components/Header";
 import NavButtons from "./components/NavButtons";
 import RelayView from "./components/RelayView";
 import RightPanel from "./components/RightPanel";
+import ScheduledView from "./components/ScheduledView";
 import SettingsView from "./components/SettingsView";
 import Sidebar from "./components/Sidebar";
 
@@ -83,6 +84,7 @@ export default function App() {
           setShowArtifacts((v) => !v);
           setView("workspace");
         }}
+        onOpenScheduled={() => setView("scheduled")}
         onOpenSettings={() => setView("settings")}
         onSelect={openConversation}
         onPin={conversations.togglePin}
@@ -120,8 +122,10 @@ export default function App() {
             },
           }}
         >
-          {view === "settings" ? (
-            <span className="px-2 text-[14px] text-[#e6e5df]">Réglages</span>
+          {view === "settings" || view === "scheduled" ? (
+            <span className="px-2 text-[14px] text-[#e6e5df]">
+              {view === "settings" ? "Réglages" : "Tâches planifiées"}
+            </span>
           ) : (
             <ConversationTitle
               conversation={selected}
@@ -137,6 +141,8 @@ export default function App() {
 
         {view === "settings" ? (
           <SettingsView />
+        ) : view === "scheduled" ? (
+          <ScheduledView />
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <ChatView
