@@ -8,10 +8,12 @@ const icons = { ask: Hand, plan: ClipboardList, auto: ShieldCheck, full: ShieldA
 interface ModeMenuProps {
   mode: PermissionMode;
   onChange: (mode: PermissionMode) => void;
+  /** De quel côté le menu s'ouvre. */
+  align?: "left" | "right";
 }
 
 /** Choix du mode d'autorisation, sous la zone de saisie. « Accès complet » reste en orange. */
-export default function ModeMenu({ mode, onChange }: ModeMenuProps) {
+export default function ModeMenu({ mode, onChange, align = "left" }: ModeMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useClickOutside(root, open, () => setOpen(false));
@@ -54,7 +56,7 @@ export default function ModeMenu({ mode, onChange }: ModeMenuProps) {
         <ChevronDown className="h-3 w-3" strokeWidth={1.8} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 w-[600px] max-w-[calc(100vw-3rem)] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl">
+        <div className={`absolute bottom-full z-30 mb-2 w-[600px] ${align === "right" ? "right-0" : "left-0"} max-w-[calc(100vw-3rem)] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl`}>
           <p className="px-3 pb-0.5 pt-1.5 text-[12px] text-[#9a9992]">Comment les actions de l'agent doivent-elles être approuvées ?</p>
           {MODES.map((item, index) => {
             const ItemIcon = icons[item.id];
