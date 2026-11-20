@@ -9,9 +9,9 @@ import {
 import { saveStoredConversations } from "../lib/store";
 
 /** Liste des conversations et toutes les actions possibles sur elles. */
-export function useConversations(initial: Conversation[]) {
+export function useConversations(initial: Conversation[], initialSelectedId: string) {
   const [items, setItems] = useState(initial);
-  const [selectedId, setSelectedId] = useState(() => items[0].id);
+  const [selectedId, setSelectedId] = useState(initialSelectedId);
 
   // Chaque changement est rangé dans la base, un court instant après le dernier.
   useEffect(() => {
@@ -35,10 +35,10 @@ export function useConversations(initial: Conversation[]) {
   );
 
   const create = useCallback(() => {
-    const conversation = makeConversation(
-      selected?.project ?? DEFAULT_PROJECT,
-      selected?.agentId ?? DEFAULT_AGENT,
-    );
+    const conversation: Conversation = {
+      ...makeConversation(selected?.project ?? DEFAULT_PROJECT, selected?.agentId ?? DEFAULT_AGENT),
+      projectPath: selected?.projectPath,
+    };
     setItems((list) => [conversation, ...list]);
     setSelectedId(conversation.id);
   }, [selected]);
@@ -84,12 +84,26 @@ export function useConversations(initial: Conversation[]) {
       const copy = {
         ...makeConversation(source.project, source.agentId),
         title: `${source.title} (copie)`,
+        projectPath: source.projectPath,
+        useWorktree: source.useWorktree,
       };
       const index = items.indexOf(source);
       setItems([...items.slice(0, index + 1), copy, ...items.slice(index + 1)]);
       setSelectedId(copy.id);
     },
     [items],
+  );
+
+  /** Change le projet d'une conversation (le dossier où ses agents travaillent). */
+  const setProject = useCallback(
+    (id: string, project: string, projectPath: string) =>
+      patch(id, (c) => ({ ...c, project, projectPath, worktree: undefined, branch: undefined })),
+    [patch],
+  );
+
+  const setUseWorktree = useCallback(
+    (id: string, useWorktree: boolean) => patch(id, (c) => ({ ...c, useWorktree })),
+    [patch],
   );
 
   /** Garde le dossier de travail créé pour une conversation. */
@@ -112,6 +126,8 @@ export function useConversations(initial: Conversation[]) {
       const copy: Conversation = {
         ...makeConversation(source.project, source.agentId),
         title: `${source.title} (bifurcation)`,
+        projectPath: source.projectPath,
+        useWorktree: source.useWorktree,
         forkedFrom: source.id,
         forkContext: context,
       };
@@ -153,6 +169,8 @@ export function useConversations(initial: Conversation[]) {
     remove,
     attachWorktree,
     clearForkContext,
+    setProject,
+    setUseWorktree,
     fork,
   };
 }
