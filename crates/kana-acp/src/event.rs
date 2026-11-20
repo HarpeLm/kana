@@ -24,6 +24,8 @@ pub enum AcpEvent {
         status: Option<String>,
         /// Ce que l'outil reçoit en paramètre (adresse, élément…), tel que l'agent l'annonce.
         raw_input: Option<Value>,
+        /// Résultat de l'outil, en texte, quand l'agent le donne.
+        output: Option<String>,
     },
     /// L'agent demande l'autorisation d'agir ; répondre avec `resolve_permission`.
     Permission {
@@ -42,6 +44,25 @@ fn string_of(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
 
+/// Le texte qu'un outil a produit : `rawOutput` (texte ou objet) sinon le contenu annoncé.
+fn tool_output(update: &Value) -> Option<String> {
+    let raw = &update["rawOutput"];
+    let from_raw = match raw {
+        Value::String(text) => Some(text.clone()),
+        Value::Object(_) => ["output", "stdout", "text"].iter().find_map(|key| string_of(&raw[key])),
+        _ => None,
+    };
+    let text = from_raw.or_else(|| {
+        let parts: Vec<String> = update["content"]
+            .as_array()?
+            .iter()
+            .filter_map(|item| string_of(&item["content"]["text"]))
+            .collect();
+        (!parts.is_empty()).then(|| parts.join("\n"))
+    })?;
+    (!text.trim().is_empty()).then_some(text)
+}
+
 impl AcpEvent {
     /// Convertit le contenu d'une notification `session/update`.
     /// Renvoie `None` pour les mises à jour que Kana n'affiche pas encore.
@@ -55,6 +76,7 @@ impl AcpEvent {
                 title: string_of(&update["title"]),
                 status: string_of(&update["status"]),
                 raw_input: update.get("rawInput").filter(|v| !v.is_null()).cloned(),
+                output: tool_output(update),
             }),
             _ => None,
         }
@@ -115,9 +137,26 @@ mod tests {
                 id: "t1".into(),
                 title: None,
                 status: Some("completed".into()),
-                raw_input: None
+                raw_input: None,
+                output: None
             })
         );
+    }
+
+    #[test]
+    fn tool_output_comes_from_raw_output_or_content() {
+        let raw = json!({ "sessionUpdate": "tool_call_update", "toolCallId": "t", "rawOutput": { "output": "ok" } });
+        let content = json!({
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "t",
+            "content": [{ "type": "content", "content": { "type": "text", "text": "fait" } }]
+        });
+        let output = |update| match AcpEvent::from_update(&update) {
+            Some(AcpEvent::ToolCall { output, .. }) => output,
+            _ => None,
+        };
+        assert_eq!(output(raw), Some("ok".into()));
+        assert_eq!(output(content), Some("fait".into()));
     }
 
     #[test]
