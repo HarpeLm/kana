@@ -1,0 +1,142 @@
+use std::{
+    collections::HashMap,
+    path::Path,
+    process::Stdio,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
+use serde_json::{Value, json};
+use tokio::{
+    io::AsyncWriteExt,
+    process::{Child, ChildStdin, Command},
+    sync::{Mutex, mpsc, oneshot},
+};
+
+use crate::{agents::AgentSpec, error::AcpError, event::AcpEvent, protocol, reader};
+
+type Reply = Result<Value, AcpError>;
+
+/// État partagé entre le client et la tâche qui lit la sortie de l'agent.
+pub(crate) struct Shared {
+    stdin: Mutex<ChildStdin>,
+    pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Reply>>>,
+    pub(crate) permissions: Mutex<HashMap<String, oneshot::Sender<Option<String>>>>,
+    pub(crate) events: mpsc::UnboundedSender<AcpEvent>,
+}
+
+impl Shared {
+    pub(crate) async fn send(&self, message: &Value) -> Result<(), AcpError> {
+        let mut line = serde_json::to_string(message)
+            .map_err(|e| AcpError::Protocol(e.to_string()))?;
+        line.push('\n');
+        let mut stdin = self.stdin.lock().await;
+        stdin.write_all(line.as_bytes()).await?;
+        stdin.flush().await?;
+        Ok(())
+    }
+}
+
+/// Connexion à un agent ACP lancé en sous-processus, avec une session ouverte.
+pub struct AcpClient {
+    shared: Arc<Shared>,
+    next_id: AtomicU64,
+    session_id: String,
+    _child: Child,
+}
+
+impl AcpClient {
+    /// Lance l'agent dans `cwd`, négocie le protocole et ouvre une session.
+    /// Les événements de l'agent arrivent sur le récepteur renvoyé.
+    pub async fn spawn(
+        spec: &AgentSpec,
+        cwd: &Path,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
+        let mut child = Command::new(&spec.command)
+            .args(&spec.args)
+            .current_dir(cwd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(AcpError::Spawn)?;
+
+        let stdin = child.stdin.take().ok_or(AcpError::Closed)?;
+        let stdout = child.stdout.take().ok_or(AcpError::Closed)?;
+        let (events, receiver) = mpsc::unbounded_channel();
+        let shared = Arc::new(Shared {
+            stdin: Mutex::new(stdin),
+            pending: Mutex::default(),
+            permissions: Mutex::default(),
+            events,
+        });
+        tokio::spawn(reader::read_loop(stdout, shared.clone()));
+
+        let mut client = Self {
+            shared,
+            next_id: AtomicU64::new(1),
+            session_id: String::new(),
+            _child: child,
+        };
+        client.request("initialize", protocol::initialize_params()).await?;
+        let session = client
+            .request("session/new", protocol::new_session_params(cwd))
+            .await?;
+        client.session_id = session["sessionId"]
+            .as_str()
+            .ok_or_else(|| AcpError::Protocol("session/new sans sessionId".into()))?
+            .to_owned();
+        Ok((client, receiver))
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    /// Envoie un message à l'agent et attend la fin de son tour.
+    /// Les réponses partielles arrivent en `AcpEvent::Message` pendant l'attente ;
+    /// le tour se termine par `AcpEvent::Done` ou `AcpEvent::Error`.
+    pub async fn prompt(&self, text: &str) -> Result<String, AcpError> {
+        let params = protocol::prompt_params(&self.session_id, text);
+        match self.request("session/prompt", params).await {
+            Ok(result) => {
+                let stop_reason = result["stopReason"].as_str().unwrap_or("end_turn").to_owned();
+                let _ = self.shared.events.send(AcpEvent::Done { stop_reason: stop_reason.clone() });
+                Ok(stop_reason)
+            }
+            Err(error) => {
+                let _ = self.shared.events.send(AcpEvent::Error { message: error.to_string() });
+                Err(error)
+            }
+        }
+    }
+
+    /// Demande à l'agent d'interrompre le tour en cours.
+    pub async fn cancel(&self) -> Result<(), AcpError> {
+        let params = json!({ "sessionId": self.session_id });
+        self.shared.send(&protocol::notification("session/cancel", params)).await
+    }
+
+    /// Répond à une demande d'autorisation ; `None` l'annule.
+    /// Renvoie `false` si la demande n'existe plus.
+    pub async fn resolve_permission(&self, request_id: &str, option_id: Option<String>) -> bool {
+        match self.shared.permissions.lock().await.remove(request_id) {
+            Some(sender) => sender.send(option_id).is_ok(),
+            None => false,
+        }
+    }
+
+    async fn request(&self, method: &str, params: Value) -> Reply {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let (sender, receiver) = oneshot::channel();
+        self.shared.pending.lock().await.insert(id, sender);
+        if let Err(error) = self.shared.send(&protocol::request(id, method, params)).await {
+            self.shared.pending.lock().await.remove(&id);
+            return Err(error);
+        }
+        receiver.await.map_err(|_| AcpError::Closed)?
+    }
+}
