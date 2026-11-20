@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../lib/chatState";
+import { toolLabel } from "../lib/toolLabel";
+import ChatMarkdown from "./ChatMarkdown";
 
 interface ChatMessagesProps {
   messages: ChatMessage[];
   agentLabel: string;
+  onOpenLink: (url: string) => void;
 }
 
 const toolColor: Record<string, string> = {
@@ -12,7 +15,7 @@ const toolColor: Record<string, string> = {
   in_progress: "text-[#e69b80]",
 };
 
-function AgentMessage({ message }: { message: ChatMessage }) {
+function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLink: (url: string) => void }) {
   return (
     <div className="space-y-2 text-[#dfded8]">
       {message.thought && (
@@ -28,17 +31,17 @@ function AgentMessage({ message }: { message: ChatMessage }) {
               key={tool.id}
               className="rounded-md border border-[#2c2c29] bg-[#1e1e1c] px-2 py-0.5 font-mono text-[12px] text-[#a3a29a]"
             >
-              <span className={toolColor[tool.status] ?? "text-[#8c8b83]"}>●</span> {tool.title}
+              <span className={toolColor[tool.status] ?? "text-[#8c8b83]"}>●</span> {toolLabel(tool)}
             </li>
           ))}
         </ul>
       )}
-      {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
+      {message.text && <ChatMarkdown source={message.text} onOpenLink={onOpenLink} />}
     </div>
   );
 }
 
-export default function ChatMessages({ messages, agentLabel }: ChatMessagesProps) {
+export default function ChatMessages({ messages, agentLabel, onOpenLink }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -68,7 +71,7 @@ export default function ChatMessages({ messages, agentLabel }: ChatMessagesProps
               {message.text}
             </div>
           ) : (
-            <AgentMessage key={message.id} message={message} />
+            <AgentMessage key={message.id} message={message} onOpenLink={onOpenLink} />
           ),
         )}
         <div ref={endRef} />
