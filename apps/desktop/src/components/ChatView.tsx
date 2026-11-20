@@ -2,7 +2,7 @@ import type { ChatState } from "../lib/chatState";
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
-import NewSession, { type NewSessionProps } from "./NewSession";
+import { EnvironmentRow, NewSessionCenter, type NewSessionProps } from "./NewSession";
 import PermissionPrompt from "./PermissionPrompt";
 
 interface ChatViewProps {
@@ -31,15 +31,22 @@ export default function ChatView({
   onModeChange,
   newSession,
 }: ChatViewProps) {
-  const composer = (
-    <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
-  );
-
-  // Une conversation vide s'ouvre sur l'écran de nouvelle session, la saisie au milieu.
+  // Une conversation vide s'ouvre sur l'écran de nouvelle session : les projets au centre,
+  // et sous la saisie, l'endroit où l'agent travaillera.
   if (chat.messages.length === 0 && !chat.busy) {
     return (
       <main className="flex flex-1 flex-col overflow-hidden">
-        <NewSession session={newSession}>{composer}</NewSession>
+        <NewSessionCenter session={newSession} />
+        <Composer
+          agentLabel={agentLabel}
+          busy={chat.busy}
+          onSend={onSend}
+          onStop={onStop}
+          mode={mode}
+          onModeChange={onModeChange}
+          footerLeft={<EnvironmentRow session={newSession} />}
+          placeholder="Décrivez une tâche ou posez une question."
+        />
       </main>
     );
   }
@@ -65,7 +72,7 @@ export default function ChatView({
         </div>
       )}
 
-      {composer}
+      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
     </main>
   );
 }
