@@ -60,12 +60,22 @@ function iconFor(doc: Document, href: string): Element | null {
   return globeIcon(doc);
 }
 
+/** `https://github.com/a/b/` → `github.com/a/b` : l'adresse affichée n'a pas besoin du protocole. */
+export function shortAddress(text: string): string {
+  return text.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
 /** Ajoute une icône devant chaque lien web du HTML (déjà nettoyé). */
 export function addLinkIcons(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   doc.querySelectorAll("a[href]").forEach((link) => {
     const icon = iconFor(doc, link.getAttribute("href") ?? "");
-    if (icon) link.prepend(icon);
+    if (!icon) return;
+    // Un lien dont le texte est l'adresse elle-même s'affiche sans « https:// ».
+    if (link.children.length === 0 && /^https?:\/\//i.test(link.textContent ?? "")) {
+      link.textContent = shortAddress(link.textContent ?? "");
+    }
+    link.prepend(icon);
   });
   return doc.body.innerHTML;
 }
