@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type DragEvent, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { ChevronDown, Plus, SlidersHorizontal } from "lucide-react";
 
 interface ConversationGroupProps {
@@ -13,14 +13,17 @@ interface ConversationGroupProps {
   onOpenViewMenu?: (anchor: DOMRect) => void;
   /** Le menu d'affichage, posé sous l'en-tête quand il est ouvert. */
   menu?: ReactNode;
-  /** Le dossier peut être glissé pour changer de place, et reçoit des conversations. */
-  reorderable?: boolean;
-  onMoveSection?: (from: string, to: string) => void;
+  /** Reçoit des conversations glissées dessus. */
   onDropConversation?: (id: string) => void;
+  /** Glisser-déposer du dossier à la souris (voir `useSectionDrag`). */
+  sectionRef?: Ref<HTMLElement>;
+  dragStyle?: CSSProperties;
+  /** Le dossier est soulevé : il suit le curseur, en carte flottante. */
+  lifted?: boolean;
+  headerProps?: HTMLAttributes<HTMLElement>;
   children: ReactNode;
 }
 
-const SECTION_TYPE = "application/x-kana-section";
 const CONVERSATION_TYPE = "application/x-kana-conversation";
 
 /** Groupe repliable de conversations (un dossier, les épinglées ou les archivées). */
@@ -31,9 +34,11 @@ export default function ConversationGroup({
   onCreate,
   onOpenViewMenu,
   menu,
-  reorderable = false,
-  onMoveSection,
   onDropConversation,
+  sectionRef,
+  dragStyle,
+  lifted = false,
+  headerProps,
   children,
 }: ConversationGroupProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -43,13 +48,15 @@ export default function ConversationGroup({
     if (expandSignal > 0) setCollapsed(false);
   }, [expandSignal]);
 
-  const accepts = (event: DragEvent) =>
-    (reorderable && event.dataTransfer.types.includes(SECTION_TYPE)) ||
-    (!!onDropConversation && event.dataTransfer.types.includes(CONVERSATION_TYPE));
+  const accepts = (event: DragEvent) => !!onDropConversation && event.dataTransfer.types.includes(CONVERSATION_TYPE);
 
   return (
     <section
-      className="relative mt-6"
+      ref={sectionRef}
+      style={dragStyle}
+      className={`relative mt-6 transition-transform duration-200 ease-out motion-reduce:transition-none ${
+        lifted ? "z-30 -mx-1 rounded-xl bg-[#262624] px-1 pb-1 shadow-[0_10px_30px_rgba(0,0,0,0.5)] ring-1 ring-[#3a3a37]" : ""
+      }`}
       onDragOver={(e) => {
         if (!accepts(e)) return;
         e.preventDefault();
@@ -58,24 +65,18 @@ export default function ConversationGroup({
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         setOver(false);
-        const section = e.dataTransfer.getData(SECTION_TYPE);
         const conversation = e.dataTransfer.getData(CONVERSATION_TYPE);
-        if (section && reorderable) {
-          e.preventDefault();
-          onMoveSection?.(section, name);
-        } else if (conversation && onDropConversation) {
+        if (conversation && onDropConversation) {
           e.preventDefault();
           onDropConversation(conversation);
         }
       }}
     >
       <div
-        draggable={reorderable}
-        onDragStart={(e) => {
-          e.dataTransfer.setData(SECTION_TYPE, name);
-          e.dataTransfer.effectAllowed = "move";
-        }}
-        className={`group/header flex h-6 items-center rounded-md ${over ? "bg-[#2b3a55]/60" : ""}`}
+        {...headerProps}
+        className={`group/header flex h-6 items-center rounded-md ${headerProps ? "cursor-grab active:cursor-grabbing" : ""} ${
+          over ? "bg-[#2b3a55]/60" : ""
+        }`}
       >
         <button
           onClick={() => setCollapsed((v) => !v)}
@@ -90,6 +91,7 @@ export default function ConversationGroup({
         </button>
         {onOpenViewMenu && (
           <button
+            data-nodrag
             title="Affichage"
             aria-label="Affichage de la liste"
             onClick={(e) => onOpenViewMenu(e.currentTarget.getBoundingClientRect())}
@@ -100,6 +102,7 @@ export default function ConversationGroup({
         )}
         {onCreate && (
           <button
+            data-nodrag
             title={`Nouvelle conversation dans ${name}`}
             aria-label={`Nouvelle conversation dans ${name}`}
             onClick={onCreate}
