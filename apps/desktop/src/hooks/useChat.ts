@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   answerPermission,
   cancelPrompt,
@@ -13,10 +13,15 @@ import {
   applyEvent,
   type ChatState,
 } from "../lib/chatState";
+import { autoAnswer, type PermissionMode } from "../lib/permissionMode";
 
 /** Conversation d'un fil avec son agent ACP. L'état de chaque fil est conservé séparément. */
-export function useChat(threadId: string, agentId: string) {
+export function useChat(threadId: string, agentId: string, mode: PermissionMode) {
   const [chats, setChats] = useState<Record<string, ChatState>>({});
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  });
 
   const update = useCallback((id: string, change: (chat: ChatState) => ChatState) => {
     setChats((all) => ({ ...all, [id]: change(all[id] ?? EMPTY_CHAT) }));
@@ -25,7 +30,17 @@ export function useChat(threadId: string, agentId: string) {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    onAgentEvent((event) => update(event.threadId, (chat) => applyEvent(chat, event))).then(
+    onAgentEvent((event) => {
+      // Selon le mode choisi, certaines autorisations sont accordées sans déranger l'utilisateur.
+      if (event.kind === "permission") {
+        const optionId = autoAnswer(modeRef.current, event);
+        if (optionId) {
+          answerPermission(event.threadId, event.request_id, optionId).catch(() => {});
+          return;
+        }
+      }
+      update(event.threadId, (chat) => applyEvent(chat, event));
+    }).then(
       (off) => (cancelled ? off() : (unlisten = off)),
     );
     return () => {
