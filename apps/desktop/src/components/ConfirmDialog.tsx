@@ -4,6 +4,12 @@ interface ConfirmDialogProps {
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  /** Texte du bouton d'annulation. */
+  cancelLabel?: string;
+  /** `danger` : bouton rouge (suppression) ; `accent` : bouton orange (autorisation). */
+  confirmTone?: "danger" | "accent";
+  /** Bouton qui a le focus à l'ouverture : Entrée le valide. Pour une autorisation, c'est l'annulation. */
+  initialFocus?: "confirm" | "cancel";
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -13,6 +19,9 @@ export default function ConfirmDialog({
   title,
   children,
   confirmLabel,
+  cancelLabel = "Annuler",
+  confirmTone = "danger",
+  initialFocus = "confirm",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -41,15 +50,20 @@ export default function ConfirmDialog({
         <div className="mt-2 text-[14px] leading-[1.5] text-[#b3b2aa]">{children}</div>
         <div className="mt-4 flex justify-end gap-2">
           <button
+            autoFocus={initialFocus === "cancel"}
             onClick={onCancel}
-            className="rounded-lg bg-[#41413d] px-3 py-1.5 text-[14px] text-[#e6e5df] transition hover:bg-[#4a4a46]"
+            className="rounded-lg bg-[#41413d] px-3 py-1.5 text-[14px] text-[#e6e5df] outline-none transition hover:bg-[#4a4a46] focus-visible:ring-2 focus-visible:ring-[#8a8982]/60"
           >
-            Annuler
+            {cancelLabel}
           </button>
           <button
-            autoFocus
+            autoFocus={initialFocus === "confirm"}
             onClick={onConfirm}
-            className="rounded-lg border border-[#c9594a] bg-[#4a2622] px-3 py-1.5 text-[14px] text-[#f4a99b] outline-none transition hover:bg-[#5a2e29] focus-visible:ring-2 focus-visible:ring-[#c9594a]/60"
+            className={`rounded-lg border px-3 py-1.5 text-[14px] outline-none transition focus-visible:ring-2 ${
+              confirmTone === "danger"
+                ? "border-[#c9594a] bg-[#4a2622] text-[#f4a99b] hover:bg-[#5a2e29] focus-visible:ring-[#c9594a]/60"
+                : "border-[#d97757] bg-[#d97757] font-medium text-[#181817] hover:bg-[#e38768] focus-visible:ring-[#d97757]/60"
+            }`}
           >
             {confirmLabel}
           </button>
