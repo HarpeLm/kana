@@ -1,13 +1,18 @@
 import type { PermissionRequest } from "./chatState";
 
 /** Comment les demandes d'autorisation des agents sont traitées. */
-export type PermissionMode = "ask" | "auto" | "full";
+export type PermissionMode = "ask" | "plan" | "auto" | "full";
 
 export const MODES: { id: PermissionMode; label: string; description: string }[] = [
   {
     id: "ask",
     label: "Demander l'approbation",
     description: "Toujours demander avant de modifier les fichiers ou d'utiliser Internet",
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    description: "Créer un plan avant d'apporter des modifications",
   },
   {
     id: "auto",
@@ -49,7 +54,16 @@ const DANGEROUS =
  * On ne choisit jamais qu'une autorisation ponctuelle : refuser ou retenir un choix reste à lui.
  */
 export function autoAnswer(mode: PermissionMode, request: Pick<PermissionRequest, "title" | "options">): string | null {
-  if (mode === "ask") return null;
+  if (mode === "ask" || mode === "plan") return null;
   if (mode === "auto" && DANGEROUS.test(request.title)) return null;
   return request.options.find((o) => o.kind === "allow_once")?.id ?? null;
+}
+
+const PLAN_INSTRUCTION =
+  "Mode plan : ne modifie aucun fichier et ne lance aucune commande qui change quoi que ce soit. " +
+  "Étudie d'abord le sujet, propose un plan détaillé, puis attends mon accord avant d'agir.\n\n";
+
+/** Le texte réellement envoyé à l'agent : en mode plan, il reçoit la consigne de planifier d'abord. */
+export function promptFor(mode: PermissionMode, text: string): string {
+  return mode === "plan" ? PLAN_INSTRUCTION + text : text;
 }
