@@ -11,11 +11,12 @@ interface ChatViewProps {
   onStop: () => void;
   onAnswer: (requestId: string, optionId: string | null) => void;
   onOpenLink: (url: string) => void;
+  onFork: (messageId: string) => void;
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
 }
 
-export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink, mode, onModeChange }: ChatViewProps) {
+export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink, onFork, mode, onModeChange }: ChatViewProps) {
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
       <ChatMessages
@@ -24,6 +25,7 @@ export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, o
         onOpenLink={onOpenLink}
         busy={chat.busy}
         onSend={onSend}
+        onFork={onFork}
       />
 
       {chat.permissions.length > 0 && (
