@@ -101,6 +101,12 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Choisit le fournisseur (l'agent) et le modèle d'une conversation. */
+  const setAgent = useCallback(
+    (id: string, agentId: string, modelId?: string) => patch(id, (c) => ({ ...c, agentId, modelId })),
+    [patch],
+  );
+
   const setUseWorktree = useCallback(
     (id: string, useWorktree: boolean) => patch(id, (c) => ({ ...c, useWorktree })),
     [patch],
@@ -171,6 +177,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     clearForkContext,
     setProject,
     setUseWorktree,
+    setAgent,
     fork,
   };
 }
