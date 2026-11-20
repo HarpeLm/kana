@@ -4,6 +4,8 @@ import { AGENTS, type View } from "./data";
 import { useBrowserAgent } from "./hooks/useBrowserAgent";
 import type { Startup } from "./lib/startup";
 import { useProjects } from "./hooks/useProjects";
+import { setThreadModel } from "./lib/models";
+import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
 import { NO_PROJECT, NO_PROJECT_NAME, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
 import { useChat, type PreparedThread } from "./hooks/useChat";
@@ -91,14 +93,14 @@ export default function App({ startup }: { startup: Startup }) {
       }
       const preface = conversation.forkContext;
       if (preface) clearForkContext(threadId);
-      return { cwd, preface };
+      return { cwd, preface, model: conversation.modelId };
     },
     [attachWorktree, clearForkContext],
   );
   const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread);
 
   // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
-  const { setProject, setUseWorktree } = conversations;
+  const { setProject, setUseWorktree, setAgent } = conversations;
   const selectProject = (project: Project | null) => {
     if (project) {
       projectList.use(project);
@@ -117,6 +119,14 @@ export default function App({ startup }: { startup: Startup }) {
       return null;
     } catch (error) {
       return String(error);
+    }
+  };
+  // Fournisseur et modèle : le fournisseur ne change que tant que la conversation est vide.
+  const chooseModel = (agentId: string, modelId: string | undefined) => {
+    setAgent(selected.id, agentId, modelId);
+    // Un agent déjà lancé change de modèle sans redémarrer.
+    if (modelId && agentId === selected.agentId && chat.messages.length > 0) {
+      setThreadModel(selected.id, modelId).catch(() => {});
     }
   };
   const newSession = {
@@ -352,6 +362,15 @@ export default function App({ startup }: { startup: Startup }) {
               mode={permissionMode}
               onModeChange={changeMode}
               newSession={newSession}
+              modelPicker={
+                <ModelPicker
+                  agents={AGENTS}
+                  agentId={selected.agentId}
+                  modelId={selected.modelId}
+                  canSwitchProvider={chat.messages.length === 0 && !chat.busy}
+                  onSelect={chooseModel}
+                />
+              }
             />
             {showRightPanel && (
               <RightPanel
