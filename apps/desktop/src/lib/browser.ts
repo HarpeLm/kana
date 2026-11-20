@@ -28,6 +28,8 @@ export interface BrowserHandlers {
   onLoading: (id: string, loading: boolean) => void;
   /** Un lien voulait ouvrir une nouvelle fenêtre : Kana en fait un onglet. */
   onNewTab: (url: string) => void;
+  /** Une page chargée a annoncé son icône. */
+  onFavicon: (pageUrl: string, icon: string) => void;
 }
 
 /** Écoute ce que font les pages (adresse, titre, chargement, nouvelle fenêtre). */
@@ -43,6 +45,9 @@ export async function listenBrowser(handlers: BrowserHandlers): Promise<() => vo
       handlers.onLoading(e.payload.id, e.payload.loading),
     ),
     listen<{ id: string; url: string }>("browser-new-tab", (e) => handlers.onNewTab(e.payload.url)),
+    listen<{ page: string; icon: string }>("browser-favicon", (e) =>
+      handlers.onFavicon(e.payload.page, e.payload.icon),
+    ),
   ]);
   return () => unlisteners.forEach((off) => off());
 }
