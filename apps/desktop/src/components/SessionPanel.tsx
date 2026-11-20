@@ -137,6 +137,8 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   const links = linksIn(messages).slice(0, 6);
 
   const changed = summary?.changed ?? [];
+  // Rien de rempli : la carte ne prend que la place de son contenu, comme une petite carte.
+  const anyFilled = plan.length > 0 || recent.length > 0 || created.length + links.length > 0 || changed.length > 0 || pulls.length > 0;
   const commits = summary?.commits ?? [];
   const onMainBranch = !summary?.branch || summary.branch === summary.base;
   const nothingToShare = !!summary && summary.ahead === 0 && !summary.dirty;
@@ -174,8 +176,8 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
 
   return (
     <aside className="flex w-[360px] shrink-0 flex-col p-3">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#232321]">
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+      <div className={`flex min-h-0 flex-col overflow-hidden rounded-2xl bg-[#232321] ${anyFilled ? "flex-1" : ""}`}>
+        <div className={`flex min-h-0 flex-col overflow-y-auto p-4 ${anyFilled ? "flex-1" : ""}`}>
         <Section title="Environnement" compact>
           <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
           <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
