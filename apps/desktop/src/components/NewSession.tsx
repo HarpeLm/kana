@@ -20,7 +20,7 @@ export interface NewSessionProps {
 export function EnvironmentRow({ session }: { session: NewSessionProps }) {
   const none = session.projectPath === NO_PROJECT;
   return (
-    <div className="flex items-center gap-0.5 text-[#c4c3bc]">
+    <div className="flex items-center gap-0.5 whitespace-nowrap text-[#c4c3bc]">
       <span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px]">
         <Laptop className="h-[15px] w-[15px]" strokeWidth={1.6} />
         Cet ordinateur
