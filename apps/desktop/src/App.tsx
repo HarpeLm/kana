@@ -381,14 +381,13 @@ export default function App({ startup }: { startup: Startup }) {
               <SessionPanel
                 conversation={selected}
                 messages={chat.messages}
+                plan={chat.plan}
                 summary={sessionSummary.summary}
                 pulls={sessionSummary.pulls}
                 workPath={workPath}
                 onOpenDiff={() => setShowDiff(true)}
                 onOpenLink={openInGlobe}
                 onRefresh={() => void sessionSummary.refresh()}
-                showPlan={showPlan}
-                showArtifacts={showArtifacts}
               />
             )}
           </div>
