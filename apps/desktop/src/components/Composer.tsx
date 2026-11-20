@@ -16,10 +16,12 @@ interface ComposerProps {
   onModeChange: (mode: PermissionMode) => void;
   /** Remplace le mode, à gauche sous la ligne ; le mode passe alors à droite. */
   footerLeft?: ReactNode;
+  /** Choix du fournisseur et du modèle, à droite sous la ligne ; sinon le nom de l'agent. */
+  modelPicker?: ReactNode;
   placeholder?: string;
 }
 
-export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange, footerLeft, placeholder }: ComposerProps) {
+export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange, footerLeft, modelPicker, placeholder }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
 
@@ -91,8 +93,8 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
         <div className="mt-1.5 flex items-center justify-between gap-3">
           {footerLeft ?? <ModeMenu mode={mode} onChange={onModeChange} />}
           <div className="flex items-center gap-1">
+            {modelPicker ?? <span className="pr-3 text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>}
             {footerLeft && <ModeMenu mode={mode} onChange={onModeChange} align="right" />}
-            <span className="pr-3 text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>
           </div>
         </div>
       </div>
