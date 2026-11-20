@@ -60,8 +60,10 @@ export default function ModelPicker({ agents, agentId, modelId, canSwitchProvide
   const current = cachedModels(agentId);
   const label = (() => {
     const id = modelId ?? current?.current ?? undefined;
-    const name = id ? (current?.available.find((m) => m.id === id)?.name ?? id) : "modèle par défaut";
-    return name.length > 28 ? `${name.slice(0, 27)}…` : name;
+    const full = id ? (current?.available.find((m) => m.id === id)?.name ?? id) : "modèle par défaut";
+    // « opencode/Tidepool Alpha Free » : le fournisseur est déjà nommé juste avant, on le retire ici.
+    const name = full.includes("/") ? full.slice(full.lastIndexOf("/") + 1) : full;
+    return name.length > 24 ? `${name.slice(0, 23)}…` : name;
   })();
   const agentName = agents.find((a) => a.id === agentId)?.name ?? agentId;
 
@@ -72,13 +74,16 @@ export default function ModelPicker({ agents, agentId, modelId, canSwitchProvide
   const selectedId = viewing === agentId ? (modelId ?? models?.current ?? undefined) : models?.current ?? undefined;
 
   return (
-    <div ref={root} className="relative">
+    <div ref={root} className="relative min-w-0">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] text-[#9a9992] transition hover:bg-[#262624] hover:text-[#ecebe4]"
+        title={`${agentName} · ${label}`}
+        className="flex max-w-full items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] text-[#9a9992] transition hover:bg-[#262624] hover:text-[#ecebe4]"
       >
-        {agentName} · {label}
-        <ChevronDown className="h-3 w-3" strokeWidth={1.8} />
+        <span className="truncate">
+          {agentName} · {label}
+        </span>
+        <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={1.8} />
       </button>
       {open && (
         <div className="absolute bottom-full right-0 z-30 mb-2 flex h-[340px] w-[520px] max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border border-[#343432] bg-[#2a2a28] shadow-2xl">
