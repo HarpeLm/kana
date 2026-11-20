@@ -8,10 +8,19 @@ interface TerminalTabsProps {
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onAdd: () => void;
+  /** Libellé du bouton « + » (selon ce que les onglets contiennent). */
+  addLabel?: string;
 }
 
 /** Onglets du volet Terminal et bouton « + » pour en ouvrir un nouveau. */
-export default function TerminalTabs({ tabs, activeId, onSelect, onClose, onAdd }: TerminalTabsProps) {
+export default function TerminalTabs({
+  tabs,
+  activeId,
+  onSelect,
+  onClose,
+  onAdd,
+  addLabel = "Nouveau terminal",
+}: TerminalTabsProps) {
   const many = tabs.length > 1;
 
   return (
@@ -25,7 +34,7 @@ export default function TerminalTabs({ tabs, activeId, onSelect, onClose, onAdd 
         >
           <button
             onClick={() => onSelect(tab.id)}
-            className={`h-7 truncate px-2 ${
+            className={`h-7 max-w-[170px] truncate px-2 ${
               tab.id === activeId ? "text-[#e6e5df]" : "text-[#8a8982] hover:text-[#e6e5df]"
             }`}
           >
@@ -42,7 +51,7 @@ export default function TerminalTabs({ tabs, activeId, onSelect, onClose, onAdd 
           )}
         </div>
       ))}
-      <ToolbarButton title="Nouveau terminal" onClick={onAdd}>
+      <ToolbarButton title={addLabel} onClick={onAdd}>
         <Plus className="h-[17px] w-[17px]" strokeWidth={1.6} />
       </ToolbarButton>
     </div>
