@@ -15,6 +15,7 @@ mod terminals;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(state::AgentSessions::default())
         .manage(terminals::Terminals::default())
         .manage(browser_agent::AgentState::default())
