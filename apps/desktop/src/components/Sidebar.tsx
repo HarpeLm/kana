@@ -1,3 +1,4 @@
+import { Settings } from "lucide-react";
 import { THREADS, type View } from "../data";
 import QuotaWidget from "./QuotaWidget";
 
@@ -6,6 +7,7 @@ interface SidebarProps {
   selectedThread: string;
   onSelectThread: (id: string) => void;
   onOpenRelay: () => void;
+  onOpenSettings: () => void;
 }
 
 export default function Sidebar({
@@ -13,6 +15,7 @@ export default function Sidebar({
   selectedThread,
   onSelectThread,
   onOpenRelay,
+  onOpenSettings,
 }: SidebarProps) {
   return (
     <aside className="flex w-[256px] shrink-0 flex-col border-r border-[#2b2b28] bg-[#21211f]">
@@ -41,6 +44,18 @@ export default function Sidebar({
       </div>
 
       <QuotaWidget onOpen={onOpenRelay} />
+
+      <button
+        onClick={onOpenSettings}
+        className={`flex h-10 shrink-0 items-center gap-2 border-t border-[#2b2b28] px-4 text-left text-[13px] transition ${
+          view === "settings"
+            ? "bg-[#2f2f2c] text-[#f0efe9]"
+            : "text-[#b3b2aa] hover:bg-[#272724] hover:text-[#e6e5df]"
+        }`}
+      >
+        <Settings className="h-[15px] w-[15px]" strokeWidth={1.6} />
+        Réglages
+      </button>
     </aside>
   );
 }
