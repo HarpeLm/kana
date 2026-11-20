@@ -23,7 +23,12 @@ export default function AccountCard({ agent }: { agent: AgentInfo }) {
           <h2 className="text-[14px] font-medium text-[#ecebe4]">{agent.name}</h2>
           <p className="mt-0.5 text-[12px] text-[#8c8b83]">{agent.hint}</p>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${style}`}>{label}</span>
+        <span
+          title={state.checkedAt ? `Vérifié le ${new Date(state.checkedAt).toLocaleString("fr-FR")}` : undefined}
+          className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${style}`}
+        >
+          {label}
+        </span>
       </div>
 
       {state.phase === "needs_login" && state.methods.length > 0 && (
