@@ -136,7 +136,7 @@ export default function FileTree({ files, changes, activePath, onOpen, collapseS
                 )}
                 <span
                   className={`min-w-0 flex-1 truncate ${
-                    status ? STATUS_COLOR[status] : node.isDir ? "text-[#e6e5df]" : "text-[#cfcec6]"
+                    status ? STATUS_COLOR[status] : node.isDir ? "text-[#f0efe9]" : "text-[#e6e5df]"
                   }`}
                 >
                   {node.name}
