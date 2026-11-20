@@ -22,6 +22,22 @@ pub fn remove_worktree(repo: &Path, path: &Path) -> Result<(), GitError> {
     git(repo, &["worktree", "remove", target.as_ref()], &[]).map(|_| ())
 }
 
+/// Crée un dépôt neuf dans `dir` (branche `main`) avec un premier commit vide : sans commit, on ne
+/// pourrait pas y créer de dossier de travail. Le commit est signé de l'identité git de l'utilisateur ;
+/// s'il n'en a pas, d'une identité de repli.
+pub fn init_repository(dir: &Path) -> Result<(), GitError> {
+    git(dir, &["init", "-q", "-b", "main"], &[])?;
+    let plain = git(dir, &["commit", "-q", "--allow-empty", "-m", "Initial commit"], &[]);
+    if plain.is_err() {
+        git(
+            dir,
+            &["-c", "user.name=Kana", "-c", "user.email=kana@localhost", "commit", "-q", "--allow-empty", "-m", "Initial commit"],
+            &[],
+        )?;
+    }
+    Ok(())
+}
+
 /// Le nom de la branche d'un dossier, ou `None` (tête détachée, pas un dépôt).
 pub fn current_branch(dir: &Path) -> Option<String> {
     let name = git(dir, &["rev-parse", "--abbrev-ref", "HEAD"], &[]).ok()?;
@@ -48,6 +64,17 @@ mod tests {
             assert!(Command::new("git").args(&args).current_dir(&dir).status().unwrap().success());
         }
         dir
+    }
+
+    #[test]
+    fn a_fresh_repository_can_host_worktrees() {
+        let dir = std::env::temp_dir().join(format!("kana-init-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        init_repository(&dir).unwrap();
+        let path = dir.with_extension("wt");
+        add_worktree(&dir, &path, "kana/x", None).unwrap();
+        assert_eq!(current_branch(&path).as_deref(), Some("kana/x"));
     }
 
     #[test]
