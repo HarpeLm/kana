@@ -4,6 +4,7 @@ import { AGENTS, type View } from "./data";
 import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
 import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
+import { useResizableWidth } from "./hooks/useResizableWidth";
 import { useNavHistory } from "./hooks/useNavHistory";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { sectionsOf } from "./lib/conversations";
@@ -17,7 +18,7 @@ import RelayView from "./components/RelayView";
 import RightPanel from "./components/RightPanel";
 import ScheduledView from "./components/ScheduledView";
 import SearchPalette from "./components/SearchPalette";
-import TerminalPanel from "./components/TerminalPanel";
+import TerminalDock from "./components/TerminalDock";
 import SettingsView from "./components/SettingsView";
 import Sidebar from "./components/Sidebar";
 
@@ -58,6 +59,14 @@ export default function App() {
 
   // Le terminal est monté à la première ouverture puis gardé : son shell survit quand on le masque.
   const [terminalOpened, setTerminalOpened] = useState(false);
+  const [terminalMaximized, setTerminalMaximized] = useState(false);
+  const terminalPanel = useResizableWidth({
+    storageKey: "kana-terminal-width",
+    min: 320,
+    max: 900,
+    fallback: 500,
+    from: "right",
+  });
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
     setTerminalOpened(true);
@@ -120,7 +129,12 @@ export default function App() {
         onOpenSettings={() => setView("settings")}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#181817]">
+      <div className="flex min-w-0 flex-1 overflow-hidden bg-[#181817]">
+      <div
+        className={`flex min-w-0 flex-1 flex-col overflow-hidden ${
+          showTerminal && terminalMaximized ? "hidden" : ""
+        }`}
+      >
         <Header
           leading={showSidebar ? undefined : <NavButtons {...nav} />}
           toolbar={{
@@ -188,11 +202,20 @@ export default function App() {
           <RelayView />
         )}
 
+      </div>
+
         {terminalOpened && (
-          <TerminalPanel
-            id="default"
+          <TerminalDock
             visible={showTerminal}
-            onClose={() => setShowTerminal(false)}
+            maximized={terminalMaximized}
+            width={terminalPanel.width}
+            dragging={terminalPanel.dragging}
+            onResizeStart={terminalPanel.startDrag}
+            onToggleMaximize={() => setTerminalMaximized((v) => !v)}
+            onClose={() => {
+              setShowTerminal(false);
+              setTerminalMaximized(false);
+            }}
           />
         )}
       </div>
