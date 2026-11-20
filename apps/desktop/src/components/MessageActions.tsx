@@ -9,7 +9,7 @@ function Action({ label, onClick, disabled, children }: { label: string; onClick
       disabled={disabled}
       title={label}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-lg text-[#8c8b83] transition hover:bg-[#262624] hover:text-[#ecebe4] disabled:opacity-40 disabled:hover:bg-transparent"
+      className="flex h-6 w-6 items-center justify-center rounded-md text-[#8c8b83] transition hover:bg-[#262624] hover:text-[#ecebe4] disabled:opacity-40 disabled:hover:bg-transparent"
     >
       {children}
     </button>
@@ -47,14 +47,14 @@ export default function MessageActions({ text, at, onRetry, onEdit, align = "lef
       .catch(() => {});
   };
 
-  const icon = "h-[15px] w-[15px]";
+  const icon = "h-[13px] w-[13px]";
   return (
     <div
-      className={`flex items-center gap-0.5 text-[12px] text-[#7e7d76] opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 ${
+      className={`flex items-center gap-0 text-[11px] text-[#7e7d76] opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 ${
         align === "right" ? "justify-end" : ""
       }`}
     >
-      {at && <span className="mr-1.5">{relativeTime(at)}</span>}
+      {at && <span className="mr-1">{relativeTime(at)}</span>}
       {onRetry && (
         <Action label="Réessayer" onClick={onRetry}>
           <RotateCcw className={icon} strokeWidth={1.7} />
