@@ -57,3 +57,32 @@ pub async fn write_repo_file(
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Ce que la branche d'un dossier de travail apporte par rapport à la branche principale.
+#[tauri::command]
+pub async fn git_branch_summary(path: Option<String>) -> Result<kana_git::BranchSummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::branch_summary(&start_dir(path)?).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Les pull requests de cette branche (liste vide si `gh` n'est pas disponible).
+#[tauri::command]
+pub async fn git_pull_requests(path: Option<String>, branch: String) -> Result<Vec<kana_git::PullRequest>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(kana_git::pull_requests(&start_dir(path)?, &branch)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Enregistre le travail, pousse la branche vers `origin` et ouvre une pull request.
+/// À n'appeler qu'après la confirmation explicite de l'utilisateur : c'est une action publique.
+#[tauri::command]
+pub async fn git_create_pull_request(path: Option<String>, branch: String, title: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::create_pull_request(&start_dir(path)?, &branch, &title).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
