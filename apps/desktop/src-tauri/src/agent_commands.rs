@@ -2,11 +2,14 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use kana_acp::{AcpClient, AcpEvent, preset};
+use kana_acp::{AcpClient, AcpError, AcpEvent};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::state::AgentSessions;
+use crate::{
+    agent_spec::{default_cwd, spec_for},
+    state::AgentSessions,
+};
 
 const EVENT_NAME: &str = "acp-event";
 
@@ -16,13 +19,6 @@ struct AgentEvent {
     thread_id: String,
     #[serde(flatten)]
     event: AcpEvent,
-}
-
-fn default_cwd() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| PathBuf::from("/"))
 }
 
 async fn client_of(sessions: &AgentSessions, thread_id: &str) -> Result<Arc<AcpClient>, String> {
@@ -44,9 +40,15 @@ pub async fn start_agent(
     if sessions.get(&thread_id).await.is_some() {
         return Ok(());
     }
-    let spec = preset(&agent).ok_or_else(|| format!("agent inconnu : {agent}"))?;
+    let spec = spec_for(&agent)?;
     let cwd = cwd.map(PathBuf::from).unwrap_or_else(default_cwd);
-    let (client, mut events) = AcpClient::spawn(&spec, &cwd).await.map_err(|e| e.to_string())?;
+    let (client, mut events) =
+        AcpClient::spawn(&spec, &cwd).await.map_err(|error| match error {
+            AcpError::AuthRequired(_) => {
+                "connexion requise : ouvre les Réglages pour te connecter".to_string()
+            }
+            other => other.to_string(),
+        })?;
     sessions.insert(thread_id.clone(), Arc::new(client)).await;
 
     tauri::async_runtime::spawn(async move {
