@@ -13,7 +13,7 @@ import {
   applyEvent,
   type ChatState,
 } from "../lib/chatState";
-import { autoAnswer, type PermissionMode } from "../lib/permissionMode";
+import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
 
 /** Conversation d'un fil avec son agent ACP. L'état de chaque fil est conservé séparément. */
 export function useChat(threadId: string, agentId: string, mode: PermissionMode) {
@@ -54,7 +54,7 @@ export function useChat(threadId: string, agentId: string, mode: PermissionMode)
       update(threadId, (chat) => addUserMessage(chat, text));
       try {
         await startAgent(threadId, agentId);
-        await sendPrompt(threadId, text);
+        await sendPrompt(threadId, promptFor(modeRef.current, text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
       }
