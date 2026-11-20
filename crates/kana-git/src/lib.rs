@@ -12,4 +12,4 @@ pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
 pub use parse::parse_diff;
 pub use run::{GitError, diff, repo_root};
 pub use status::{ChangedFile, changed_files, parse_status};
-pub use worktree::{add_worktree, current_branch, remove_worktree};
+pub use worktree::{add_worktree, current_branch, init_repository, remove_worktree};
