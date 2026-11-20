@@ -1,10 +1,10 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { inTauri } from "./env";
 
-/** Ouvre le sélecteur de fichiers du système et renvoie les chemins choisis. */
-export async function pickFiles(): Promise<string[]> {
+/** Ouvre le sélecteur du système (fichiers, ou dossiers) et renvoie les chemins choisis. */
+export async function pickFiles(directory = false): Promise<string[]> {
   if (!inTauri) return [];
-  const picked = await open({ multiple: true, directory: false });
+  const picked = await open({ multiple: !directory, directory });
   if (!picked) return [];
   return Array.isArray(picked) ? picked : [picked];
 }
