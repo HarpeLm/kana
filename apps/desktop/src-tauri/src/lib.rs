@@ -1,5 +1,6 @@
 mod agent_commands;
 mod agent_spec;
+mod attachment_commands;
 mod browser;
 mod browser_agent;
 mod browser_agent_tools;
@@ -24,6 +25,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            attachment_commands::image_preview,
             agent_commands::start_agent,
             agent_commands::send_prompt,
             agent_commands::cancel_prompt,
