@@ -1,15 +1,21 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import Toolbar from "./Toolbar";
 
 interface HeaderProps {
-  title?: string;
+  /** Boutons de navigation, affichés ici seulement quand la barre latérale est masquée. */
+  leading?: ReactNode;
+  /** Titre de la conversation ou de l'écran. */
+  children: ReactNode;
   toolbar: ComponentProps<typeof Toolbar>;
 }
 
-export default function Header({ title, toolbar }: HeaderProps) {
+export default function Header({ leading, children, toolbar }: HeaderProps) {
   return (
-    <header className="flex h-[44px] shrink-0 items-center justify-between border-b border-[#262623] px-4">
-      <span className="text-[13px] font-medium text-[#e6e5df]">{title}</span>
+    <header className="flex h-[44px] shrink-0 items-center justify-between gap-3 border-b border-[#262623] px-3">
+      <div className="flex min-w-0 items-center gap-2">
+        {leading}
+        {children}
+      </div>
       <Toolbar {...toolbar} />
     </header>
   );
