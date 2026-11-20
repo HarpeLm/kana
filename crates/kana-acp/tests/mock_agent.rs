@@ -5,7 +5,7 @@ use kana_acp::{AcpClient, AcpEvent, AgentSpec};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 fn shell_agent(script: &str) -> AgentSpec {
-    AgentSpec { command: "sh".into(), args: vec!["-c".into(), script.into()] }
+    AgentSpec::new("sh", &["-c", script])
 }
 
 const HANDSHAKE: &str = r#"
@@ -89,7 +89,49 @@ async fn agent_exit_is_reported() {
 
 #[tokio::test]
 async fn missing_binary_gives_a_spawn_error() {
-    let spec = AgentSpec { command: "kana-agent-inexistant".into(), args: vec![] };
+    let spec = AgentSpec::new("kana-agent-inexistant", &[]);
     let result = AcpClient::spawn(&spec, &std::env::temp_dir()).await;
     assert!(matches!(result, Err(kana_acp::AcpError::Spawn(_))));
+}
+
+const NOT_LOGGED_IN: &str = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"authMethods":[{"id":"chatgpt","name":"ChatGPT","description":"Compte ChatGPT"}]}}'
+read line; echo '{"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"Authentication required"}}'
+"#;
+
+#[tokio::test]
+async fn unauthenticated_agent_lists_its_login_methods() {
+    let result = AcpClient::spawn(&shell_agent(NOT_LOGGED_IN), &std::env::temp_dir()).await;
+    let Err(kana_acp::AcpError::AuthRequired(methods)) = result else {
+        panic!("attendu : AuthRequired");
+    };
+    assert_eq!(methods.len(), 1);
+    assert_eq!(methods[0].id, "chatgpt");
+}
+
+#[tokio::test]
+async fn authenticate_runs_before_the_session_is_created() {
+    // initialize = 1, authenticate = 2, session/new = 3.
+    let script = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+read line
+case "$line" in *'"methodId":"chatgpt"'*) echo '{"jsonrpc":"2.0","id":2,"result":{}}';; esac
+read line; echo '{"jsonrpc":"2.0","id":3,"result":{"sessionId":"apres-login"}}'
+"#;
+    let (client, _events) =
+        AcpClient::spawn_authenticated(&shell_agent(script), &std::env::temp_dir(), "chatgpt")
+            .await
+            .unwrap();
+    assert_eq!(client.session_id(), "apres-login");
+}
+
+#[tokio::test]
+async fn env_variables_reach_the_agent() {
+    let script = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+read line; echo '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"'$KANA_TEST_KEY'"}}'
+"#;
+    let spec = shell_agent(script).with_env("KANA_TEST_KEY", "secret-123");
+    let (client, _events) = AcpClient::spawn(&spec, &std::env::temp_dir()).await.unwrap();
+    assert_eq!(client.session_id(), "secret-123");
 }
