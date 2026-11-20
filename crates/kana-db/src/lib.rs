@@ -1,14 +1,7 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Stockage local de Kana : conversations et messages dans une base SQLite.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod model;
+mod store;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use model::{StoredConversation, StoredMessage};
+pub use store::{Store, StoreError};
