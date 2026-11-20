@@ -46,10 +46,10 @@
 }
 .markdown-body .link-icon {
   display: inline-block;
-  width: 1em;
-  height: 1em;
+  width: 1.1em;
+  height: 1.1em;
   margin-right: 0.35em;
-  vertical-align: -0.14em;
+  vertical-align: -0.2em;
   border-radius: 3px;
   object-fit: contain;
 }
@@ -83,6 +83,15 @@
 .markdown-body ol { list-style: decimal; padding-left: 1.5em; }
 .markdown-body li + li { margin-top: 0.25em; }
 .markdown-body a { color: #6aa6e8; text-decoration: underline; text-underline-offset: 2px; }
+/* Liens de la conversation, comme dans Codex : bleu vif, sans soulignement, icône de la même couleur. */
+.markdown-body.chat-markdown a {
+  color: #4a9bff;
+  text-decoration: none;
+}
+.markdown-body.chat-markdown a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .markdown-body code {
   background: #232321;
   border-radius: 5px;
