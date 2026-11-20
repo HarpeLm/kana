@@ -29,17 +29,21 @@ const dirName = (path: string) => path.split("/").slice(0, -1).join("/");
 const SHOWN = 5;
 
 /**
- * Une partie du panneau. Toutes ont la même hauteur (même vides), séparées par un trait fin ; ce qui
- * dépasse défile à l'intérieur de la partie.
+ * Une partie du panneau. Remplie, elle partage la hauteur à égalité avec les autres remplies (ce qui
+ * dépasse défile dedans) ; vide, elle se réduit à son titre et une ligne, comme une petite carte.
  */
-function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+function Section({ title, count, compact, children }: { title: string; count?: number; compact?: boolean; children: ReactNode }) {
   return (
-    <section className="flex min-h-[132px] flex-1 basis-0 flex-col border-t border-[#2f2f2c] py-3 first:border-t-0 first:pt-0 last:pb-0">
+    <section
+      className={`flex flex-col border-t border-[#2f2f2c] py-3 first:border-t-0 first:pt-0 last:pb-0 ${
+        compact ? "shrink-0" : "min-h-[132px] flex-1 basis-0"
+      }`}
+    >
       <h3 className="mb-2 flex shrink-0 items-baseline gap-2 text-[13px] text-[#9a9992]">
         {title}
         {count !== undefined && count > 0 && <span className="text-[12px] text-[#6f6e68]">{count}</span>}
       </h3>
-      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      <div className={compact ? "" : "min-h-0 flex-1 overflow-y-auto"}>{children}</div>
     </section>
   );
 }
@@ -172,7 +176,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
     <aside className="flex w-[360px] shrink-0 flex-col p-3">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#232321]">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-        <Section title="Environnement">
+        <Section title="Environnement" compact>
           <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
           <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
             {noProject ? "Aucun dossier" : conversation.project}
@@ -188,7 +192,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           )}
         </Section>
 
-        <Section title="Plan et tâches" count={plan.length}>
+        <Section title="Plan et tâches" count={plan.length} compact={plan.length === 0}>
           {plan.length === 0 && <Empty>L'agent n'a pas annoncé de plan.</Empty>}
           {plan.map((item, index) => (
             <Row key={index} icon={<PlanIcon status={item.status} />}>
@@ -197,7 +201,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           ))}
         </Section>
 
-        <Section title="Artéfacts" count={created.length + links.length}>
+        <Section title="Artéfacts" count={created.length + links.length} compact={created.length + links.length === 0}>
           {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
           {created.slice(0, 5).map((file) => (
             <Row key={file.path} onClick={onOpenDiff} title={file.path} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
@@ -211,7 +215,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           ))}
         </Section>
 
-        <Section title="Activité" count={tools.length}>
+        <Section title="Activité" count={tools.length} compact={recent.length === 0}>
           {recent.length === 0 && <Empty>Aucune commande lancée.</Empty>}
           {recent.map((tool) => (
             <Row key={tool.id} icon={<ToolStatus status={tool.status} />} title={toolCommand(tool) ?? undefined}>
@@ -273,7 +277,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           </Section>
         )}
 
-        <Section title="Modifications" count={changed.length}>
+        <Section title="Modifications" count={changed.length} compact={changed.length === 0}>
           <Row
             icon={<FileDiff className="h-4 w-4" strokeWidth={1.7} />}
             trailing={
