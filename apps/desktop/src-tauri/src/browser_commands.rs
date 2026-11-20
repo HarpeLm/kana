@@ -6,11 +6,14 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
     webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder},
 };
 
-use crate::browser::{is_allowed_navigation, parse_web_url, webview_label};
+use crate::{
+    browser::{is_allowed_navigation, parse_web_url, webview_label},
+    browser_agent::AgentState,
+};
 
 /// Position et taille de la vue, en pixels logiques dans la fenêtre.
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -60,6 +63,8 @@ pub fn browser_open(app: AppHandle, id: String, url: String, bounds: Bounds) -> 
     let (nav_id, load_id, title_id, popup_id) = (id.clone(), id.clone(), id.clone(), id);
 
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+        // Outils de lecture et d'action sur la page, pour les agents.
+        .initialization_script(include_str!("agent_page.js"))
         .on_navigation(move |target| {
             if !is_allowed_navigation(target) {
                 return false;
@@ -139,4 +144,16 @@ pub fn browser_close(app: AppHandle, id: String) -> Result<(), String> {
         Some(webview) => webview.close().map_err(|e| e.to_string()),
         None => Ok(()),
     }
+}
+
+/// L'onglet que l'utilisateur regarde : celui sur lequel les agents agissent.
+#[tauri::command]
+pub fn browser_set_active(state: State<'_, AgentState>, id: String) {
+    state.set_active(id);
+}
+
+/// Réponse de l'utilisateur à une demande d'accord d'un agent.
+#[tauri::command]
+pub fn browser_agent_answer(state: State<'_, AgentState>, request_id: String, allow: bool) {
+    state.answer(&request_id, allow);
 }
