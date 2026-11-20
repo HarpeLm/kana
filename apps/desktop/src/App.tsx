@@ -1,22 +1,39 @@
 import { useState } from "react";
 import "./App.css";
-import { THREADS, type View } from "./data";
+import { AGENTS, type View } from "./data";
 import { useChat } from "./hooks/useChat";
-import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
+import { useConversations } from "./hooks/useConversations";
+import { useNavHistory } from "./hooks/useNavHistory";
+import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import ChatView from "./components/ChatView";
-import RightPanel from "./components/RightPanel";
+import ConversationTitle from "./components/ConversationTitle";
+import Header from "./components/Header";
+import NavButtons from "./components/NavButtons";
 import RelayView from "./components/RelayView";
+import RightPanel from "./components/RightPanel";
 import SettingsView from "./components/SettingsView";
+import Sidebar from "./components/Sidebar";
+
+const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
 
 export default function App() {
   const [view, setView] = useState<View>("workspace");
-  const [selectedThread, setSelectedThread] = useState("1");
-  const thread = THREADS.find((t) => t.id === selectedThread) ?? THREADS[0];
-  const { chat, send, stop, answer } = useChat(thread.id, thread.agentId);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const conversations = useConversations();
+  const { selected } = conversations;
+  const sidebar = useSidebarWidth();
 
-  // Boutons de la barre en haut à droite
-  const [showSidebar, setShowSidebar] = useState(false);
+  const openConversation = (id: string) => {
+    conversations.select(id);
+    setView("workspace");
+  };
+  const history = useNavHistory(selected.id, openConversation);
+  const { chat, send, stop, answer } = useChat(selected.id, selected.agentId);
+  const agentLabel = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
+
+  // Barre latérale et boutons du haut
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showPlan, setShowPlan] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
@@ -29,29 +46,59 @@ export default function App() {
   const [showSimulator, setShowSimulator] = useState(false);
   const [keepAwake, setKeepAwake] = useState(false);
 
-  const showRightPanel = showDiff || showTerminal || showArtifacts || showBackgroundTasks;
-  const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
+  const showRightPanel =
+    showPlan || showDiff || showTerminal || showArtifacts || showBackgroundTasks;
+
+  const nav = {
+    onToggleSidebar: toggle(setShowSidebar),
+    canBack: history.canBack,
+    canForward: history.canForward,
+    onBack: history.back,
+    onForward: history.forward,
+  };
+
+  const createConversation = () => {
+    conversations.create();
+    setView("workspace");
+  };
+  const rename = (id: string, title: string) => {
+    conversations.rename(id, title);
+    setEditingId(null);
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#181817] text-[#e6e5df] select-none">
       {showSidebar && (
         <Sidebar
+          conversations={conversations.items}
+          selectedId={selected.id}
+          editingId={editingId}
           view={view}
-          selectedThread={selectedThread}
-          onSelectThread={(id) => {
-            setSelectedThread(id);
+          width={sidebar.width}
+          dragging={sidebar.dragging}
+          onResizeStart={sidebar.startDrag}
+          nav={nav}
+          onCreate={createConversation}
+          onArtifacts={() => {
+            setShowArtifacts((v) => !v);
             setView("workspace");
           }}
-          onOpenRelay={() => setView("relay")}
           onOpenSettings={() => setView("settings")}
+          onSelect={openConversation}
+          onPin={conversations.togglePin}
+          onStartRename={setEditingId}
+          onRename={rename}
+          onCancelRename={() => setEditingId(null)}
+          onDelete={conversations.remove}
         />
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden bg-[#181817]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#181817]">
         <Header
-          title={view === "settings" ? "Réglages" : thread.branch}
+          leading={showSidebar ? undefined : <NavButtons {...nav} />}
           toolbar={{
-            onToggleSidebar: toggle(setShowSidebar),
+            showPlan,
+            onPlan: toggle(setShowPlan),
             showTerminal,
             onTerminal: toggle(setShowTerminal),
             showDiff,
@@ -73,14 +120,28 @@ export default function App() {
               onKeepAwake: toggle(setKeepAwake),
             },
           }}
-        />
+        >
+          {view === "settings" ? (
+            <span className="px-2 text-[14px] text-[#e6e5df]">Réglages</span>
+          ) : (
+            <ConversationTitle
+              conversation={selected}
+              editing={editingId === selected.id && !showSidebar}
+              onPin={() => conversations.togglePin(selected.id)}
+              onStartRename={() => setEditingId(selected.id)}
+              onRename={(title) => rename(selected.id, title)}
+              onCancelRename={() => setEditingId(null)}
+              onDelete={() => conversations.remove(selected.id)}
+            />
+          )}
+        </Header>
 
         {view === "settings" ? (
           <SettingsView />
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <ChatView
-              agentLabel={thread.agent}
+              agentLabel={agentLabel}
               chat={chat}
               onSend={send}
               onStop={stop}
@@ -88,6 +149,7 @@ export default function App() {
             />
             {showRightPanel && (
               <RightPanel
+                showPlan={showPlan}
                 showArtifacts={showArtifacts}
                 showBackgroundTasks={showBackgroundTasks}
                 showDiff={showDiff}
