@@ -398,6 +398,9 @@ export default function App({ startup }: { startup: Startup }) {
       </div>
 
         <FilesDock
+          // Un autre dossier de travail repart d'un volet neuf : ses fichiers ouverts ne sont pas les mêmes.
+          key={workPath ?? "depot"}
+          root={workPath}
           visible={showFiles && !terminalFills}
           maximized={filesMaximized}
           width={filesPanel.width}
