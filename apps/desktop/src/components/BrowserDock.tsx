@@ -17,6 +17,7 @@ import {
 } from "../lib/browser";
 import { setActiveBrowserTab } from "../lib/browserAgent";
 import { inTauri } from "../lib/env";
+import AgentBanner from "./AgentBanner";
 import BrowserBar from "./BrowserBar";
 import SidePane from "./SidePane";
 import TerminalTabs from "./TerminalTabs";
@@ -30,6 +31,10 @@ interface BrowserDockProps {
   dragging: boolean;
   onResizeStart: (event: PointerEvent) => void;
   onClose: () => void;
+  /** Un agent agit sur la page en ce moment. */
+  driving: boolean;
+  /** Adresse à ouvrir dans un nouvel onglet ; `id` change à chaque demande. */
+  openRequest: { id: number; url: string } | null;
 }
 
 const ignore = () => {};
@@ -39,7 +44,16 @@ const ignore = () => {};
  * posée sur l'emplacement vide du volet. Les sessions (cookies) sont conservées entre deux
  * lancements. Masqué, le volet garde ses onglets ouverts.
  */
-export default function BrowserDock({ visible, suspended, width, dragging, onResizeStart, onClose }: BrowserDockProps) {
+export default function BrowserDock({
+  visible,
+  suspended,
+  width,
+  dragging,
+  onResizeStart,
+  onClose,
+  driving,
+  openRequest,
+}: BrowserDockProps) {
   const { tabs, activeId, add, select, close, setUrl, setTitle, setLoading } = useBrowserTabs();
   const slot = useRef<HTMLDivElement>(null);
   const created = useRef(new Set<string>());
@@ -72,6 +86,14 @@ export default function BrowserDock({ visible, suspended, width, dragging, onRes
     ensureViews();
     for (const id of created.current) setBrowserBounds(id, area).catch(ignore);
   });
+
+  // Un lien cliqué dans la conversation s'ouvre dans un nouvel onglet.
+  const handled = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openRequest || handled.current === openRequest.id) return;
+    handled.current = openRequest.id;
+    add(openRequest.url);
+  }, [openRequest, add]);
 
   // Les agents agissent sur l'onglet que l'utilisateur regarde.
   useEffect(() => {
@@ -149,6 +171,7 @@ export default function BrowserDock({ visible, suspended, width, dragging, onRes
       }
     >
       <div className="flex h-full flex-col">
+        {driving && <AgentBanner />}
         <BrowserBar
           address={address}
           loading={active.loading}
