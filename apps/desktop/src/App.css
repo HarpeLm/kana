@@ -44,6 +44,18 @@
   line-height: 1.7;
   letter-spacing: 0;
 }
+.markdown-body .link-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.35em;
+  vertical-align: -0.14em;
+  border-radius: 3px;
+  object-fit: contain;
+}
+.markdown-body .link-icon-svg {
+  color: #d4d3cb;
+}
 .markdown-body > :first-child {
   margin-top: 0;
 }
