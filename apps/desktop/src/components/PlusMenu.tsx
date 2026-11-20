@@ -26,7 +26,7 @@ function Item({
       onClick={onClick}
       disabled={soon}
       title={soon ? "Bientôt" : undefined}
-      className="flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left text-[13px] text-[#ecebe4] transition hover:bg-[#333331] disabled:cursor-default disabled:text-[#7e7d76] disabled:hover:bg-transparent"
+      className="flex w-full items-center gap-3 rounded-xl px-3 py-1 text-left text-[13px] text-[#ecebe4] transition hover:bg-[#333331] disabled:cursor-default disabled:text-[#7e7d76] disabled:hover:bg-transparent"
     >
       <span className="shrink-0">{icon}</span>
       <span className="flex-1 truncate">{label}</span>
@@ -60,7 +60,7 @@ export default function PlusMenu({ onAddFiles, onAddFolder, onSlash }: PlusMenuP
         <Plus className="h-[18px] w-[18px]" strokeWidth={1.8} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 w-[320px] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1.5 shadow-2xl">
+        <div className="absolute bottom-full left-0 z-30 mb-2 w-[320px] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl">
           <Item
             icon={<Paperclip className={icon} strokeWidth={1.6} />}
             label="Ajouter des fichiers ou des photos"
