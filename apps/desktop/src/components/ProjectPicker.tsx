@@ -13,12 +13,27 @@ interface ProjectPickerProps {
   onOpenFolder: () => void;
   /** Crée un projet neuf ; renvoie l'erreur à montrer, ou `null`. */
   onCreate: (name: string) => Promise<string | null>;
+  /** Libellé du bouton quand il remplace le bouton habituel (liste des projets au centre de l'écran). */
+  triggerLabel?: string;
+  /** Le menu s'ouvre vers le bas plutôt que vers le haut. */
+  dropDown?: boolean;
+  triggerClassName?: string;
 }
 
 const row = "flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] text-[#ecebe4] transition hover:bg-[#333331]";
 
 /** Choix du projet d'une session : recherche, récents, ouvrir un dossier, nouveau projet. */
-export default function ProjectPicker({ projects, current, currentName, onSelect, onOpenFolder, onCreate }: ProjectPickerProps) {
+export default function ProjectPicker({
+  projects,
+  current,
+  currentName,
+  onSelect,
+  onOpenFolder,
+  onCreate,
+  triggerLabel,
+  dropDown,
+  triggerClassName,
+}: ProjectPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
@@ -57,14 +72,17 @@ export default function ProjectPicker({ projects, current, currentName, onSelect
     <div ref={root} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] text-[#c4c3bc] transition hover:bg-[#262624] hover:text-[#ecebe4]"
+        className={
+          triggerClassName ??
+          "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] text-[#c4c3bc] transition hover:bg-[#262624] hover:text-[#ecebe4]"
+        }
       >
-        <Folder className="h-[15px] w-[15px]" strokeWidth={1.6} />
-        {currentName}
+        {!triggerLabel && <Folder className="h-[15px] w-[15px]" strokeWidth={1.6} />}
+        {triggerLabel ?? currentName}
         <ChevronDown className="h-3 w-3" strokeWidth={1.8} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 w-[260px] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl">
+        <div className={`absolute left-0 z-30 w-[260px] ${dropDown ? "top-full mt-2" : "bottom-full mb-2"} rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl`}>
           <input
             ref={search}
             value={query}
