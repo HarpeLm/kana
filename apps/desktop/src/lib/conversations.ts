@@ -10,6 +10,8 @@ export interface Conversation {
   unread?: boolean;
   /** Rangée dans « Archivées » au lieu de son projet. */
   archived?: boolean;
+  /** Dernière ouverture (ms), pour classer les récentes dans la recherche. */
+  openedAt?: number;
 }
 
 export const DEFAULT_PROJECT = "kana";
@@ -28,7 +30,7 @@ const STORAGE_KEY = "kana-conversations";
 
 export function makeConversation(project: string, agentId: string): Conversation {
   const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  return { id, title: "Nouvelle conversation", project, agentId, pinned: false };
+  return { id, title: "Nouvelle conversation", project, agentId, pinned: false, openedAt: Date.now() };
 }
 
 export function loadConversations(): Conversation[] {
