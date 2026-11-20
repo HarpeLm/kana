@@ -26,6 +26,7 @@ pub fn run() {
             git_commands::git_diff,
             git_commands::repo_files,
             git_commands::read_repo_file,
+            git_commands::write_repo_file,
             terminal_commands::terminal_open,
             terminal_commands::terminal_write,
             terminal_commands::terminal_resize,
