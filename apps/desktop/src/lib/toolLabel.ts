@@ -52,3 +52,13 @@ export function toolLabel(tool: ToolCall): string {
   if (!found || !actions[found[1]]) return tool.title;
   return describe(found[1], field(tool.input, "url") ?? field(tool.input, "text") ?? field(tool.input, "key"));
 }
+
+/** La commande ou le script qu'un outil a lancé, tel que l'agent l'a écrit. */
+export function toolCommand(tool: ToolCall): string | null {
+  if (tool.input && typeof tool.input === "object") {
+    const command = (tool.input as Record<string, unknown>).command;
+    if (typeof command === "string" && command) return command;
+    if (Array.isArray(command) && command.length > 0) return command.join(" ");
+  }
+  return field(tool.input, "code");
+}
