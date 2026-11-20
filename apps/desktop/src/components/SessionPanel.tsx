@@ -28,15 +28,18 @@ const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path
 const dirName = (path: string) => path.split("/").slice(0, -1).join("/");
 const SHOWN = 5;
 
-/** Une partie du panneau ; toutes sont dans la même carte, séparées par un trait fin. */
+/**
+ * Une partie du panneau. Toutes ont la même hauteur (même vides), séparées par un trait fin ; ce qui
+ * dépasse défile à l'intérieur de la partie.
+ */
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
-    <section className="border-t border-[#2f2f2c] pt-4 first:border-t-0 first:pt-0">
-      <h3 className="mb-2.5 flex items-baseline gap-2 text-[13px] text-[#9a9992]">
+    <section className="flex min-h-[132px] flex-1 basis-0 flex-col border-t border-[#2f2f2c] py-3 first:border-t-0 first:pt-0 last:pb-0">
+      <h3 className="mb-2 flex shrink-0 items-baseline gap-2 text-[13px] text-[#9a9992]">
         {title}
         {count !== undefined && count > 0 && <span className="text-[12px] text-[#6f6e68]">{count}</span>}
       </h3>
-      {children}
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </section>
   );
 }
@@ -168,7 +171,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   return (
     <aside className="flex w-[360px] shrink-0 flex-col p-3">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#232321]">
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
         <Section title="Environnement">
           <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
           <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
@@ -184,6 +187,91 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
             </Row>
           )}
         </Section>
+
+        <Section title="Plan et tâches" count={plan.length}>
+          {plan.length === 0 && <Empty>L'agent n'a pas annoncé de plan.</Empty>}
+          {plan.map((item, index) => (
+            <Row key={index} icon={<PlanIcon status={item.status} />}>
+              <span className={item.status === "completed" ? "text-[#8c8b83] line-through" : ""}>{item.content}</span>
+            </Row>
+          ))}
+        </Section>
+
+        <Section title="Artéfacts" count={created.length + links.length}>
+          {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
+          {created.slice(0, 5).map((file) => (
+            <Row key={file.path} onClick={onOpenDiff} title={file.path} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
+              {baseName(file.path)}
+            </Row>
+          ))}
+          {links.map((url) => (
+            <Row key={url} onClick={() => onOpenLink(url)} title={url} icon={<SiteIcon url={url} />}>
+              {shortLink(url)}
+            </Row>
+          ))}
+        </Section>
+
+        <Section title="Activité" count={tools.length}>
+          {recent.length === 0 && <Empty>Aucune commande lancée.</Empty>}
+          {recent.map((tool) => (
+            <Row key={tool.id} icon={<ToolStatus status={tool.status} />} title={toolCommand(tool) ?? undefined}>
+              <span className="font-mono text-[12.5px]">{(toolCommand(tool) ?? toolLabel(tool)).split("\n")[0]}</span>
+            </Row>
+          ))}
+          {tools.length > 0 && (
+            <p className="px-1 pt-1 text-[12.5px] text-[#6f6e68]">
+              {running > 0 ? `${running} en cours · ` : ""}
+              {tools.length - running} terminée{tools.length - running > 1 ? "s" : ""}
+            </p>
+          )}
+        </Section>
+
+        {pulls.length > 0 && (
+          <Section title="Pull requests" count={pulls.length}>
+            {pulls.map((pr) => (
+              <button
+                key={pr.url}
+                onClick={() => onOpenLink(pr.url)}
+                className="flex w-full items-start gap-3 rounded-lg px-1 py-1.5 text-left transition hover:bg-[#2a2a28]"
+              >
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                  <PullIcon state={pr.state} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] text-[#ecebe4]">
+                    {pr.isDraft ? "[Brouillon] " : ""}
+                    {pr.title}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-2 text-[12.5px] text-[#8c8b83]">
+                    <span className="truncate">
+                      {pr.repo ? `${pr.repo.split("/")[1]} ` : ""}#{pr.number}
+                    </span>
+                    <span className="text-[#3fb950]">+{pr.additions}</span>
+                    <span className="text-[#f85149]">−{pr.deletions}</span>
+                    {pr.checksFailed > 0 && <span className="ml-auto text-[#f87171]">{pr.checksFailed} en échec</span>}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </Section>
+        )}
+
+        {commits.length > 0 && (
+          <Section title="Commits" count={summary?.ahead}>
+            {(allCommits ? commits : commits.slice(0, 3)).map((commit) => (
+              <Row
+                key={commit.hash}
+                icon={<GitCommitHorizontal className="h-4 w-4" strokeWidth={1.7} />}
+                trailing={<span className="shrink-0 font-mono text-[12px] text-[#6f6e68]">{commit.hash}</span>}
+              >
+                {commit.subject}
+              </Row>
+            ))}
+            {commits.length > 3 && (
+              <MoreButton onClick={() => setAllCommits((v) => !v)}>{allCommits ? "Réduire" : `Afficher ${commits.length - 3} de plus`}</MoreButton>
+            )}
+          </Section>
+        )}
 
         <Section title="Modifications" count={changed.length}>
           <Row
@@ -219,92 +307,6 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
             </MoreButton>
           )}
         </Section>
-
-        {commits.length > 0 && (
-          <Section title="Commits" count={summary?.ahead}>
-            {(allCommits ? commits : commits.slice(0, 3)).map((commit) => (
-              <Row
-                key={commit.hash}
-                icon={<GitCommitHorizontal className="h-4 w-4" strokeWidth={1.7} />}
-                trailing={<span className="shrink-0 font-mono text-[12px] text-[#6f6e68]">{commit.hash}</span>}
-              >
-                {commit.subject}
-              </Row>
-            ))}
-            {commits.length > 3 && (
-              <MoreButton onClick={() => setAllCommits((v) => !v)}>{allCommits ? "Réduire" : `Afficher ${commits.length - 3} de plus`}</MoreButton>
-            )}
-          </Section>
-        )}
-
-        {pulls.length > 0 && (
-          <Section title="Pull requests" count={pulls.length}>
-            {pulls.map((pr) => (
-              <button
-                key={pr.url}
-                onClick={() => onOpenLink(pr.url)}
-                className="flex w-full items-start gap-3 rounded-lg px-1 py-1.5 text-left transition hover:bg-[#2a2a28]"
-              >
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-                  <PullIcon state={pr.state} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] text-[#ecebe4]">
-                    {pr.isDraft ? "[Brouillon] " : ""}
-                    {pr.title}
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-2 text-[12.5px] text-[#8c8b83]">
-                    <span className="truncate">
-                      {pr.repo ? `${pr.repo.split("/")[1]} ` : ""}#{pr.number}
-                    </span>
-                    <span className="text-[#3fb950]">+{pr.additions}</span>
-                    <span className="text-[#f85149]">−{pr.deletions}</span>
-                    {pr.checksFailed > 0 && <span className="ml-auto text-[#f87171]">{pr.checksFailed} en échec</span>}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </Section>
-        )}
-
-        <Section title="Plan et tâches" count={plan.length}>
-          {plan.length === 0 && <Empty>L'agent n'a pas annoncé de plan.</Empty>}
-          {plan.map((item, index) => (
-            <Row key={index} icon={<PlanIcon status={item.status} />}>
-              <span className={item.status === "completed" ? "text-[#8c8b83] line-through" : ""}>{item.content}</span>
-            </Row>
-          ))}
-        </Section>
-
-        <Section title="Activité" count={tools.length}>
-          {recent.length === 0 && <Empty>Aucune commande lancée.</Empty>}
-          {recent.map((tool) => (
-            <Row key={tool.id} icon={<ToolStatus status={tool.status} />} title={toolCommand(tool) ?? undefined}>
-              <span className="font-mono text-[12.5px]">{(toolCommand(tool) ?? toolLabel(tool)).split("\n")[0]}</span>
-            </Row>
-          ))}
-          {tools.length > 0 && (
-            <p className="px-1 pt-1 text-[12.5px] text-[#6f6e68]">
-              {running > 0 ? `${running} en cours · ` : ""}
-              {tools.length - running} terminée{tools.length - running > 1 ? "s" : ""}
-            </p>
-          )}
-        </Section>
-
-        <Section title="Artéfacts" count={created.length + links.length}>
-          {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
-          {created.slice(0, 5).map((file) => (
-            <Row key={file.path} onClick={onOpenDiff} title={file.path} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
-              {baseName(file.path)}
-            </Row>
-          ))}
-          {links.map((url) => (
-            <Row key={url} onClick={() => onOpenLink(url)} title={url} icon={<SiteIcon url={url} />}>
-              {shortLink(url)}
-            </Row>
-          ))}
-        </Section>
-
         </div>
 
         <div className="shrink-0 border-t border-[#2f2f2c] p-3">
