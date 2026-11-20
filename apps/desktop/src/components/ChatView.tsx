@@ -9,12 +9,13 @@ interface ChatViewProps {
   onSend: (text: string) => void;
   onStop: () => void;
   onAnswer: (requestId: string, optionId: string | null) => void;
+  onOpenLink: (url: string) => void;
 }
 
-export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer }: ChatViewProps) {
+export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink }: ChatViewProps) {
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
-      <ChatMessages messages={chat.messages} agentLabel={agentLabel} />
+      <ChatMessages messages={chat.messages} agentLabel={agentLabel} onOpenLink={onOpenLink} />
 
       {chat.permissions.length > 0 && (
         <div className="px-6 pb-2">
