@@ -1,15 +1,32 @@
 @import "tailwindcss";
 
 @layer base {
+  /* 1rem = 16px : les utilitaires Tailwind (h-7, gap-1...) gardent leur échelle native */
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    font-size: 14px;
+  }
+
   html,
   body,
   #root {
     height: 100%;
     margin: 0;
-    background-color: #212120;
-    color: #ecebe4;
+    background-color: #181817;
+    color: #e6e5df;
     color-scheme: dark;
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 }
