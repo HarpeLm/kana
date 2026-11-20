@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { loadCachedAccount, saveCachedAccount } from "../lib/accountCache";
 import {
   checkAgent,
   deleteApiKey,
@@ -15,15 +16,22 @@ export interface AccountState {
   methods: AuthMethod[];
   message: string;
   hasKey: boolean;
+  /** Date de la dernière vérification (ms), si on en connaît une. */
+  checkedAt: number | null;
 }
 
 /** Connexion d'un agent : vérification, méthodes de login et clé d'API du Trousseau. */
 export function useAgentAccount(agentId: string) {
-  const [state, setState] = useState<AccountState>({
-    phase: "idle",
-    methods: [],
-    message: "",
-    hasKey: false,
+  // On repart du dernier état connu : quitter l'écran des réglages ou relancer l'app ne l'efface pas.
+  const [state, setState] = useState<AccountState>(() => {
+    const known = loadCachedAccount(agentId);
+    return {
+      phase: known?.phase ?? "idle",
+      methods: known?.methods ?? [],
+      message: "",
+      hasKey: false,
+      checkedAt: known?.checkedAt ?? null,
+    };
   });
   const patch = (change: Partial<AccountState>) => setState((s) => ({ ...s, ...change }));
 
@@ -37,8 +45,14 @@ export function useAgentAccount(agentId: string) {
     patch({ phase: "checking", message: "" });
     try {
       const result = await checkAgent(agentId);
-      if (result.status === "ready") patch({ phase: "ready", methods: [] });
-      else patch({ phase: "needs_login", methods: result.methods });
+      const checkedAt = Date.now();
+      if (result.status === "ready") {
+        patch({ phase: "ready", methods: [], checkedAt });
+        saveCachedAccount(agentId, { phase: "ready", methods: [], checkedAt });
+      } else {
+        patch({ phase: "needs_login", methods: result.methods, checkedAt });
+        saveCachedAccount(agentId, { phase: "needs_login", methods: result.methods, checkedAt });
+      }
     } catch (error) {
       patch({ phase: "error", message: String(error) });
     }
