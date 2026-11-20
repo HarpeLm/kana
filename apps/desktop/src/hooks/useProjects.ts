@@ -18,6 +18,9 @@ export function useProjects(initial: Project[]) {
     });
   }, []);
 
+  /** Retire un projet de la liste de Kana. Le dossier, lui, n'est jamais touché. */
+  const remove = useCallback((path: string) => setItems((list) => list.filter((p) => p.path !== path)), []);
+
   const recent = [...items].sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0));
-  return { projects: recent, use };
+  return { projects: recent, use, remove };
 }
