@@ -2,12 +2,13 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use kana_acp::{AcpClient, AcpError, AcpEvent};
+use kana_acp::{AcpClient, AcpError, AcpEvent, McpServerConfig};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
     agent_spec::{default_cwd, spec_for},
+    browser_agent::AgentState,
     state::AgentSessions,
 };
 
@@ -42,8 +43,17 @@ pub async fn start_agent(
     }
     let spec = spec_for(&agent)?;
     let cwd = cwd.map(PathBuf::from).unwrap_or_else(default_cwd);
+    // Les outils pour naviguer dans le Globe, proposés à chaque agent.
+    let mcp: Vec<McpServerConfig> = app
+        .state::<AgentState>()
+        .mcp()
+        .map(|info| {
+            vec![McpServerConfig::http("kana-browser", &info.url)
+                .with_header("Authorization", &format!("Bearer {}", info.token))]
+        })
+        .unwrap_or_default();
     let (client, mut events) =
-        AcpClient::spawn(&spec, &cwd).await.map_err(|error| match error {
+        AcpClient::spawn_with_mcp(&spec, &cwd, &mcp).await.map_err(|error| match error {
             AcpError::AuthRequired(_) => {
                 "connexion requise : ouvre les Réglages pour te connecter".to_string()
             }
