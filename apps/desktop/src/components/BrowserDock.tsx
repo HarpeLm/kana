@@ -15,6 +15,7 @@ import {
   setBrowserVisible,
   type Bounds,
 } from "../lib/browser";
+import { setActiveBrowserTab } from "../lib/browserAgent";
 import { inTauri } from "../lib/env";
 import BrowserBar from "./BrowserBar";
 import SidePane from "./SidePane";
@@ -71,6 +72,11 @@ export default function BrowserDock({ visible, suspended, width, dragging, onRes
     ensureViews();
     for (const id of created.current) setBrowserBounds(id, area).catch(ignore);
   });
+
+  // Les agents agissent sur l'onglet que l'utilisateur regarde.
+  useEffect(() => {
+    if (inTauri) setActiveBrowserTab(activeId).catch(ignore);
+  }, [activeId]);
 
   // Seul l'onglet actif est affiché, et seulement si rien ne passe par-dessus.
   useEffect(() => {
