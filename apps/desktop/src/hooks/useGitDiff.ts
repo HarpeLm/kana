@@ -5,7 +5,7 @@ import { loadDiff, type DiffReport } from "../lib/gitDiff";
  * Les changements du dépôt. Chargés à l'ouverture du volet, puis à chaque retour sur la fenêtre
  * (on a souvent modifié des fichiers dans un autre outil entre-temps).
  */
-export function useGitDiff(active: boolean) {
+export function useGitDiff(active: boolean, path?: string) {
   const [report, setReport] = useState<DiffReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -13,14 +13,14 @@ export function useGitDiff(active: boolean) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setReport(await loadDiff());
+      setReport(await loadDiff(path));
       setError("");
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [path]);
 
   useEffect(() => {
     if (!active) return;
