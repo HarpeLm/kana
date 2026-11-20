@@ -12,6 +12,8 @@ import SidePane from "./SidePane";
 import ToolbarButton from "./ToolbarButton";
 
 interface FilesDockProps {
+  /** Dossier de travail de la conversation ; sans lui, le dépôt où l'app a été lancée. */
+  root?: string;
   visible: boolean;
   maximized: boolean;
   width: number;
@@ -26,6 +28,7 @@ interface FilesDockProps {
  * Un clic sur un fichier l'ouvre en aperçu, un double clic le garde ; ⌘S enregistre.
  */
 export default function FilesDock({
+  root,
   visible,
   maximized,
   width,
@@ -34,8 +37,8 @@ export default function FilesDock({
   onToggleMaximize,
   onClose,
 }: FilesDockProps) {
-  const { list, error, refresh } = useRepoFiles(visible);
-  const files = useOpenFiles();
+  const { list, error, refresh } = useRepoFiles(visible, root);
+  const files = useOpenFiles(root);
   const [showTree, setShowTree] = useState(true);
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [sourcePaths, setSourcePaths] = useState<Set<string>>(new Set());
