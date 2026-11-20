@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import { AGENTS, type View } from "./data";
 import { useBrowserAgent } from "./hooks/useBrowserAgent";
-import { useChat } from "./hooks/useChat";
+import type { Conversation } from "./lib/conversations";
+import { useChat, type PreparedThread } from "./hooks/useChat";
+import { buildForkContext } from "./lib/fork";
+import { createWorktree, removeWorktree } from "./lib/worktree";
 import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
 import { useConversations } from "./hooks/useConversations";
 import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
@@ -30,13 +33,15 @@ import Sidebar from "./components/Sidebar";
 
 const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
 
-export default function App() {
+export default function App({ initialConversations }: { initialConversations: Conversation[] }) {
   useNativeContextMenu();
   const [view, setView] = useState<View>("workspace");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** Conversation dont le dossier de travail est gardé car il contient du travail non enregistré. */
+  const [keptWorktree, setKeptWorktree] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const conversations = useConversations();
+  const conversations = useConversations(initialConversations);
   const { selected } = conversations;
   const sidebar = useSidebarWidth();
 
@@ -50,7 +55,44 @@ export default function App() {
     setPermissionMode(mode);
     saveMode(mode);
   };
-  const { chat, send, stop, answer } = useChat(selected.id, selected.agentId, permissionMode);
+  // Avant le premier message d'une conversation : son dossier de travail (worktree) et, pour une
+  // bifurcation, le résumé de la conversation d'origine.
+  const itemsRef = useRef(conversations.items);
+  useEffect(() => {
+    itemsRef.current = conversations.items;
+  });
+  const { attachWorktree, clearForkContext } = conversations;
+  const prepareThread = useCallback(
+    async (threadId: string): Promise<PreparedThread> => {
+      const conversation = itemsRef.current.find((c) => c.id === threadId);
+      if (!conversation) return {};
+      let cwd = conversation.worktree;
+      if (!cwd) {
+        const base = conversation.forkedFrom
+          ? itemsRef.current.find((c) => c.id === conversation.forkedFrom)?.branch
+          : undefined;
+        const info = await createWorktree(threadId, base).catch(() => null);
+        if (info) {
+          cwd = info.path;
+          attachWorktree(threadId, info.path, info.branch);
+        }
+      }
+      const preface = conversation.forkContext;
+      if (preface) clearForkContext(threadId);
+      return { cwd, preface };
+    },
+    [attachWorktree, clearForkContext],
+  );
+  const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread);
+
+  /** Bifurque : une nouvelle conversation qui reprend l'échange jusqu'à ce message. */
+  const forkFrom = (messageId: string) => {
+    const index = chat.messages.findIndex((m) => m.id === messageId);
+    if (index < 0) return;
+    const kept = chat.messages.slice(0, index + 1);
+    const newId = conversations.fork(selected.id, buildForkContext(kept));
+    if (newId) seed(newId, kept);
+  };
   const agentLabel = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
 
   // Barre latérale et boutons du haut
@@ -250,6 +292,7 @@ export default function App() {
               onStop={stop}
               onAnswer={answer}
               onOpenLink={openInGlobe}
+              onFork={forkFrom}
               mode={permissionMode}
               onModeChange={changeMode}
             />
@@ -281,6 +324,7 @@ export default function App() {
         />
 
         <DiffDock
+          path={selected.worktree}
           visible={diffVisible}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
@@ -338,14 +382,34 @@ export default function App() {
         <ConfirmDialog
           title="Supprimer cette conversation ?"
           confirmLabel="Supprimer"
-          onCancel={() => setDeletingId(null)}
-          onConfirm={() => {
+          onCancel={() => {
+            setDeletingId(null);
+            setKeptWorktree(null);
+          }}
+          onConfirm={async () => {
+            // Le dossier de travail part avec la conversation, sauf s'il contient du travail non enregistré.
+            if (deleting.worktree && keptWorktree !== deleting.id) {
+              try {
+                await removeWorktree(deleting.worktree);
+              } catch {
+                setKeptWorktree(deleting.id);
+                return;
+              }
+            }
             conversations.remove(deleting.id);
             setDeletingId(null);
+            setKeptWorktree(null);
           }}
         >
           La conversation « {deleting.title} » sera supprimée de cet environnement. Cette action
           est définitive.
+          {keptWorktree === deleting.id && (
+            <span className="mt-2 block text-[#e69b80]">
+              Son dossier de travail contient du travail non enregistré (
+              <code>{deleting.worktree}</code>) : il ne sera pas supprimé. Clique encore sur
+              Supprimer pour retirer seulement la conversation.
+            </span>
+          )}
         </ConfirmDialog>
       )}
     </div>
