@@ -38,7 +38,15 @@ export default function ConversationRow({
   }
 
   return (
-    <div ref={ref} className="group relative">
+    <div
+      ref={ref}
+      className="group relative"
+      onContextMenu={(e) => {
+        // Clic droit ou clic à deux doigts : le menu s'ouvre à l'endroit du curseur.
+        e.preventDefault();
+        setMenuAnchor(new DOMRect(e.clientX, e.clientY, 0, 0));
+      }}
+    >
       <button
         onClick={() => actions.onSelect(conversation.id)}
         className={`flex h-8 w-full items-center rounded-lg px-[10px] pr-9 text-left text-[14px] transition ${
@@ -75,6 +83,7 @@ export default function ConversationRow({
           sections={sections}
           actions={actions}
           anchor={menuAnchor}
+          canMarkUnread={!selected}
           onClose={closeMenu}
         />
       )}
