@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { inTauri } from "./env";
 
@@ -15,4 +16,17 @@ export const fileName = (path: string) => path.split("/").pop() || path;
 export function withAttachments(text: string, paths: string[]): string {
   if (paths.length === 0) return text;
   return `${text}\n\nFichiers joints :\n${paths.map((p) => `- ${p}`).join("\n")}`;
+}
+
+const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
+export const isImage = (path: string) => IMAGE.test(path);
+
+/** L'image en adresse `data:` pour l'afficher, ou `null` (pas une image, trop lourde, illisible). */
+export async function imagePreview(path: string): Promise<string | null> {
+  if (!inTauri || !isImage(path)) return null;
+  try {
+    return await invoke<string | null>("image_preview", { path });
+  } catch {
+    return null;
+  }
 }
