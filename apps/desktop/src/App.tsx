@@ -351,7 +351,10 @@ export default function App({ startup }: { startup: Startup }) {
         </Header>
 
         {view === "settings" ? (
-          <SettingsView />
+          <SettingsView
+            conversationIds={conversations.items.map((c) => c.id)}
+            projectPaths={projectList.projects.map((p) => p.path)}
+          />
         ) : view === "scheduled" ? (
           <ScheduledView />
         ) : view === "workspace" ? (
