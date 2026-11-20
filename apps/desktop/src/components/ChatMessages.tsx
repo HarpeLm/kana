@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../lib/chatState";
 import ChatMarkdown from "./ChatMarkdown";
 import MessageActions from "./MessageActions";
+import UserMessage from "./UserMessage";
 import ToolGroup from "./ToolGroup";
 
 interface ChatMessagesProps {
@@ -9,10 +10,8 @@ interface ChatMessagesProps {
   agentLabel: string;
   onOpenLink: (url: string) => void;
   busy: boolean;
-  /** Renvoyer un message de l'utilisateur. */
-  onRetry: (text: string) => void;
-  /** Remettre un message de l'utilisateur dans la zone de saisie. */
-  onEdit: (text: string) => void;
+  /** Envoyer un texte à l'agent (renvoi ou message modifié). */
+  onSend: (text: string) => void;
 }
 
 function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLink: (url: string) => void }) {
@@ -31,7 +30,7 @@ function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLin
   );
 }
 
-export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onRetry, onEdit }: ChatMessagesProps) {
+export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onSend }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,18 +47,7 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
         )}
         {messages.map((message) =>
           message.role === "user" ? (
-            <div key={message.id} className="group/message flex flex-col items-end gap-1">
-              <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] bg-[#1f4fb5] px-4 py-2.5 text-[#f4f6fc]">
-                {message.text}
-              </p>
-              <MessageActions
-                text={message.text}
-                at={message.startedAt}
-                align="right"
-                onRetry={busy ? undefined : () => onRetry(message.text)}
-                onEdit={() => onEdit(message.text)}
-              />
-            </div>
+            <UserMessage key={message.id} message={message} busy={busy} onSend={onSend} />
           ) : message.role === "error" ? (
             <div
               key={message.id}
