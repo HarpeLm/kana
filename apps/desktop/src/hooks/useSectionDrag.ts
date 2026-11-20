@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type RefObject } from "react";
 
 /** Distance minimale avant qu'un appui devienne un glissement (sinon c'est un simple clic). */
 const THRESHOLD = 5;
@@ -18,7 +18,12 @@ interface Drag {
  * le curseur, les autres s'écartent en glissant pour lui faire de la place, et il se pose où on le lâche.
  * `names` : les dossiers déplaçables, dans l'ordre affiché.
  */
-export function useSectionDrag(names: string[], onMove: (from: string, to: string) => void) {
+export function useSectionDrag(
+  names: string[],
+  onMove: (from: string, to: string) => void,
+  /** La zone où le dossier saisi doit rester : il ne peut pas en sortir (ni passer sous les boutons fixes). */
+  bounds?: RefObject<HTMLElement | null>,
+) {
   const elements = useRef(new Map<string, HTMLElement>());
   const [drag, setDrag] = useState<Drag | null>(null);
   // La même valeur que `drag`, lisible sans attendre le rendu : le relâchement s'en sert.
@@ -44,6 +49,9 @@ export function useSectionDrag(names: string[], onMove: (from: string, to: strin
     const rects = order.map((n) => elements.current.get(n)?.getBoundingClientRect());
     if (from < 0 || rects.some((r) => !r)) return null;
     const own = rects[from]!;
+    // Le dossier saisi reste dans la zone de la liste : jamais par-dessus la navigation ni les réglages.
+    const area = bounds?.current?.getBoundingClientRect();
+    if (area) dy = Math.min(Math.max(dy, area.top - own.top), area.bottom - own.bottom);
     const center = own.top + own.height / 2 + dy;
     // La place d'arrivée : combien d'autres dossiers ont leur milieu au-dessus du dossier saisi.
     const target = rects.filter((r, i) => i !== from && r!.top + r!.height / 2 < center).length;
