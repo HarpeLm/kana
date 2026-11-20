@@ -20,6 +20,10 @@ export interface Conversation {
   forkedFrom?: string;
   /** Résumé de la conversation d'origine, glissé dans le premier message d'une bifurcation. */
   forkContext?: string;
+  /** Dossier du projet (`none` : sans projet) ; absent pour les anciennes conversations. */
+  projectPath?: string;
+  /** Travaille dans un dossier de travail git à part (par défaut oui). */
+  useWorktree?: boolean;
 }
 
 export const DEFAULT_PROJECT = "kana";
