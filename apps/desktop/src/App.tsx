@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 import { AGENTS, type View } from "./data";
+import { useBrowserAgent } from "./hooks/useBrowserAgent";
 import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
 import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
@@ -10,6 +11,7 @@ import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { sectionsOf } from "./lib/conversations";
 import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
+import BrowserApprovalDialog from "./components/BrowserApprovalDialog";
 import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
 import DiffDock from "./components/DiffDock";
@@ -108,6 +110,11 @@ export default function App() {
     setShowBrowser((v) => !v);
     setBrowserOpened(true);
   };
+  // Un agent qui veut naviguer ouvre le Globe, puis attend l'accord de l'utilisateur.
+  const browserAgent = useBrowserAgent(() => {
+    setShowBrowser(true);
+    setBrowserOpened(true);
+  });
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
     setTerminalOpened(true);
@@ -268,7 +275,7 @@ export default function App() {
         {browserOpened && (
           <BrowserDock
             visible={browserVisible}
-            suspended={searchOpen || deletingId !== null}
+            suspended={searchOpen || deletingId !== null || browserAgent.approval !== null}
             width={browserPanel.width}
             dragging={browserPanel.dragging}
             onResizeStart={browserPanel.startDrag}
@@ -299,6 +306,13 @@ export default function App() {
           onCreate={createConversation}
           onOpenSettings={() => setView("settings")}
           onClose={() => setSearchOpen(false)}
+        />
+      )}
+
+      {browserAgent.approval && (
+        <BrowserApprovalDialog
+          approval={browserAgent.approval}
+          onAnswer={(allow) => browserAgent.answer(browserAgent.approval!.requestId, allow)}
         />
       )}
 
