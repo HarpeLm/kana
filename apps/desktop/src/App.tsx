@@ -8,6 +8,7 @@ import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { sectionsOf } from "./lib/conversations";
 import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
+import ConfirmDialog from "./components/ConfirmDialog";
 import ConversationTitle from "./components/ConversationTitle";
 import Header from "./components/Header";
 import NavButtons from "./components/NavButtons";
@@ -22,6 +23,7 @@ const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => 
 export default function App() {
   const [view, setView] = useState<View>("workspace");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const conversations = useConversations();
   const { selected } = conversations;
   const sidebar = useSidebarWidth();
@@ -79,8 +81,9 @@ export default function App() {
     onMoveDown: conversations.moveDown,
     onMoveToSection: conversations.moveToSection,
     onArchive: conversations.toggleArchive,
-    onDelete: conversations.remove,
+    onDelete: setDeletingId,
   };
+  const deleting = conversations.items.find((c) => c.id === deletingId);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#181817] text-[#e6e5df] select-none">
@@ -173,6 +176,21 @@ export default function App() {
           <RelayView />
         )}
       </div>
+
+      {deleting && (
+        <ConfirmDialog
+          title="Supprimer cette conversation ?"
+          confirmLabel="Supprimer"
+          onCancel={() => setDeletingId(null)}
+          onConfirm={() => {
+            conversations.remove(deleting.id);
+            setDeletingId(null);
+          }}
+        >
+          La conversation « {deleting.title} » sera supprimée de cet environnement. Cette action
+          est définitive.
+        </ConfirmDialog>
+      )}
     </div>
   );
 }
