@@ -2,34 +2,24 @@ import { useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import type { Conversation } from "../lib/conversations";
 import { useClickOutside } from "../hooks/useClickOutside";
+import type { ConversationActions } from "./conversationActions";
 import ConversationMenu from "./ConversationMenu";
 import RenameInput from "./RenameInput";
 
-export interface ConversationActions {
-  onSelect: (id: string) => void;
-  onPin: (id: string) => void;
-  onStartRename: (id: string) => void;
-  onRename: (id: string, title: string) => void;
-  onCancelRename: () => void;
-  onDelete: (id: string) => void;
-}
-
-interface ConversationRowProps extends ConversationActions {
+interface ConversationRowProps {
   conversation: Conversation;
   selected: boolean;
   editing: boolean;
+  sections: string[];
+  actions: ConversationActions;
 }
 
 export default function ConversationRow({
   conversation,
   selected,
   editing,
-  onSelect,
-  onPin,
-  onStartRename,
-  onRename,
-  onCancelRename,
-  onDelete,
+  sections,
+  actions,
 }: ConversationRowProps) {
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const menuOpen = menuAnchor !== null;
@@ -41,8 +31,8 @@ export default function ConversationRow({
     return (
       <RenameInput
         initial={conversation.title}
-        onCommit={(title) => onRename(conversation.id, title)}
-        onCancel={onCancelRename}
+        onCommit={(title) => actions.onRename(conversation.id, title)}
+        onCancel={actions.onCancelRename}
       />
     );
   }
@@ -50,7 +40,7 @@ export default function ConversationRow({
   return (
     <div ref={ref} className="group relative">
       <button
-        onClick={() => onSelect(conversation.id)}
+        onClick={() => actions.onSelect(conversation.id)}
         className={`flex h-8 w-full items-center rounded-lg px-[10px] pr-9 text-left text-[14px] transition ${
           selected
             ? "bg-[#2b2b29] text-[#f0efe9]"
@@ -59,6 +49,13 @@ export default function ConversationRow({
       >
         <span className="truncate">{conversation.title}</span>
       </button>
+
+      {conversation.unread && !menuOpen && (
+        <span
+          aria-label="Non lue"
+          className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#d97757] group-hover:hidden"
+        />
+      )}
 
       <button
         title="Plus"
@@ -74,12 +71,10 @@ export default function ConversationRow({
 
       {menuAnchor && (
         <ConversationMenu
-          pinned={conversation.pinned}
+          conversation={conversation}
+          sections={sections}
+          actions={actions}
           anchor={menuAnchor}
-          align="right"
-          onPin={() => onPin(conversation.id)}
-          onRename={() => onStartRename(conversation.id)}
-          onDelete={() => onDelete(conversation.id)}
           onClose={closeMenu}
         />
       )}
