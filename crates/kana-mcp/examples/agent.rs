@@ -57,7 +57,7 @@ async fn main() {
                 match event {
                     AcpEvent::Message { text } => print!("{text}"),
                     AcpEvent::Thought { .. } => eprintln!("[{t:.1}s réflexion]"),
-                    AcpEvent::ToolCall { id, title, status, raw_input } => eprintln!("[{t:.1}s outil {id} {title:?} {status:?} {raw_input:?}]"),
+                    AcpEvent::ToolCall { id, title, status, raw_input, output } => eprintln!("[{t:.1}s outil {id} {title:?} {status:?} {raw_input:?} -> {output:?}]"),
                     AcpEvent::Permission { request_id, title, options } => {
                         eprintln!("[{t:.1}s autorisation demandée : {title}]");
                         let allow = options.iter().find(|o| o.kind.starts_with("allow")).map(|o| o.id.clone());
