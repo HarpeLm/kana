@@ -15,7 +15,12 @@ use tokio::{
     sync::{Mutex, mpsc, oneshot},
 };
 
-use crate::{agents::AgentSpec, error::AcpError, event::AcpEvent, protocol, reader};
+use crate::{
+    agents::AgentSpec, auth::AuthMethod, error::AcpError, event::AcpEvent, protocol, reader,
+};
+
+/// Code JSON-RPC que les agents renvoient quand il faut se connecter d'abord.
+const AUTH_REQUIRED_CODE: i64 = -32000;
 
 type Reply = Result<Value, AcpError>;
 
@@ -50,12 +55,33 @@ pub struct AcpClient {
 impl AcpClient {
     /// Lance l'agent dans `cwd`, négocie le protocole et ouvre une session.
     /// Les événements de l'agent arrivent sur le récepteur renvoyé.
+    ///
+    /// Renvoie `AcpError::AuthRequired` avec les méthodes de connexion de l'agent
+    /// si celui-ci n'est pas connecté.
     pub async fn spawn(
         spec: &AgentSpec,
         cwd: &Path,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
+        Self::connect(spec, cwd, None).await
+    }
+
+    /// Comme `spawn`, mais exécute d'abord la méthode de connexion `method_id`.
+    pub async fn spawn_authenticated(
+        spec: &AgentSpec,
+        cwd: &Path,
+        method_id: &str,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
+        Self::connect(spec, cwd, Some(method_id)).await
+    }
+
+    async fn connect(
+        spec: &AgentSpec,
+        cwd: &Path,
+        method_id: Option<&str>,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
         let mut child = Command::new(&spec.command)
             .args(&spec.args)
+            .envs(spec.env.iter().map(|(name, value)| (name, value)))
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -81,10 +107,21 @@ impl AcpClient {
             session_id: String::new(),
             _child: child,
         };
-        client.request("initialize", protocol::initialize_params()).await?;
-        let session = client
+        let init = client.request("initialize", protocol::initialize_params()).await?;
+        if let Some(method_id) = method_id {
+            client
+                .request("authenticate", json!({ "methodId": method_id }))
+                .await?;
+        }
+        let session = match client
             .request("session/new", protocol::new_session_params(cwd))
-            .await?;
+            .await
+        {
+            Err(AcpError::Rpc { code: AUTH_REQUIRED_CODE, .. }) => {
+                return Err(AcpError::AuthRequired(AuthMethod::list_from(&init)));
+            }
+            other => other?,
+        };
         client.session_id = session["sessionId"]
             .as_str()
             .ok_or_else(|| AcpError::Protocol("session/new sans sessionId".into()))?
