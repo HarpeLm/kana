@@ -13,6 +13,8 @@ interface SidebarProps extends ConversationActions {
   selectedId: string;
   editingId: string | null;
   view: View;
+  /** Visible ou masquée : le passage de l'un à l'autre est animé. */
+  open: boolean;
   width: number;
   dragging: boolean;
   onResizeStart: (event: PointerEvent) => void;
@@ -27,6 +29,7 @@ export default function Sidebar({
   selectedId,
   editingId,
   view,
+  open,
   width,
   dragging,
   onResizeStart,
@@ -45,11 +48,22 @@ export default function Sidebar({
     setQuery("");
   };
 
+  // Le conteneur change de largeur et le panneau garde la sienne en s'estompant :
+  // le texte ne se réorganise pas pendant l'animation. Pas d'animation pendant le glissement.
   return (
-    <aside
-      style={{ width }}
-      className="relative flex shrink-0 flex-col border-r border-[#2b2b28] bg-[#21211f]"
+    <div
+      style={{ width: open ? width : 0 }}
+      inert={!open}
+      className={`shrink-0 overflow-hidden motion-reduce:transition-none ${
+        dragging ? "" : "transition-[width] duration-200 ease-out"
+      }`}
     >
+      <aside
+        style={{ width }}
+        className={`relative flex h-full flex-col border-r border-[#2b2b28] bg-[#21211f] transition-opacity duration-200 ease-out motion-reduce:transition-none ${
+          open ? "opacity-100" : "opacity-0"
+        }`}
+      >
       <div className="flex h-[44px] shrink-0 items-center px-3">
         <NavButtons {...nav} />
       </div>
@@ -107,6 +121,7 @@ export default function Sidebar({
       </button>
 
       <SidebarResizer dragging={dragging} onPointerDown={onResizeStart} />
-    </aside>
+      </aside>
+    </div>
   );
 }
