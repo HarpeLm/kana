@@ -9,9 +9,10 @@ import ConfirmDialog from "./ConfirmDialog";
 
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 
+/** Une partie du panneau ; toutes sont dans la même carte, séparées par un trait fin. */
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl bg-[#232321] p-4">
+    <section className="border-t border-[#2f2f2c] pt-4 first:border-t-0 first:pt-0">
       <h3 className="mb-3 text-[13px] text-[#9a9992]">{title}</h3>
       {children}
     </section>
@@ -108,14 +109,27 @@ export default function SessionPanel({
   };
 
   return (
-    <section className="flex w-[360px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-[#2b2b28] bg-[#1d1d1b] p-3">
-      <Card title="Modifications">
-        <Row icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}>
-          {summary?.branch ?? "Pas de branche"}
-          {summary?.base && summary.branch !== summary.base && (
-            <span className="text-[#8c8b83]"> · depuis {summary.base}</span>
+    <aside className="flex w-[360px] shrink-0 flex-col overflow-y-auto p-3">
+      <div className="flex flex-col gap-4 rounded-2xl bg-[#232321] p-4">
+      <Card title="Environnement">
+        <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
+        <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
+          {noProject ? "Aucun dossier" : conversation.project}
+          {conversation.projectPath && !noProject && (
+            <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>
           )}
         </Row>
+        {summary?.branch && (
+          <Row icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}>
+            {summary.branch}
+            {summary.base && summary.branch !== summary.base && (
+              <span className="text-[#8c8b83]"> · depuis {summary.base}</span>
+            )}
+          </Row>
+        )}
+      </Card>
+
+      <Card title="Modifications">
         <Row
           icon={<FileDiff className="h-4 w-4" strokeWidth={1.7} />}
           trailing={
@@ -172,15 +186,6 @@ export default function SessionPanel({
         </Card>
       )}
 
-      <Card title="Environnement">
-        <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
-        <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
-          {noProject ? "Aucun dossier" : conversation.project}
-          {workPath && !noProject && <span className="text-[#8c8b83]"> · {home(workPath)}</span>}
-        </Row>
-        {summary?.branch && <Row icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}>{summary.branch}</Row>}
-      </Card>
-
       <Card title="Tâches en arrière-plan">
         {running.length === 0 && <p className="py-1 text-[13px] text-[#8c8b83]">Aucune tâche en cours.</p>}
         {running.map((tool) => (
@@ -190,12 +195,6 @@ export default function SessionPanel({
         ))}
         <p className="mt-1 text-[13px] text-[#8c8b83]">Terminées : {finished}</p>
       </Card>
-
-      {!noProject && workPath && (
-        <Card title="Sources">
-          <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>{conversation.project}</Row>
-        </Card>
-      )}
 
       {showPlan && (
         <Card title="Plan et tâches">
@@ -207,6 +206,8 @@ export default function SessionPanel({
           <p className="text-[13px] text-[#8c8b83]">Aucun artéfact généré dans cette session.</p>
         </Card>
       )}
+
+      </div>
 
       {creating && summary?.branch && (
         <ConfirmDialog
@@ -234,6 +235,6 @@ export default function SessionPanel({
           {error && <p className="mt-2 whitespace-pre-wrap text-[12.5px] text-red-300">{error}</p>}
         </ConfirmDialog>
       )}
-    </section>
+    </aside>
   );
 }
