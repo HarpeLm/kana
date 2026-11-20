@@ -5,6 +5,8 @@ import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
 import { useNavHistory } from "./hooks/useNavHistory";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
+import { sectionsOf } from "./lib/conversations";
+import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
 import ConversationTitle from "./components/ConversationTitle";
 import Header from "./components/Header";
@@ -66,12 +68,26 @@ export default function App() {
     conversations.rename(id, title);
     setEditingId(null);
   };
+  const actions: ConversationActions = {
+    onSelect: openConversation,
+    onPin: conversations.togglePin,
+    onToggleUnread: conversations.toggleUnread,
+    onStartRename: setEditingId,
+    onRename: rename,
+    onCancelRename: () => setEditingId(null),
+    onDuplicate: conversations.duplicate,
+    onMoveDown: conversations.moveDown,
+    onMoveToSection: conversations.moveToSection,
+    onArchive: conversations.toggleArchive,
+    onDelete: conversations.remove,
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#181817] text-[#e6e5df] select-none">
       <Sidebar
         open={showSidebar}
         conversations={conversations.items}
+        actions={actions}
         selectedId={selected.id}
         editingId={editingId}
         view={view}
@@ -86,12 +102,6 @@ export default function App() {
         }}
         onOpenScheduled={() => setView("scheduled")}
         onOpenSettings={() => setView("settings")}
-        onSelect={openConversation}
-        onPin={conversations.togglePin}
-        onStartRename={setEditingId}
-        onRename={rename}
-        onCancelRename={() => setEditingId(null)}
-        onDelete={conversations.remove}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#181817]">
@@ -130,11 +140,8 @@ export default function App() {
             <ConversationTitle
               conversation={selected}
               editing={editingId === selected.id && !showSidebar}
-              onPin={() => conversations.togglePin(selected.id)}
-              onStartRename={() => setEditingId(selected.id)}
-              onRename={(title) => rename(selected.id, title)}
-              onCancelRename={() => setEditingId(null)}
-              onDelete={() => conversations.remove(selected.id)}
+              sections={sectionsOf(conversations.items)}
+              actions={actions}
             />
           )}
         </Header>
