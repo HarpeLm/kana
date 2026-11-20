@@ -4,7 +4,7 @@ use kana_acp::{AcpClient, AcpError, AuthMethod};
 use serde::Serialize;
 
 use crate::{
-    agent_spec::{default_cwd, spec_for},
+    agent_spec::{project_dir, spec_for},
     secrets,
 };
 
@@ -19,7 +19,7 @@ pub enum AgentStatus {
 #[tauri::command]
 pub async fn check_agent(agent: String) -> Result<AgentStatus, String> {
     let spec = spec_for(&agent)?;
-    match AcpClient::spawn(&spec, &default_cwd()).await {
+    match AcpClient::spawn(&spec, &project_dir()).await {
         Ok(_) => Ok(AgentStatus::Ready),
         Err(AcpError::AuthRequired(methods)) => Ok(AgentStatus::AuthRequired { methods }),
         Err(error) => Err(error.to_string()),
@@ -31,7 +31,7 @@ pub async fn check_agent(agent: String) -> Result<AgentStatus, String> {
 #[tauri::command]
 pub async fn login_agent(agent: String, method_id: String) -> Result<(), String> {
     let spec = spec_for(&agent)?;
-    AcpClient::spawn_authenticated(&spec, &default_cwd(), &method_id)
+    AcpClient::spawn_authenticated(&spec, &project_dir(), &method_id)
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
