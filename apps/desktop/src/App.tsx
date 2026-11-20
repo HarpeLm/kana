@@ -16,6 +16,7 @@ import NavButtons from "./components/NavButtons";
 import RelayView from "./components/RelayView";
 import RightPanel from "./components/RightPanel";
 import ScheduledView from "./components/ScheduledView";
+import SearchPalette from "./components/SearchPalette";
 import SettingsView from "./components/SettingsView";
 import Sidebar from "./components/Sidebar";
 
@@ -26,6 +27,7 @@ export default function App() {
   const [view, setView] = useState<View>("workspace");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const conversations = useConversations();
   const { selected } = conversations;
   const sidebar = useSidebarWidth();
@@ -100,7 +102,9 @@ export default function App() {
         dragging={sidebar.dragging}
         onResizeStart={sidebar.startDrag}
         nav={nav}
+        searchOpen={searchOpen}
         onCreate={createConversation}
+        onOpenSearch={() => setSearchOpen(true)}
         onArtifacts={() => {
           setShowArtifacts((v) => !v);
           setView("workspace");
@@ -178,6 +182,16 @@ export default function App() {
           <RelayView />
         )}
       </div>
+
+      {searchOpen && (
+        <SearchPalette
+          conversations={conversations.items}
+          onOpenConversation={openConversation}
+          onCreate={createConversation}
+          onOpenSettings={() => setView("settings")}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
 
       {deleting && (
         <ConfirmDialog
