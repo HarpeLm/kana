@@ -16,7 +16,12 @@ use tokio::{
 };
 
 use crate::{
-    agents::AgentSpec, auth::AuthMethod, error::AcpError, event::AcpEvent, protocol, reader,
+    agents::AgentSpec,
+    auth::AuthMethod,
+    error::AcpError,
+    event::AcpEvent,
+    mcp::{McpServerConfig, supports_http},
+    protocol, reader,
 };
 
 /// Code JSON-RPC que les agents renvoient quand il faut se connecter d'abord.
@@ -62,7 +67,17 @@ impl AcpClient {
         spec: &AgentSpec,
         cwd: &Path,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
-        Self::connect(spec, cwd, None).await
+        Self::connect(spec, cwd, None, &[]).await
+    }
+
+    /// Comme `spawn`, et propose des serveurs MCP à l'agent (ceux qu'il ne sait pas utiliser par HTTP
+    /// sont ignorés).
+    pub async fn spawn_with_mcp(
+        spec: &AgentSpec,
+        cwd: &Path,
+        mcp: &[McpServerConfig],
+    ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
+        Self::connect(spec, cwd, None, mcp).await
     }
 
     /// Comme `spawn`, mais exécute d'abord la méthode de connexion `method_id`.
@@ -71,13 +86,14 @@ impl AcpClient {
         cwd: &Path,
         method_id: &str,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
-        Self::connect(spec, cwd, Some(method_id)).await
+        Self::connect(spec, cwd, Some(method_id), &[]).await
     }
 
     async fn connect(
         spec: &AgentSpec,
         cwd: &Path,
         method_id: Option<&str>,
+        mcp: &[McpServerConfig],
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
         let mut child = Command::new(&spec.command)
             .args(&spec.args)
@@ -113,8 +129,13 @@ impl AcpClient {
                 .request("authenticate", json!({ "methodId": method_id }))
                 .await?;
         }
+        let servers = if supports_http(&init) {
+            mcp.iter().map(McpServerConfig::to_acp).collect()
+        } else {
+            Vec::new()
+        };
         let session = match client
-            .request("session/new", protocol::new_session_params(cwd))
+            .request("session/new", protocol::new_session_params(cwd, servers))
             .await
         {
             Err(AcpError::Rpc { code: AUTH_REQUIRED_CODE, .. }) => {
