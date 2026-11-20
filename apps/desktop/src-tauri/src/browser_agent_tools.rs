@@ -4,7 +4,7 @@ use std::{thread, time::Duration};
 
 use kana_mcp::ToolDriver;
 use serde_json::Value;
-use tauri::Webview;
+use tauri::{Emitter, Webview};
 
 use crate::{
     browser::parse_web_url,
@@ -124,6 +124,8 @@ impl ToolDriver for BrowserAgent {
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<String, String> {
+        // L'interface affiche « un agent pilote cette page » tant que ces signaux arrivent.
+        let _ = self.app.emit("browser-agent-active", name);
         let result = self.run(name, arguments);
         debug_log(&match &result {
             Ok(text) => format!("outil {name} : ok ({} caractères)", text.len()),
