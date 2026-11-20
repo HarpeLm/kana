@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="assets/icon.png" width="128" height="128" alt="Kana icon" />
+</p>
+
+<h1 align="center">Kana</h1>
+ 
 # Kana
 
 Poste de pilotage desktop natif (Rust + Tauri) unifiant les agents de code (Claude Code, Codex, Gemini CLI, OpenCode) via ACP, avec gestion de worktrees Git et relais automatique en cas de limite de quota.
