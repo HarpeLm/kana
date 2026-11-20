@@ -4,6 +4,8 @@ export interface ToolCall {
   id: string;
   title: string;
   status: string;
+  /** Paramètres annoncés par l'agent pour cet outil. */
+  input?: unknown;
 }
 
 export interface ChatMessage {
@@ -66,12 +68,22 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
       const tools = known
         ? agent.tools.map((t) =>
             t.id === event.id
-              ? { ...t, title: event.title ?? t.title, status: event.status ?? t.status }
+              ? {
+                  ...t,
+                  title: event.title ?? t.title,
+                  status: event.status ?? t.status,
+                  input: event.raw_input ?? t.input,
+                }
               : t,
           )
         : [
             ...agent.tools,
-            { id: event.id, title: event.title ?? "Outil", status: event.status ?? "pending" },
+            {
+              id: event.id,
+              title: event.title ?? "Outil",
+              status: event.status ?? "pending",
+              input: event.raw_input,
+            },
           ];
       return { ...chat, messages: [...rest, { ...agent, tools }] };
     }
