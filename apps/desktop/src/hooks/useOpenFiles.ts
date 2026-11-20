@@ -42,7 +42,7 @@ const EMPTY: OpenDoc = {
 export const isDocDirty = (doc: OpenDoc | undefined) => !!doc && doc.text !== doc.saved;
 
 /** Les fichiers ouverts dans le volet : onglets, contenu, modifications et enregistrement. */
-export function useOpenFiles() {
+export function useOpenFiles(root?: string) {
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [docs, setDocs] = useState<Record<string, OpenDoc>>({});
@@ -62,7 +62,7 @@ export function useOpenFiles() {
   const load = useCallback(async (path: string) => {
     setDocs((all) => ({ ...all, [path]: { ...EMPTY } }));
     try {
-      const file = await loadFilePreview(path);
+      const file = await loadFilePreview(path, root);
       setDocs((all) => ({
         ...all,
         [path]: {
@@ -79,7 +79,7 @@ export function useOpenFiles() {
     } catch (e) {
       setDocs((all) => ({ ...all, [path]: { ...EMPTY, status: "error", error: String(e) } }));
     }
-  }, []);
+  }, [root]);
 
   /** Ouvre un fichier ; `pin` le garde en onglet fixe au lieu d'un onglet d'aperçu. */
   const open = useCallback(
@@ -105,7 +105,7 @@ export function useOpenFiles() {
       // Modifier un fichier le garde ouvert : l'onglet d'aperçu devient fixe.
       setTabs((all) => all.map((t) => (t.path === path && t.preview ? { ...t, preview: false } : t)));
     },
-    [patchDoc],
+    [patchDoc, root],
   );
 
   /** Enregistre le fichier ; `force` écrase une version modifiée ailleurs. Renvoie le succès. */
@@ -116,7 +116,7 @@ export function useOpenFiles() {
       const text = doc.text;
       patchDoc(path, (d) => ({ ...d, saving: true, saveError: "", conflict: false }));
       try {
-        const modified = await writeFile(path, text, force ? null : doc.modified);
+        const modified = await writeFile(path, text, force ? null : doc.modified, root);
         patchDoc(path, (d) => ({ ...d, saving: false, saved: text, modified }));
         return true;
       } catch (e) {
