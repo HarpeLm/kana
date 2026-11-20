@@ -18,6 +18,7 @@ export type AcpEvent =
       title: string | null;
       status: string | null;
       raw_input?: unknown;
+      output?: string | null;
     }
   | { kind: "permission"; request_id: string; title: string; options: PermissionOption[] }
   | { kind: "done"; stop_reason: string }
