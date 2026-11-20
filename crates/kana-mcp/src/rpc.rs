@@ -42,8 +42,13 @@ pub fn handle(body: &str, driver: &dyn ToolDriver) -> Option<String> {
     };
     let id = request.get("id").filter(|id| !id.is_null())?.clone();
     let params = request.get("params").cloned().unwrap_or(Value::Null);
+    let method = request["method"].as_str().unwrap_or_default();
+    driver.note(&match params["name"].as_str() {
+        Some(tool) if method == "tools/call" => format!("requête {method} {tool}"),
+        _ => format!("requête {method}"),
+    });
 
-    let result = match request["method"].as_str().unwrap_or_default() {
+    let result = match method {
         "initialize" => Ok(initialize_result(&params)),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": tool_definitions() })),
