@@ -41,6 +41,12 @@ export default function ConversationRow({
     <div
       ref={ref}
       className="group relative"
+      draggable
+      onDragStart={(e) => {
+        // Glisser une conversation sur un autre dossier l'y déplace.
+        e.dataTransfer.setData("application/x-kana-conversation", conversation.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       onContextMenu={(e) => {
         // Clic droit ou clic à deux doigts : le menu s'ouvre à l'endroit du curseur.
         e.preventDefault();
