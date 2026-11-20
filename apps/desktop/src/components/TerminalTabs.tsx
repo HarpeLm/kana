@@ -10,6 +10,8 @@ interface TerminalTabsProps {
   onAdd: () => void;
   /** Libellé du bouton « + » (selon ce que les onglets contiennent). */
   addLabel?: string;
+  /** Montre la croix même quand il n'y a qu'un onglet (fermer le dernier ferme le volet). */
+  closeLast?: boolean;
 }
 
 /** Onglets du volet Terminal et bouton « + » pour en ouvrir un nouveau. */
@@ -20,8 +22,10 @@ export default function TerminalTabs({
   onClose,
   onAdd,
   addLabel = "Nouveau terminal",
+  closeLast = false,
 }: TerminalTabsProps) {
   const many = tabs.length > 1;
+  const closable = many || closeLast;
 
   return (
     <div className="flex min-w-0 items-center gap-1">
@@ -29,7 +33,7 @@ export default function TerminalTabs({
         <div
           key={tab.id}
           className={`group flex h-7 items-center rounded-lg text-[14px] transition ${
-            many && tab.id === activeId ? "bg-[#2a2a27]" : ""
+            closable && tab.id === activeId ? "bg-[#2a2a27]" : ""
           }`}
         >
           <button
@@ -40,11 +44,13 @@ export default function TerminalTabs({
           >
             {tab.title}
           </button>
-          {many && (
+          {closable && (
             <button
               onClick={() => onClose(tab.id)}
               title="Fermer l'onglet"
-              className="mr-1 flex h-5 w-5 items-center justify-center rounded text-[#9a9992] opacity-0 transition hover:bg-[#383835] hover:text-[#f0efe9] group-hover:opacity-100"
+              className={`mr-1 flex h-5 w-5 items-center justify-center rounded text-[#9a9992] transition hover:bg-[#383835] hover:text-[#f0efe9] group-hover:opacity-100 ${
+                tab.id === activeId && closeLast ? "opacity-100" : "opacity-0"
+              }`}
             >
               <X className="h-[13px] w-[13px]" strokeWidth={1.8} />
             </button>
