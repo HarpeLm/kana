@@ -36,7 +36,8 @@ export interface ChatState {
 export const EMPTY_CHAT: ChatState = { messages: [], permissions: [], busy: false };
 
 let counter = 0;
-const nextId = () => `m${++counter}`;
+// L'heure rend l'identifiant unique d'un lancement à l'autre : les messages rechargés gardent le leur.
+const nextId = () => `m${Date.now().toString(36)}${++counter}`;
 
 export function makeMessage(role: ChatMessage["role"], text = ""): ChatMessage {
   return { id: nextId(), role, text, thought: "", tools: [], startedAt: Date.now() };
