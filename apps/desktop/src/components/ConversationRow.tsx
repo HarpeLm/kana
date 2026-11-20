@@ -51,7 +51,7 @@ export default function ConversationRow({
     <div ref={ref} className="group relative">
       <button
         onClick={() => onSelect(conversation.id)}
-        className={`flex h-[34px] w-full items-center rounded-lg px-[10px] pr-9 text-left text-[14px] transition ${
+        className={`flex h-8 w-full items-center rounded-lg px-[10px] pr-9 text-left text-[14px] transition ${
           selected
             ? "bg-[#2b2b29] text-[#f0efe9]"
             : "text-[#d4d3cb] hover:bg-[#262624] hover:text-[#f0efe9]"
