@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 import { THREADS, type View } from "./data";
+import { useChat } from "./hooks/useChat";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import ChatView from "./components/ChatView";
@@ -10,7 +11,8 @@ import RelayView from "./components/RelayView";
 export default function App() {
   const [view, setView] = useState<View>("workspace");
   const [selectedThread, setSelectedThread] = useState("1");
-  const [prompt, setPrompt] = useState("");
+  const thread = THREADS.find((t) => t.id === selectedThread) ?? THREADS[0];
+  const { chat, send, stop, answer } = useChat(thread.id, thread.agentId);
 
   // Boutons de la barre en haut à droite
   const [showSidebar, setShowSidebar] = useState(true);
@@ -45,7 +47,7 @@ export default function App() {
 
       <div className="flex flex-1 flex-col overflow-hidden bg-[#181817]">
         <Header
-          title={THREADS.find((t) => t.id === selectedThread)?.branch}
+          title={thread.branch}
           toolbar={{
             onToggleSidebar: toggle(setShowSidebar),
             showTerminal,
@@ -73,7 +75,13 @@ export default function App() {
 
         {view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
-            <ChatView prompt={prompt} onPromptChange={setPrompt} />
+            <ChatView
+              agentLabel={thread.agent}
+              chat={chat}
+              onSend={send}
+              onStop={stop}
+              onAnswer={answer}
+            />
             {showRightPanel && (
               <RightPanel
                 showArtifacts={showArtifacts}
