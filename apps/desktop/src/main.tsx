@@ -1,15 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { loadInitialConversations } from "./lib/startup";
+import { loadInitial } from "./lib/startup";
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
-// L'app s'affiche une fois les conversations lues dans la base (quelques millisecondes).
-loadInitialConversations().then((conversations) =>
+// L'app s'affiche une fois les conversations et les projets lus dans la base (quelques millisecondes).
+loadInitial().then((startup) =>
   root.render(
     <React.StrictMode>
-      <App initialConversations={conversations} />
+      <App startup={startup} />
     </React.StrictMode>,
   ),
 );
