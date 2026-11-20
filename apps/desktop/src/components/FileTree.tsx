@@ -20,16 +20,16 @@ const ROW =
 const ICON = "h-[15px] w-[15px] shrink-0";
 
 const STATUS_COLOR: Record<ChangeStatus, string> = {
-  added: "text-[#7fc08c]",
-  modified: "text-[#e0b25f]",
-  renamed: "text-[#6aa6e8]",
-  deleted: "text-red-400",
+  added: "text-[#73c991]",
+  modified: "text-[#e2c08d]",
+  renamed: "text-[#4aa3ff]",
+  deleted: "text-[#e5675a]",
 };
 const STATUS_DOT: Record<ChangeStatus, string> = {
-  added: "bg-[#7fc08c]",
-  modified: "bg-[#e0b25f]",
-  renamed: "bg-[#6aa6e8]",
-  deleted: "bg-red-400",
+  added: "bg-[#73c991]",
+  modified: "bg-[#e2c08d]",
+  renamed: "bg-[#4aa3ff]",
+  deleted: "bg-[#e5675a]",
 };
 
 /** Arbre des fichiers. Les fichiers modifiés sont colorés, et leurs dossiers portent un point. */
