@@ -1,5 +1,7 @@
 mod agent_commands;
 mod agent_spec;
+mod browser;
+mod browser_commands;
 mod git_commands;
 mod secrets;
 mod settings_commands;
@@ -27,6 +29,14 @@ pub fn run() {
             git_commands::repo_files,
             git_commands::read_repo_file,
             git_commands::write_repo_file,
+            browser_commands::browser_open,
+            browser_commands::browser_set_bounds,
+            browser_commands::browser_set_visible,
+            browser_commands::browser_navigate,
+            browser_commands::browser_back,
+            browser_commands::browser_forward,
+            browser_commands::browser_reload,
+            browser_commands::browser_close,
             terminal_commands::terminal_open,
             terminal_commands::terminal_write,
             terminal_commands::terminal_resize,
