@@ -9,8 +9,10 @@ interface ConversationMenuProps {
   /** Sections existantes, pour « Déplacer vers une section ». */
   sections: string[];
   actions: ConversationActions;
-  /** Rectangle du bouton qui a ouvert le menu : le menu s'aligne sur son bord gauche. */
+  /** Rectangle du bouton (ou point du clic droit) qui a ouvert le menu : le menu s'y aligne. */
   anchor: DOMRect;
+  /** Faux pour la conversation ouverte : on ne la marque pas « non lue » pendant qu'on la lit. */
+  canMarkUnread: boolean;
   onClose: () => void;
 }
 
@@ -23,6 +25,7 @@ export default function ConversationMenu({
   sections,
   actions,
   anchor,
+  canMarkUnread,
   onClose,
 }: ConversationMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -46,9 +49,10 @@ export default function ConversationMenu({
     action();
   };
 
+  const markable = canMarkUnread || conversation.unread;
   const shortcuts: Record<string, () => void> = {
     p: () => actions.onPin(id),
-    u: () => actions.onToggleUnread(id),
+    ...(markable ? { u: () => actions.onToggleUnread(id) } : {}),
     r: () => actions.onStartRename(id),
     f: () => actions.onDuplicate(id),
     a: () => actions.onArchive(id),
@@ -87,6 +91,7 @@ export default function ConversationMenu({
       <ConversationMenuItem
         label={conversation.unread ? "Marquer comme lu" : "Marquer comme non lu"}
         shortcut="U"
+        disabled={!markable}
         onClick={run(() => actions.onToggleUnread(id))}
         onMouseEnter={() => setSectionsOpen(false)}
       />
