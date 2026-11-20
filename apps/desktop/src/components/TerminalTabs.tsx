@@ -1,0 +1,50 @@
+import { Plus, X } from "lucide-react";
+import type { TerminalTab } from "../hooks/useTerminalTabs";
+import ToolbarButton from "./ToolbarButton";
+
+interface TerminalTabsProps {
+  tabs: TerminalTab[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  onClose: (id: string) => void;
+  onAdd: () => void;
+}
+
+/** Onglets du volet Terminal et bouton « + » pour en ouvrir un nouveau. */
+export default function TerminalTabs({ tabs, activeId, onSelect, onClose, onAdd }: TerminalTabsProps) {
+  const many = tabs.length > 1;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      {tabs.map((tab) => (
+        <div
+          key={tab.id}
+          className={`group flex h-7 items-center rounded-lg text-[14px] transition ${
+            many && tab.id === activeId ? "bg-[#2a2a27]" : ""
+          }`}
+        >
+          <button
+            onClick={() => onSelect(tab.id)}
+            className={`h-7 truncate px-2 ${
+              tab.id === activeId ? "text-[#e6e5df]" : "text-[#8a8982] hover:text-[#e6e5df]"
+            }`}
+          >
+            {tab.title}
+          </button>
+          {many && (
+            <button
+              onClick={() => onClose(tab.id)}
+              title="Fermer l'onglet"
+              className="mr-1 flex h-5 w-5 items-center justify-center rounded text-[#9a9992] opacity-0 transition hover:bg-[#383835] hover:text-[#f0efe9] group-hover:opacity-100"
+            >
+              <X className="h-[13px] w-[13px]" strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
+      ))}
+      <ToolbarButton title="Nouveau terminal" onClick={onAdd}>
+        <Plus className="h-[17px] w-[17px]" strokeWidth={1.6} />
+      </ToolbarButton>
+    </div>
+  );
+}
