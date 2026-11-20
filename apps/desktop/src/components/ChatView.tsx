@@ -1,4 +1,5 @@
 import type { ChatState } from "../lib/chatState";
+import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
 import PermissionPrompt from "./PermissionPrompt";
@@ -10,9 +11,11 @@ interface ChatViewProps {
   onStop: () => void;
   onAnswer: (requestId: string, optionId: string | null) => void;
   onOpenLink: (url: string) => void;
+  mode: PermissionMode;
+  onModeChange: (mode: PermissionMode) => void;
 }
 
-export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink }: ChatViewProps) {
+export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink, mode, onModeChange }: ChatViewProps) {
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
       <ChatMessages messages={chat.messages} agentLabel={agentLabel} onOpenLink={onOpenLink} />
@@ -27,7 +30,7 @@ export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, o
         </div>
       )}
 
-      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} />
+      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
     </main>
   );
 }
