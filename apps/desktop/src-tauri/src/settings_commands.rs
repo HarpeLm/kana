@@ -1,6 +1,6 @@
 //! Commandes Tauri de l'écran Réglages : connexion des agents et clés d'API.
 
-use kana_acp::{AcpClient, AcpError, AuthMethod};
+use kana_acp::{AcpClient, AcpError, AgentModels, AuthMethod};
 use serde::Serialize;
 
 use crate::{
@@ -53,4 +53,19 @@ pub fn set_api_key(agent: String, key: String) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_api_key(agent: String) -> Result<(), String> {
     secrets::delete_api_key(&agent)
+}
+
+/// Les modèles qu'un agent propose. Lance l'agent un instant : à appeler à l'ouverture du sélecteur,
+/// l'interface garde le résultat en mémoire.
+#[tauri::command]
+pub async fn list_models(agent: String) -> Result<AgentModels, String> {
+    let spec = spec_for(&agent)?;
+    let dir = project_dir();
+    let started = tokio::time::timeout(std::time::Duration::from_secs(45), AcpClient::spawn(&spec, &dir));
+    match started.await {
+        Ok(Ok((client, _events))) => Ok(client.models().clone()),
+        Ok(Err(AcpError::AuthRequired(_))) => Err("connexion requise : ouvre les Réglages".into()),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(_) => Err("l'agent met trop de temps à répondre".into()),
+    }
 }
