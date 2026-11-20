@@ -1,5 +1,6 @@
 mod agent_commands;
 mod agent_spec;
+mod git_commands;
 mod secrets;
 mod settings_commands;
 mod state;
@@ -22,6 +23,7 @@ pub fn run() {
             settings_commands::has_api_key,
             settings_commands::set_api_key,
             settings_commands::delete_api_key,
+            git_commands::git_diff,
             terminal_commands::terminal_open,
             terminal_commands::terminal_write,
             terminal_commands::terminal_resize,
