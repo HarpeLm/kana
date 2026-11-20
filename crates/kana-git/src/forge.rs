@@ -10,6 +10,23 @@ use crate::run::{GitError, git};
 /// Un fichier non suivi plus gros que ça n'est pas compté ligne par ligne.
 const MAX_UNTRACKED_BYTES: u64 = 512 * 1024;
 
+/// Un fichier touché par le travail de la branche.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FileStat {
+    pub path: String,
+    pub additions: u32,
+    pub deletions: u32,
+    /// `added`, `modified` ou `deleted`.
+    pub status: String,
+}
+
+/// Un commit de la branche.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CommitInfo {
+    pub hash: String,
+    pub subject: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct BranchSummary {
     pub branch: Option<String>,
@@ -20,6 +37,10 @@ pub struct BranchSummary {
     pub files: u32,
     /// Commits de la branche absents de la branche principale.
     pub ahead: u32,
+    /// Les fichiers touchés (commits et changements non enregistrés), du plus gros changement au plus petit.
+    pub changed: Vec<FileStat>,
+    /// Les derniers commits de la branche, du plus récent au plus ancien.
+    pub commits: Vec<CommitInfo>,
     /// Il y a des changements non enregistrés (pas encore commités).
     pub dirty: bool,
     /// Le dépôt a un remote `origin` : on peut y pousser.
@@ -54,24 +75,43 @@ pub fn branch_summary(dir: &Path) -> Result<BranchSummary, GitError> {
         .map(|s| s.trim().to_owned())
         .unwrap_or_else(|| "HEAD".to_owned());
 
-    let (mut additions, mut deletions, mut files) = (0u32, 0u32, 0u32);
-    for line in git(dir, &["diff", "--numstat", &start], &[])?.lines() {
-        let mut parts = line.split('\t');
-        let (Some(add), Some(del)) = (parts.next(), parts.next()) else { continue };
-        additions += add.parse().unwrap_or(0);
-        deletions += del.parse().unwrap_or(0);
-        files += 1;
+    // `--no-renames` : un fichier renommé compte comme un retrait et un ajout, ce qui reste lisible.
+    let mut changed: Vec<FileStat> = Vec::new();
+    let statuses: std::collections::HashMap<String, &str> = git(dir, &["diff", "--name-status", "--no-renames", &start], &[])?
+        .lines()
+        .filter_map(|line| {
+            let (code, path) = line.split_once('\t')?;
+            Some((path.to_owned(), match code {
+                "A" => "added",
+                "D" => "deleted",
+                _ => "modified",
+            }))
+        })
+        .collect();
+    for line in git(dir, &["diff", "--numstat", "--no-renames", &start], &[])?.lines() {
+        let mut parts = line.splitn(3, '\t');
+        let (Some(add), Some(del), Some(path)) = (parts.next(), parts.next(), parts.next()) else { continue };
+        changed.push(FileStat {
+            path: path.to_owned(),
+            additions: add.parse().unwrap_or(0),
+            deletions: del.parse().unwrap_or(0),
+            status: statuses.get(path).copied().unwrap_or("modified").to_owned(),
+        });
     }
     // Les fichiers non suivis ne sont pas dans `git diff` : on compte leurs lignes.
     for name in git(dir, &["ls-files", "--others", "--exclude-standard"], &[])?.lines() {
-        files += 1;
         let path = dir.join(name);
-        if fs::metadata(&path).map(|m| m.len() <= MAX_UNTRACKED_BYTES).unwrap_or(false) {
-            if let Ok(text) = fs::read_to_string(&path) {
-                additions += text.lines().count() as u32;
-            }
-        }
+        let lines = if fs::metadata(&path).map(|m| m.len() <= MAX_UNTRACKED_BYTES).unwrap_or(false) {
+            fs::read_to_string(&path).map(|t| t.lines().count() as u32).unwrap_or(0)
+        } else {
+            0
+        };
+        changed.push(FileStat { path: name.to_owned(), additions: lines, deletions: 0, status: "added".into() });
     }
+    changed.sort_by_key(|f| std::cmp::Reverse(f.additions + f.deletions));
+    let additions = changed.iter().map(|f| f.additions).sum();
+    let deletions = changed.iter().map(|f| f.deletions).sum();
+    let files = changed.len() as u32;
 
     let ahead = base
         .as_deref()
@@ -79,7 +119,20 @@ pub fn branch_summary(dir: &Path) -> Result<BranchSummary, GitError> {
         .and_then(|n| n.trim().parse().ok())
         .unwrap_or(0);
 
-    Ok(BranchSummary { branch, base, additions, deletions, files, ahead, dirty, has_remote })
+    let commits = base
+        .as_deref()
+        .and_then(|b| git(dir, &["log", "--format=%h%x09%s", "-n", "10", &format!("{b}..HEAD")], &[]).ok())
+        .map(|log| {
+            log.lines()
+                .filter_map(|line| {
+                    let (hash, subject) = line.split_once('\t')?;
+                    Some(CommitInfo { hash: hash.to_owned(), subject: subject.to_owned() })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(BranchSummary { branch, base, additions, deletions, files, ahead, changed, commits, dirty, has_remote })
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -226,6 +279,13 @@ mod tests {
         assert_eq!(summary.files, 2);
         assert_eq!(summary.additions, 3, "{summary:?}"); // trois (+1), b.txt (+2)
         assert_eq!(summary.deletions, 1); // deux
+        // Le détail : b.txt est nouveau, a.txt modifié ; un commit « ajoute trois ».
+        let by_path = |p: &str| summary.changed.iter().find(|f| f.path == p).unwrap();
+        assert_eq!(by_path("b.txt").status, "added");
+        assert_eq!(by_path("b.txt").additions, 2);
+        assert_eq!(by_path("a.txt").status, "modified");
+        assert_eq!(summary.commits.len(), 1);
+        assert_eq!(summary.commits[0].subject, "ajoute trois");
     }
 
     #[test]
