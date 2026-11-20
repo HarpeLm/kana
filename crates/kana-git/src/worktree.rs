@@ -45,6 +45,66 @@ pub fn current_branch(dir: &Path) -> Option<String> {
     (!name.is_empty() && name != "HEAD").then(|| name.to_owned())
 }
 
+/// Une branche `kana/…` du dépôt, avec le dossier de travail qui la porte s'il existe encore.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct KanaBranch {
+    pub branch: String,
+    pub worktree: Option<String>,
+    /// Tout le travail de la branche est déjà dans la branche principale : on peut la supprimer sans perte.
+    pub merged: bool,
+    /// Commits de la branche absents de la branche principale.
+    pub ahead: u32,
+    /// Le dossier de travail contient des changements non enregistrés.
+    pub dirty: bool,
+}
+
+/// Les dossiers de travail du dépôt d'après `git worktree list --porcelain` : (chemin, branche).
+fn worktree_branches(repo: &Path) -> Vec<(String, String)> {
+    let Ok(out) = git(repo, &["worktree", "list", "--porcelain"], &[]) else { return Vec::new() };
+    let (mut path, mut result) = (String::new(), Vec::new());
+    for line in out.lines() {
+        if let Some(p) = line.strip_prefix("worktree ") {
+            path = p.to_owned();
+        } else if let Some(b) = line.strip_prefix("branch refs/heads/") {
+            result.push((path.clone(), b.to_owned()));
+        }
+    }
+    result
+}
+
+/// Les branches `kana/…` du dépôt (celles que Kana crée pour ses conversations), leur état et leur dossier.
+pub fn kana_branches(repo: &Path) -> Vec<KanaBranch> {
+    let Ok(listing) = git(repo, &["for-each-ref", "--format=%(refname:short)", "refs/heads/kana/"], &[]) else {
+        return Vec::new();
+    };
+    let base = ["main", "master"]
+        .into_iter()
+        .find(|b| git(repo, &["rev-parse", "--verify", "--quiet", b], &[]).is_ok());
+    let worktrees = worktree_branches(repo);
+    listing
+        .lines()
+        .map(|branch| {
+            let worktree = worktrees.iter().find(|(_, b)| b == branch).map(|(p, _)| p.clone());
+            let ahead = base
+                .and_then(|b| git(repo, &["rev-list", "--count", &format!("{b}..{branch}")], &[]).ok())
+                .and_then(|n| n.trim().parse().ok())
+                .unwrap_or(0);
+            let dirty = worktree
+                .as_deref()
+                .and_then(|w| git(Path::new(w), &["status", "--porcelain"], &[]).ok())
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            KanaBranch { branch: branch.to_owned(), worktree, merged: base.is_some() && ahead == 0, ahead, dirty }
+        })
+        .collect()
+}
+
+/// Supprime une branche seulement si tout son travail est déjà ailleurs (`git branch -d`) :
+/// git refuse sinon, et c'est voulu.
+pub fn delete_merged_branch(repo: &Path, branch: &str) -> Result<(), GitError> {
+    git(repo, &["branch", "-d", branch], &[]).map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, process::Command};
@@ -75,6 +135,34 @@ mod tests {
         let path = dir.with_extension("wt");
         add_worktree(&dir, &path, "kana/x", None).unwrap();
         assert_eq!(current_branch(&path).as_deref(), Some("kana/x"));
+    }
+
+    #[test]
+    fn lists_kana_branches_and_deletes_only_merged_ones() {
+        let repo = repo("kanabranches");
+        let clean = repo.with_extension("clean");
+        let work = repo.with_extension("work");
+        add_worktree(&repo, &clean, "kana/clean", None).unwrap();
+        add_worktree(&repo, &work, "kana/work", None).unwrap();
+        // « work » a un commit que la branche principale n'a pas, et du travail non enregistré.
+        fs::write(work.join("a.txt"), "x").unwrap();
+        for args in [vec!["add", "-A"], vec!["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "w"]] {
+            assert!(Command::new("git").args(&args).current_dir(&work).status().unwrap().success());
+        }
+        fs::write(work.join("b.txt"), "y").unwrap();
+
+        let branches = kana_branches(&repo);
+        let find = |name: &str| branches.iter().find(|b| b.branch == name).unwrap();
+        assert!(find("kana/clean").merged && !find("kana/clean").dirty);
+        assert_eq!(find("kana/work").ahead, 1);
+        assert!(!find("kana/work").merged && find("kana/work").dirty);
+        assert!(find("kana/work").worktree.is_some());
+
+        // La branche propre peut partir une fois son dossier retiré ; l'autre est refusée.
+        remove_worktree(&repo, &clean).unwrap();
+        delete_merged_branch(&repo, "kana/clean").unwrap();
+        assert!(delete_merged_branch(&repo, "kana/work").is_err());
+        assert!(kana_branches(&repo).iter().all(|b| b.branch != "kana/clean"));
     }
 
     #[test]
