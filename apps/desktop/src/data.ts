@@ -6,6 +6,8 @@ export interface Thread {
   id: string;
   branch: string;
   agent: string;
+  /** Identifiant du préréglage ACP côté Rust (`kana_acp::preset`). */
+  agentId: string;
 }
 
 export interface Provider {
@@ -16,9 +18,10 @@ export interface Provider {
 }
 
 export const THREADS: Thread[] = [
-  { id: "1", branch: "feat/acp-client", agent: "Codex" },
-  { id: "2", branch: "fix/failover-router", agent: "Claude" },
-  { id: "3", branch: "feat/sqlite-store", agent: "Gemini" },
+  { id: "1", branch: "feat/acp-client", agent: "Codex", agentId: "codex" },
+  { id: "2", branch: "fix/failover-router", agent: "Claude", agentId: "claude" },
+  { id: "3", branch: "feat/sqlite-store", agent: "Gemini", agentId: "gemini" },
+  { id: "4", branch: "chore/opencode-test", agent: "OpenCode", agentId: "opencode" },
 ];
 
 export const PROVIDERS: Provider[] = [
