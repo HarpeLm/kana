@@ -72,7 +72,7 @@ const SAMPLE: DiffReport = {
   ],
 };
 
-/** Les changements du dépôt où l'app a été lancée. */
-export function loadDiff(): Promise<DiffReport> {
-  return inTauri ? invoke("git_diff", { path: null }) : Promise.resolve(SAMPLE);
+/** Les changements du dépôt où l'app a été lancée, ou de celui de `path` (un dossier de travail). */
+export function loadDiff(path?: string): Promise<DiffReport> {
+  return inTauri ? invoke("git_diff", { path: path ?? null }) : Promise.resolve(SAMPLE);
 }
