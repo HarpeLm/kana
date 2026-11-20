@@ -2,6 +2,7 @@ import type { ChatState } from "../lib/chatState";
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
+import NewSession, { type NewSessionProps } from "./NewSession";
 import PermissionPrompt from "./PermissionPrompt";
 
 interface ChatViewProps {
@@ -14,9 +15,35 @@ interface ChatViewProps {
   onFork: (messageId: string) => void;
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
+  /** Ce qu'affiche l'écran d'une conversation vide (projet, dossier de travail). */
+  newSession: NewSessionProps;
 }
 
-export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, onOpenLink, onFork, mode, onModeChange }: ChatViewProps) {
+export default function ChatView({
+  agentLabel,
+  chat,
+  onSend,
+  onStop,
+  onAnswer,
+  onOpenLink,
+  onFork,
+  mode,
+  onModeChange,
+  newSession,
+}: ChatViewProps) {
+  const composer = (
+    <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
+  );
+
+  // Une conversation vide s'ouvre sur l'écran de nouvelle session, la saisie au milieu.
+  if (chat.messages.length === 0 && !chat.busy) {
+    return (
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <NewSession session={newSession}>{composer}</NewSession>
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
       <ChatMessages
@@ -38,7 +65,7 @@ export default function ChatView({ agentLabel, chat, onSend, onStop, onAnswer, o
         </div>
       )}
 
-      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
+      {composer}
     </main>
   );
 }
