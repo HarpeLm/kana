@@ -12,6 +12,7 @@ import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
 import ConfirmDialog from "./components/ConfirmDialog";
 import DiffDock from "./components/DiffDock";
+import FilesDock from "./components/FilesDock";
 import ConversationTitle from "./components/ConversationTitle";
 import Header from "./components/Header";
 import NavButtons from "./components/NavButtons";
@@ -68,6 +69,7 @@ export default function App() {
     fallback: 500,
     from: "right",
   });
+  const terminalFills = showTerminal && terminalMaximized;
   const terminalIsSide = showTerminal && !terminalMaximized;
   const diffPanel = useResizableWidth({
     storageKey: "kana-diff-width",
@@ -76,6 +78,16 @@ export default function App() {
     fallback: 560,
     from: "right",
     offsetRight: terminalIsSide ? terminalPanel.width : 0,
+  });
+  const filesPanel = useResizableWidth({
+    storageKey: "kana-files-width",
+    min: 300,
+    max: 800,
+    fallback: 420,
+    from: "right",
+    offsetRight:
+      (terminalIsSide ? terminalPanel.width : 0) +
+      (showDiff && !terminalFills ? diffPanel.width : 0),
   });
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
@@ -213,8 +225,16 @@ export default function App() {
 
       </div>
 
+        <FilesDock
+          visible={showFiles && !terminalFills}
+          width={filesPanel.width}
+          dragging={filesPanel.dragging}
+          onResizeStart={filesPanel.startDrag}
+          onClose={() => setShowFiles(false)}
+        />
+
         <DiffDock
-          visible={showDiff && !(showTerminal && terminalMaximized)}
+          visible={showDiff && !terminalFills}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
           onResizeStart={diffPanel.startDrag}
