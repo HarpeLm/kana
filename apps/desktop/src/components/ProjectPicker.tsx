@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, FolderOpen, FolderPlus, Folder } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, FolderPlus, Folder, X } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { NO_PROJECT, type Project } from "../lib/projects";
 
@@ -13,6 +13,8 @@ interface ProjectPickerProps {
   onOpenFolder: () => void;
   /** Crée un projet neuf ; renvoie l'erreur à montrer, ou `null`. */
   onCreate: (name: string) => Promise<string | null>;
+  /** Retire un projet de la liste (le dossier n'est pas supprimé). */
+  onRemove?: (project: Project) => void;
   /** Libellé du bouton quand il remplace le bouton habituel (liste des projets au centre de l'écran). */
   triggerLabel?: string;
   /** Le menu s'ouvre vers le bas plutôt que vers le haut. */
@@ -30,6 +32,7 @@ export default function ProjectPicker({
   onSelect,
   onOpenFolder,
   onCreate,
+  onRemove,
   triggerLabel,
   dropDown,
   triggerClassName,
@@ -101,15 +104,31 @@ export default function ProjectPicker({
               <p className="px-3 pb-0.5 pt-1.5 text-[11.5px] text-[#8c8b83]">Récents</p>
               <div className="max-h-[260px] overflow-y-auto">
                 {shown.map((project) => (
-                  <button key={project.path} className={row} onClick={() => pick(project)}>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{project.name}</span>
-                      {duplicated(project) && (
-                        <span className="block truncate text-[11.5px] text-[#8c8b83]">{home(project.path)}</span>
-                      )}
-                    </span>
-                    {current === project.path && <Check className="h-4 w-4 shrink-0 text-[#4a9bff]" strokeWidth={1.8} />}
-                  </button>
+                  <div key={project.path} className="group flex items-center rounded-lg hover:bg-[#333331]">
+                    <button
+                      className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[#ecebe4]"
+                      onClick={() => pick(project)}
+                      title={home(project.path)}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{project.name}</span>
+                        {duplicated(project) && (
+                          <span className="block truncate text-[11.5px] text-[#8c8b83]">{home(project.path)}</span>
+                        )}
+                      </span>
+                      {current === project.path && <Check className="h-4 w-4 shrink-0 text-[#4a9bff]" strokeWidth={1.8} />}
+                    </button>
+                    {onRemove && (
+                      <button
+                        onClick={() => onRemove(project)}
+                        title="Retirer de Kana (le dossier n'est pas supprimé)"
+                        aria-label={`Retirer ${project.name}`}
+                        className="mr-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#8c8b83] opacity-0 hover:bg-[#3d3d3a] hover:text-[#ecebe4] group-hover:opacity-100 focus:opacity-100"
+                      >
+                        <X className="h-3 w-3" strokeWidth={1.8} />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </>
