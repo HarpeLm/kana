@@ -32,8 +32,8 @@ export default function ModeMenu({ mode, onChange }: ModeMenuProps) {
         <ChevronDown className="h-3 w-3" strokeWidth={1.8} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 w-[400px] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1.5 shadow-2xl">
-          <p className="px-3 pb-1 pt-1.5 text-[12px] text-[#9a9992]">Comment les actions de l'agent doivent-elles être approuvées ?</p>
+        <div className="absolute bottom-full left-0 z-30 mb-2 w-[600px] max-w-[calc(100vw-3rem)] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl">
+          <p className="px-3 pb-0.5 pt-1.5 text-[12px] text-[#9a9992]">Comment les actions de l'agent doivent-elles être approuvées ?</p>
           {MODES.map((item) => {
             const ItemIcon = icons[item.id];
             const danger = item.id === "full";
@@ -44,18 +44,18 @@ export default function ModeMenu({ mode, onChange }: ModeMenuProps) {
                   onChange(item.id);
                   setOpen(false);
                 }}
-                className={`flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left transition ${
+                className={`flex w-full items-start gap-2.5 rounded-xl px-3 py-1.5 text-left transition ${
                   danger ? "text-[#e8743b] hover:bg-[#e8743b]/10" : "text-[#ecebe4] hover:bg-[#333331]"
                 }`}
               >
-                <ItemIcon className="mt-0.5 h-[18px] w-[18px] shrink-0" strokeWidth={1.6} />
+                <ItemIcon className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.6} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px]">{item.label}</span>
-                  <span className={`block text-[11.5px] ${danger ? "text-[#e8743b]/80" : "text-[#8c8b83]"}`}>
+                  <span className="block text-[13px] leading-[1.35]">{item.label}</span>
+                  <span className={`block text-[11.5px] leading-[1.35] ${danger ? "text-[#e8743b]/80" : "text-[#8c8b83]"}`}>
                     {item.description}
                   </span>
                 </span>
-                {item.id === mode && <Check className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />}
+                {item.id === mode && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />}
               </button>
             );
           })}
