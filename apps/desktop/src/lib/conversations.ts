@@ -1,0 +1,67 @@
+export interface Conversation {
+  id: string;
+  title: string;
+  /** Nom du groupe dans la barre latérale (le projet). */
+  project: string;
+  /** Identifiant du préréglage ACP côté Rust. */
+  agentId: string;
+  pinned: boolean;
+}
+
+export const DEFAULT_PROJECT = "kana";
+export const DEFAULT_AGENT = "opencode";
+export const PINNED_GROUP = "Épinglés";
+
+const SEED: Conversation[] = [
+  { id: "c1", title: "feat/acp-client", project: DEFAULT_PROJECT, agentId: "codex", pinned: false },
+  { id: "c2", title: "fix/failover-router", project: DEFAULT_PROJECT, agentId: "claude", pinned: false },
+  { id: "c3", title: "feat/sqlite-store", project: DEFAULT_PROJECT, agentId: "gemini", pinned: false },
+  { id: "c4", title: "chore/opencode-test", project: DEFAULT_PROJECT, agentId: "opencode", pinned: false },
+];
+
+const STORAGE_KEY = "kana-conversations";
+
+export function makeConversation(project: string, agentId: string): Conversation {
+  const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return { id, title: "Nouvelle conversation", project, agentId, pinned: false };
+}
+
+export function loadConversations(): Conversation[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {
+    // stockage indisponible ou corrompu : on repart des exemples
+  }
+  return SEED;
+}
+
+export function saveConversations(items: Conversation[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // stockage indisponible : la liste ne sera pas conservée
+  }
+}
+
+export interface ConversationGroup {
+  name: string;
+  items: Conversation[];
+}
+
+/** Épinglés d'abord, puis un groupe par projet dans l'ordre d'apparition ; filtre sur le titre. */
+export function groupConversations(items: Conversation[], query: string): ConversationGroup[] {
+  const needle = query.trim().toLowerCase();
+  const visible = items.filter((c) => !needle || c.title.toLowerCase().includes(needle));
+
+  const groups: ConversationGroup[] = [];
+  const pinned = visible.filter((c) => c.pinned);
+  if (pinned.length > 0) groups.push({ name: PINNED_GROUP, items: pinned });
+
+  for (const conversation of visible.filter((c) => !c.pinned)) {
+    const group = groups.find((g) => g.name === conversation.project && g.name !== PINNED_GROUP);
+    if (group) group.items.push(conversation);
+    else groups.push({ name: conversation.project, items: [conversation] });
+  }
+  return groups;
+}
