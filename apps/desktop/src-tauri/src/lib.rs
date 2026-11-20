@@ -7,6 +7,7 @@ mod browser_agent_tools;
 mod browser_commands;
 mod db_commands;
 mod git_commands;
+mod project_commands;
 mod secrets;
 mod settings_commands;
 mod state;
@@ -35,6 +36,12 @@ pub fn run() {
             db_commands::db_save_conversations,
             db_commands::db_load_messages,
             db_commands::db_save_messages,
+            db_commands::db_load_projects,
+            db_commands::db_save_projects,
+            project_commands::launch_project,
+            project_commands::create_project,
+            project_commands::scratch_dir,
+            project_commands::describe_folder,
             worktree_commands::create_worktree,
             worktree_commands::remove_worktree,
             agent_commands::start_agent,
