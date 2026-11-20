@@ -13,6 +13,7 @@ import type { ConversationActions } from "./conversationActions";
 import ConversationGroup from "./ConversationGroup";
 import ConversationRow from "./ConversationRow";
 import RenameInput from "./RenameInput";
+import { useSectionDrag } from "../hooks/useSectionDrag";
 import SidebarViewMenu from "./SidebarViewMenu";
 import { DEFAULT_VIEW, applyView, flatGroups, saveView, type SidebarView } from "../lib/sidebarView";
 import NavButtons, { type NavButtonsProps } from "./NavButtons";
@@ -69,6 +70,9 @@ export default function Sidebar({
   const grouped = groupConversations(shown, "");
   const groups = listView.groupBy === "none" ? flatGroups(grouped) : grouped;
   const sections = sectionsOf(conversations);
+  // Les dossiers qu'on peut déplacer, dans l'ordre affiché (seulement avec « Mon ordre »).
+  const movable = listView.groupBy === "folder" && listView.sortBy === "manual" ? groups.map((g) => g.name).filter((n) => n !== PINNED_GROUP && n !== ARCHIVED_GROUP) : [];
+  const sectionDrag = useSectionDrag(movable, actions.onMoveSection);
   const isFolder = (name: string) => listView.groupBy === "folder" && name !== PINNED_GROUP && name !== ARCHIVED_GROUP;
 
   // Le conteneur change de largeur et le panneau garde la sienne en s'estompant :
@@ -120,8 +124,10 @@ export default function Sidebar({
               name={group.name}
               defaultCollapsed={group.name === ARCHIVED_GROUP}
               expandSignal={expandSignal}
-              reorderable={isFolder(group.name) && listView.sortBy === "manual"}
-              onMoveSection={actions.onMoveSection}
+              sectionRef={movable.includes(group.name) ? sectionDrag.register(group.name) : undefined}
+              headerProps={movable.includes(group.name) ? sectionDrag.headerProps(group.name) : undefined}
+              dragStyle={movable.includes(group.name) ? sectionDrag.styleOf(group.name).style : undefined}
+              lifted={movable.includes(group.name) && sectionDrag.styleOf(group.name).lifted}
               onDropConversation={isFolder(group.name) ? (id) => actions.onMoveToSection(id, group.name) : undefined}
               onCreate={isFolder(group.name) ? () => actions.onCreateIn(group.name) : undefined}
               onOpenViewMenu={(anchor) => setMenuFor((open) => (open?.name === group.name ? null : { name: group.name, anchor }))}
