@@ -48,3 +48,14 @@ pub struct StoredMessage {
     #[serde(default)]
     pub ended_at: Option<i64>,
 }
+
+/// Un projet : un dossier de l'ordinateur où les agents travaillent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredProject {
+    pub name: String,
+    pub path: String,
+    /// Dernière utilisation (ms), pour classer les récents.
+    #[serde(default)]
+    pub last_used: Option<i64>,
+}
