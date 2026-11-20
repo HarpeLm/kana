@@ -22,11 +22,11 @@ export function useConversations() {
     setItems((list) => list.map((c) => (c.id === id ? change(c) : c)));
   }, []);
 
-  /** Ouvre une conversation ; l'ouvrir la marque comme lue. */
+  /** Ouvre une conversation ; l'ouvrir la marque comme lue et comme récente. */
   const select = useCallback(
     (id: string) => {
       setSelectedId(id);
-      patch(id, (c) => (c.unread ? { ...c, unread: false } : c));
+      patch(id, (c) => ({ ...c, unread: false, openedAt: Date.now() }));
     },
     [patch],
   );
