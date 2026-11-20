@@ -35,10 +35,16 @@ export function useBrowserTabs() {
 
   const select = useCallback((id: string) => setState((s) => ({ ...s, activeId: id })), []);
 
-  /** Ferme un onglet (le dernier reste) et active son voisin. */
+  /**
+   * Ferme un onglet et active son voisin. Fermer le dernier le remplace par un onglet neuf :
+   * le volet en a toujours un quand on le rouvre.
+   */
   const close = useCallback((id: string) => {
     setState((s) => {
-      if (s.tabs.length <= 1) return s;
+      if (s.tabs.length <= 1) {
+        const tab = makeTab(s.next, HOME_URL);
+        return { tabs: [tab], activeId: tab.id, next: s.next + 1 };
+      }
       const index = s.tabs.findIndex((t) => t.id === id);
       const tabs = s.tabs.filter((t) => t.id !== id);
       const activeId = s.activeId === id ? tabs[Math.max(0, index - 1)].id : s.activeId;
