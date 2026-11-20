@@ -29,6 +29,10 @@ pub enum GitError {
     InvalidPath(String),
     #[error("lecture impossible : {0}")]
     Read(String),
+    #[error("écriture impossible : {0}")]
+    Write(String),
+    #[error("fichier modifié ailleurs depuis son ouverture : {0}")]
+    Conflict(String),
 }
 
 /// Lance git dans `dir` ; `ok_codes` liste les codes de sortie acceptés en plus de 0.
