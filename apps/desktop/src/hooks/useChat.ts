@@ -11,13 +11,81 @@ import {
   addError,
   addUserMessage,
   applyEvent,
+  type ChatMessage,
   type ChatState,
 } from "../lib/chatState";
+import { loadStoredMessages, saveStoredMessages } from "../lib/store";
 import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
 
-/** Conversation d'un fil avec son agent ACP. L'état de chaque fil est conservé séparément. */
-export function useChat(threadId: string, agentId: string, mode: PermissionMode) {
+/** Ce qu'il faut préparer avant d'envoyer le premier message d'un fil. */
+export interface PreparedThread {
+  /** Dossier de travail de l'agent (le worktree de la conversation). */
+  cwd?: string;
+  /** Texte à placer devant le message (contexte d'une bifurcation). */
+  preface?: string;
+}
+
+/** Un outil resté « en cours » quand l'app s'est arrêtée n'a jamais fini : on le montre comme interrompu. */
+function settled(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    tools: m.tools.map((t) => (t.status === "pending" || t.status === "in_progress" ? { ...t, status: "failed" } : t)),
+    endedAt: m.role === "agent" ? (m.endedAt ?? m.startedAt) : m.endedAt,
+  }));
+}
+
+/**
+ * Conversation d'un fil avec son agent ACP. L'état de chaque fil est conservé séparément, relu de
+ * la base à l'ouverture du fil et enregistré un court instant après chaque changement.
+ */
+export function useChat(
+  threadId: string,
+  agentId: string,
+  mode: PermissionMode,
+  prepare: (threadId: string) => Promise<PreparedThread>,
+) {
   const [chats, setChats] = useState<Record<string, ChatState>>({});
+  const loaded = useRef(new Set<string>());
+  const saved = useRef(new Map<string, ChatMessage[]>());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const prepareRef = useRef(prepare);
+  useEffect(() => {
+    prepareRef.current = prepare;
+  });
+
+  // Ouvrir un fil relit son historique dans la base.
+  useEffect(() => {
+    if (loaded.current.has(threadId)) return;
+    loaded.current.add(threadId);
+    loadStoredMessages(threadId)
+      .then((messages) => {
+        if (messages.length === 0) return;
+        const restored = settled(messages);
+        saved.current.set(threadId, restored);
+        setChats((all) => {
+          const current = all[threadId];
+          // Un message déjà écrit pendant le chargement l'emporte : on ne l'écrase pas.
+          if (current && current.messages.length > 0) return all;
+          return { ...all, [threadId]: { ...(current ?? EMPTY_CHAT), messages: restored } };
+        });
+      })
+      .catch(() => {});
+  }, [threadId]);
+
+  // Chaque fil modifié est enregistré, un court instant après son dernier changement.
+  useEffect(() => {
+    for (const [id, chat] of Object.entries(chats)) {
+      if (!loaded.current.has(id) || saved.current.get(id) === chat.messages) continue;
+      clearTimeout(timers.current.get(id));
+      timers.current.set(
+        id,
+        setTimeout(() => {
+          saved.current.set(id, chat.messages);
+          void saveStoredMessages(id, chat.messages).catch(() => {});
+        }, 400),
+      );
+    }
+  }, [chats]);
   const modeRef = useRef(mode);
   useEffect(() => {
     modeRef.current = mode;
@@ -53,8 +121,9 @@ export function useChat(threadId: string, agentId: string, mode: PermissionMode)
     async (text: string) => {
       update(threadId, (chat) => addUserMessage(chat, text));
       try {
-        await startAgent(threadId, agentId);
-        await sendPrompt(threadId, promptFor(modeRef.current, text));
+        const { cwd, preface } = await prepareRef.current(threadId);
+        await startAgent(threadId, agentId, cwd);
+        await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
       }
@@ -77,5 +146,11 @@ export function useChat(threadId: string, agentId: string, mode: PermissionMode)
     [threadId, update],
   );
 
-  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer };
+  /** Donne à un fil neuf un début d'historique (la copie faite par « bifurquer »). */
+  const seed = useCallback((id: string, messages: ChatMessage[]) => {
+    loaded.current.add(id);
+    setChats((all) => ({ ...all, [id]: { ...EMPTY_CHAT, messages } }));
+  }, []);
+
+  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer, seed };
 }
