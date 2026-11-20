@@ -17,6 +17,7 @@ import RelayView from "./components/RelayView";
 import RightPanel from "./components/RightPanel";
 import ScheduledView from "./components/ScheduledView";
 import SearchPalette from "./components/SearchPalette";
+import TerminalPanel from "./components/TerminalPanel";
 import SettingsView from "./components/SettingsView";
 import Sidebar from "./components/Sidebar";
 
@@ -55,8 +56,14 @@ export default function App() {
   const [showSimulator, setShowSimulator] = useState(false);
   const [keepAwake, setKeepAwake] = useState(false);
 
-  const showRightPanel =
-    showPlan || showDiff || showTerminal || showArtifacts || showBackgroundTasks;
+  // Le terminal est monté à la première ouverture puis gardé : son shell survit quand on le masque.
+  const [terminalOpened, setTerminalOpened] = useState(false);
+  const toggleTerminal = () => {
+    setShowTerminal((v) => !v);
+    setTerminalOpened(true);
+  };
+
+  const showRightPanel = showPlan || showDiff || showArtifacts || showBackgroundTasks;
 
   const nav = {
     onToggleSidebar: toggle(setShowSidebar),
@@ -120,7 +127,7 @@ export default function App() {
             showPlan,
             onPlan: toggle(setShowPlan),
             showTerminal,
-            onTerminal: toggle(setShowTerminal),
+            onTerminal: toggleTerminal,
             showDiff,
             onDiff: toggle(setShowDiff),
             showBrowser,
@@ -174,12 +181,19 @@ export default function App() {
                 showArtifacts={showArtifacts}
                 showBackgroundTasks={showBackgroundTasks}
                 showDiff={showDiff}
-                showTerminal={showTerminal}
               />
             )}
           </div>
         ) : (
           <RelayView />
+        )}
+
+        {terminalOpened && (
+          <TerminalPanel
+            id="default"
+            visible={showTerminal}
+            onClose={() => setShowTerminal(false)}
+          />
         )}
       </div>
 
