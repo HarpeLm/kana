@@ -1,8 +1,10 @@
-import type { PointerEvent } from "react";
+import { useState, type PointerEvent } from "react";
 import { Settings } from "lucide-react";
+import { loadView } from "../lib/sidebarView";
 import type { View } from "../data";
 import {
   ARCHIVED_GROUP,
+  PINNED_GROUP,
   groupConversations,
   sectionsOf,
   type Conversation,
@@ -10,6 +12,9 @@ import {
 import type { ConversationActions } from "./conversationActions";
 import ConversationGroup from "./ConversationGroup";
 import ConversationRow from "./ConversationRow";
+import RenameInput from "./RenameInput";
+import SidebarViewMenu from "./SidebarViewMenu";
+import { DEFAULT_VIEW, applyView, flatGroups, saveView, type SidebarView } from "../lib/sidebarView";
 import NavButtons, { type NavButtonsProps } from "./NavButtons";
 import SidebarNav from "./SidebarNav";
 import SidebarResizer from "./SidebarResizer";
@@ -52,8 +57,19 @@ export default function Sidebar({
   onOpenScheduled,
   onOpenSettings,
 }: SidebarProps) {
-  const groups = groupConversations(conversations, "");
+  const [listView, setListView] = useState<SidebarView>(loadView);
+  const [menuFor, setMenuFor] = useState<{ name: string; anchor: DOMRect } | null>(null);
+  const [expandSignal, setExpandSignal] = useState(0);
+  const [newSection, setNewSection] = useState(false);
+  const changeView = (next: SidebarView) => {
+    setListView(next);
+    saveView(next);
+  };
+  const shown = applyView(conversations, listView);
+  const grouped = groupConversations(shown, "");
+  const groups = listView.groupBy === "none" ? flatGroups(grouped) : grouped;
   const sections = sectionsOf(conversations);
+  const isFolder = (name: string) => listView.groupBy === "folder" && name !== PINNED_GROUP && name !== ARCHIVED_GROUP;
 
   // Le conteneur change de largeur et le panneau garde la sienne en s'estompant :
   // le texte ne se réorganise pas pendant l'animation. Pas d'animation pendant le glissement.
@@ -86,11 +102,48 @@ export default function Sidebar({
         />
 
         <div className="flex-1 overflow-y-auto px-2 pb-3">
+          {newSection && (
+            <div className="mt-2">
+              <RenameInput
+                initial=""
+                onCommit={(name) => {
+                  setNewSection(false);
+                  if (name.trim()) actions.onCreateIn(name.trim());
+                }}
+                onCancel={() => setNewSection(false)}
+              />
+            </div>
+          )}
           {groups.map((group) => (
             <ConversationGroup
               key={group.name}
               name={group.name}
               defaultCollapsed={group.name === ARCHIVED_GROUP}
+              expandSignal={expandSignal}
+              reorderable={isFolder(group.name) && listView.sortBy === "manual"}
+              onMoveSection={actions.onMoveSection}
+              onDropConversation={isFolder(group.name) ? (id) => actions.onMoveToSection(id, group.name) : undefined}
+              onCreate={isFolder(group.name) ? () => actions.onCreateIn(group.name) : undefined}
+              onOpenViewMenu={(anchor) => setMenuFor((open) => (open?.name === group.name ? null : { name: group.name, anchor }))}
+              menu={
+                menuFor?.name === group.name ? (
+                  <SidebarViewMenu
+                    anchor={menuFor.anchor}
+                    view={listView}
+                    onChange={changeView}
+                    onReset={() => changeView(DEFAULT_VIEW)}
+                    onNewSection={() => {
+                      setMenuFor(null);
+                      setNewSection(true);
+                    }}
+                    onShowAll={() => {
+                      setExpandSignal((n) => n + 1);
+                      setMenuFor(null);
+                    }}
+                    onClose={() => setMenuFor(null)}
+                  />
+                ) : null
+              }
             >
               {group.items.map((conversation) => (
                 <ConversationRow
