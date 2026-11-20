@@ -90,9 +90,9 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
             </button>
           )}
         </div>
-        <div className="mt-1.5 flex items-center justify-between gap-3">
+        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2">
           {footerLeft ?? <ModeMenu mode={mode} onChange={onModeChange} />}
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 shrink items-center gap-1">
             {modelPicker ?? <span className="pr-3 text-[12px] text-[#8c8b83]">{agentLabel} · ACP</span>}
             {footerLeft && <ModeMenu mode={mode} onChange={onModeChange} align="right" />}
           </div>
