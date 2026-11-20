@@ -11,6 +11,7 @@ import { sectionsOf } from "./lib/conversations";
 import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
 import ConfirmDialog from "./components/ConfirmDialog";
+import DiffDock from "./components/DiffDock";
 import ConversationTitle from "./components/ConversationTitle";
 import Header from "./components/Header";
 import NavButtons from "./components/NavButtons";
@@ -67,12 +68,21 @@ export default function App() {
     fallback: 500,
     from: "right",
   });
+  const terminalIsSide = showTerminal && !terminalMaximized;
+  const diffPanel = useResizableWidth({
+    storageKey: "kana-diff-width",
+    min: 360,
+    max: 1000,
+    fallback: 560,
+    from: "right",
+    offsetRight: terminalIsSide ? terminalPanel.width : 0,
+  });
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
     setTerminalOpened(true);
   };
 
-  const showRightPanel = showPlan || showDiff || showArtifacts || showBackgroundTasks;
+  const showRightPanel = showPlan || showArtifacts || showBackgroundTasks;
 
   const nav = {
     onToggleSidebar: toggle(setShowSidebar),
@@ -194,7 +204,6 @@ export default function App() {
                 showPlan={showPlan}
                 showArtifacts={showArtifacts}
                 showBackgroundTasks={showBackgroundTasks}
-                showDiff={showDiff}
               />
             )}
           </div>
@@ -203,6 +212,14 @@ export default function App() {
         )}
 
       </div>
+
+        <DiffDock
+          visible={showDiff && !(showTerminal && terminalMaximized)}
+          width={diffPanel.width}
+          dragging={diffPanel.dragging}
+          onResizeStart={diffPanel.startDrag}
+          onClose={() => setShowDiff(false)}
+        />
 
         {terminalOpened && (
           <TerminalDock
