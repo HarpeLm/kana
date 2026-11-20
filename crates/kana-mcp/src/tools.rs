@@ -6,6 +6,10 @@ use serde_json::{Value, json};
 /// (que l'agent verra comme un échec de l'outil, pas comme un échec du protocole).
 pub trait ToolDriver: Send + Sync {
     fn call(&self, name: &str, arguments: &Value) -> Result<String, String>;
+
+    /// Reçoit une ligne de journal décrivant ce que fait le serveur (pour diagnostiquer un agent
+    /// qui ne se connecte pas). Ne fait rien par défaut.
+    fn note(&self, _event: &str) {}
 }
 
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
