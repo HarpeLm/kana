@@ -12,6 +12,14 @@ export interface Conversation {
   archived?: boolean;
   /** Dernière ouverture (ms), pour classer les récentes dans la recherche. */
   openedAt?: number;
+  /** Dossier de travail (worktree git) de cette conversation, créé à son premier message. */
+  worktree?: string;
+  /** Branche git de ce dossier de travail. */
+  branch?: string;
+  /** Conversation dont celle-ci est une bifurcation. */
+  forkedFrom?: string;
+  /** Résumé de la conversation d'origine, glissé dans le premier message d'une bifurcation. */
+  forkContext?: string;
 }
 
 export const DEFAULT_PROJECT = "kana";
@@ -26,30 +34,13 @@ const SEED: Conversation[] = [
   { id: "c4", title: "chore/opencode-test", project: DEFAULT_PROJECT, agentId: "opencode", pinned: false },
 ];
 
-const STORAGE_KEY = "kana-conversations";
-
 export function makeConversation(project: string, agentId: string): Conversation {
   const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   return { id, title: "Nouvelle conversation", project, agentId, pinned: false, openedAt: Date.now() };
 }
 
-export function loadConversations(): Conversation[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  } catch {
-    // stockage indisponible ou corrompu : on repart des exemples
-  }
-  return SEED;
-}
-
-export function saveConversations(items: Conversation[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // stockage indisponible : la liste ne sera pas conservée
-  }
-}
+/** Les conversations d'exemple d'un premier lancement. */
+export const SEED_CONVERSATIONS = SEED;
 
 export interface ConversationGroup {
   name: string;
