@@ -115,6 +115,13 @@ export default function App() {
     setShowBrowser(true);
     setBrowserOpened(true);
   });
+  // Un lien de la conversation s'ouvre dans le Globe, jamais dans le navigateur du système.
+  const [openRequest, setOpenRequest] = useState<{ id: number; url: string } | null>(null);
+  const openInGlobe = (url: string) => {
+    setOpenRequest((r) => ({ id: (r?.id ?? 0) + 1, url }));
+    setShowBrowser(true);
+    setBrowserOpened(true);
+  };
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
     setTerminalOpened(true);
@@ -236,6 +243,7 @@ export default function App() {
               onSend={send}
               onStop={stop}
               onAnswer={answer}
+              onOpenLink={openInGlobe}
             />
             {showRightPanel && (
               <RightPanel
@@ -280,6 +288,8 @@ export default function App() {
             dragging={browserPanel.dragging}
             onResizeStart={browserPanel.startDrag}
             onClose={() => setShowBrowser(false)}
+            driving={browserAgent.driving}
+            openRequest={openRequest}
           />
         )}
 
