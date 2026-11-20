@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
-    agent_spec::{default_cwd, spec_for},
+    agent_spec::{project_dir, spec_for},
     browser_agent::AgentState,
     state::AgentSessions,
 };
@@ -42,7 +42,7 @@ pub async fn start_agent(
         return Ok(());
     }
     let spec = spec_for(&agent)?;
-    let cwd = cwd.map(PathBuf::from).unwrap_or_else(default_cwd);
+    let cwd = cwd.map(PathBuf::from).unwrap_or_else(project_dir);
     // Les outils pour naviguer dans le Globe, proposés à chaque agent.
     let mcp: Vec<McpServerConfig> = app
         .state::<AgentState>()
