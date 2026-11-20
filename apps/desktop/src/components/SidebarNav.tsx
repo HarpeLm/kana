@@ -10,7 +10,7 @@ interface SidebarNavProps {
 }
 
 const ROW =
-  "flex h-[34px] w-full items-center gap-2 rounded-lg px-[10px] text-left text-[14px] text-[#e6e5df] transition hover:bg-[#262624]";
+  "flex h-8 w-full items-center gap-2 rounded-lg px-[10px] text-left text-[14px] text-[#e6e5df] transition hover:bg-[#262624]";
 const ICON = "h-[18px] w-[18px] shrink-0";
 
 function Row({ label, icon, onClick, active }: { label: string; icon: ReactNode; onClick: () => void; active?: boolean }) {
@@ -25,7 +25,7 @@ function Row({ label, icon, onClick, active }: { label: string; icon: ReactNode;
 /** Actions rapides en haut de la barre latérale : créer, rechercher, artéfacts. */
 export default function SidebarNav({ searching, onCreate, onToggleSearch, onArtifacts }: SidebarNavProps) {
   return (
-    <nav className="space-y-0.5 px-2">
+    <nav className="space-y-0.5 px-2 pt-1">
       <Row label="Créer" icon={<Plus className={ICON} strokeWidth={1.6} />} onClick={onCreate} />
       <Row
         label="Rechercher"
