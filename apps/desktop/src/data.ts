@@ -1,4 +1,4 @@
-export type View = "workspace" | "relay" | "settings";
+export type View = "workspace" | "relay" | "settings" | "scheduled";
 
 export interface AgentInfo {
   /** Identifiant du préréglage ACP côté Rust. */
