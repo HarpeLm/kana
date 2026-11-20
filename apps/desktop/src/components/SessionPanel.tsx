@@ -1,35 +1,74 @@
 import { useState, type ReactNode } from "react";
-import { FolderClosed, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, Laptop, SquareTerminal, FileDiff } from "lucide-react";
-import type { ChatMessage, ToolCall } from "../lib/chatState";
+import {
+  Check,
+  Circle,
+  CircleDot,
+  FileDiff,
+  FileText,
+  FolderClosed,
+  GitBranch,
+  GitCommitHorizontal,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  Laptop,
+  SquareTerminal,
+  X,
+} from "lucide-react";
+import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation } from "../lib/conversations";
 import { createPullRequest, type BranchSummary, type PullRequest } from "../lib/forge";
 import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import ConfirmDialog from "./ConfirmDialog";
+import SiteIcon from "./SiteIcon";
 
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
+const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+const dirName = (path: string) => path.split("/").slice(0, -1).join("/");
+const SHOWN = 5;
 
 /** Une partie du panneau ; toutes sont dans la même carte, séparées par un trait fin. */
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
     <section className="border-t border-[#2f2f2c] pt-4 first:border-t-0 first:pt-0">
-      <h3 className="mb-3 text-[13px] text-[#9a9992]">{title}</h3>
+      <h3 className="mb-2.5 flex items-baseline gap-2 text-[13px] text-[#9a9992]">
+        {title}
+        {count !== undefined && count > 0 && <span className="text-[12px] text-[#6f6e68]">{count}</span>}
+      </h3>
       {children}
     </section>
   );
 }
 
-function Row({ icon, children, trailing }: { icon: ReactNode; children: ReactNode; trailing?: ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 py-1.5 text-[14px] text-[#ecebe4]">
-      <span className="shrink-0 text-[#9a9992]">{icon}</span>
+function Row({ icon, children, trailing, onClick, title }: { icon: ReactNode; children: ReactNode; trailing?: ReactNode; onClick?: () => void; title?: string }) {
+  const content = (
+    <>
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[#9a9992]">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {trailing}
+    </>
+  );
+  const cls = "flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left text-[14px] text-[#ecebe4]";
+  return onClick ? (
+    <button onClick={onClick} title={title} className={`${cls} transition hover:bg-[#2a2a28]`}>
+      {content}
+    </button>
+  ) : (
+    <div title={title} className={cls}>
+      {content}
     </div>
   );
 }
 
-const pill = "rounded-lg bg-[#333331] px-3 py-1 text-[13px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]";
+const Empty = ({ children }: { children: ReactNode }) => <p className="px-1 py-1 text-[13px] text-[#6f6e68]">{children}</p>;
+const MoreButton = ({ onClick, children }: { onClick: () => void; children: ReactNode }) => (
+  <button onClick={onClick} className="mt-1 px-1 text-[12.5px] text-[#8c8b83] transition hover:text-[#ecebe4]">
+    {children}
+  </button>
+);
+
+const statusColor: Record<string, string> = { added: "text-[#3fb950]", deleted: "text-[#f85149]", modified: "text-[#d29922]" };
 
 function PullIcon({ state }: { state: string }) {
   if (state === "MERGED") return <GitMerge className="h-4 w-4 text-[#a371f7]" strokeWidth={1.8} />;
@@ -37,9 +76,34 @@ function PullIcon({ state }: { state: string }) {
   return <GitPullRequest className="h-4 w-4 text-[#3fb950]" strokeWidth={1.8} />;
 }
 
+function PlanIcon({ status }: { status: string }) {
+  if (status === "completed") return <Check className="h-4 w-4 text-[#3fb950]" strokeWidth={2} />;
+  if (status === "in_progress") return <CircleDot className="h-4 w-4 text-[#4a9bff]" strokeWidth={1.8} />;
+  return <Circle className="h-4 w-4 text-[#6f6e68]" strokeWidth={1.6} />;
+}
+
+function ToolStatus({ status }: { status: string }) {
+  if (status === "failed") return <X className="h-4 w-4 text-[#f85149]" strokeWidth={2} />;
+  if (status === "pending" || status === "in_progress") return <CircleDot className="h-4 w-4 animate-pulse text-[#4a9bff]" strokeWidth={1.8} />;
+  return <SquareTerminal className="h-4 w-4" strokeWidth={1.7} />;
+}
+
+/** Les adresses citées par l'agent dans ses réponses, sans doublon, la dernière en premier. */
+function linksIn(messages: ChatMessage[]): string[] {
+  const seen = new Set<string>();
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "agent") continue;
+    for (const match of message.text.matchAll(/https?:\/\/[^\s)\]>"'`]+/g)) seen.add(match[0].replace(/[.,;:!?]+$/, ""));
+  }
+  return [...seen];
+}
+
+const shortLink = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
 interface SessionPanelProps {
   conversation: Conversation;
   messages: ChatMessage[];
+  plan: PlanItem[];
   summary: BranchSummary | null;
   pulls: PullRequest[];
   /** Dossier où se trouve le travail (worktree, sinon projet). */
@@ -47,47 +111,40 @@ interface SessionPanelProps {
   onOpenDiff: () => void;
   onOpenLink: (url: string) => void;
   onRefresh: () => void;
-  showPlan: boolean;
-  showArtifacts: boolean;
 }
 
-/** Panneau de droite : ce que la session a fait (modifications, commandes, pull requests) et où elle travaille. */
-export default function SessionPanel({
-  conversation,
-  messages,
-  summary,
-  pulls,
-  workPath,
-  onOpenDiff,
-  onOpenLink,
-  onRefresh,
-  showPlan,
-  showArtifacts,
-}: SessionPanelProps) {
+/** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh }: SessionPanelProps) {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [allFiles, setAllFiles] = useState(false);
+  const [allCommits, setAllCommits] = useState(false);
 
   const noProject = conversation.projectPath === NO_PROJECT;
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
-  const running = tools.filter((t) => t.status === "pending" || t.status === "in_progress");
-  const finished = tools.length - running.length;
+  const running = tools.filter((t) => t.status === "pending" || t.status === "in_progress").length;
+  const recent = tools.slice(-6).reverse();
+  const created = (summary?.changed ?? []).filter((f) => f.status === "added");
+  const links = linksIn(messages).slice(0, 6);
 
+  const changed = summary?.changed ?? [];
+  const commits = summary?.commits ?? [];
   const onMainBranch = !summary?.branch || summary.branch === summary.base;
   const nothingToShare = !!summary && summary.ahead === 0 && !summary.dirty;
-  const prBlocked = !summary || onMainBranch || nothingToShare || !summary.has_remote
-    ? !summary
-      ? "Aucune information sur la branche"
-      : onMainBranch
-        ? "Le travail est sur la branche principale : il n'y a rien à proposer"
-        : !summary.has_remote
-          ? "Ce projet n'a pas de remote « origin » : impossible de pousser"
-          : "Aucun changement par rapport à la branche principale"
-    : null;
+  const prBlocked = !summary
+    ? "Aucune information sur la branche"
+    : onMainBranch
+      ? "Le travail est sur la branche principale : il n'y a rien à proposer"
+      : !summary.has_remote
+        ? "Ce projet n'a pas de remote « origin » : impossible de pousser"
+        : nothingToShare
+          ? "Aucun changement par rapport à la branche principale"
+          : null;
 
   const startPr = () => {
-    setTitle(conversation.title === "Nouvelle conversation" ? summary?.branch ?? "" : conversation.title);
+    setTitle(conversation.title === "Nouvelle conversation" ? (summary?.branch ?? "") : conversation.title);
     setError("");
     setCreating(true);
   };
@@ -110,101 +167,156 @@ export default function SessionPanel({
 
   return (
     <aside className="flex w-[360px] shrink-0 flex-col p-3">
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl bg-[#232321] p-4">
-      <Card title="Environnement">
-        <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
-        <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
-          {noProject ? "Aucun dossier" : conversation.project}
-          {conversation.projectPath && !noProject && (
-            <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[#232321]">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <Section title="Environnement">
+          <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
+          <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
+            {noProject ? "Aucun dossier" : conversation.project}
+            {conversation.projectPath && !noProject && <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>}
+          </Row>
+          {(summary?.base ?? summary?.branch) && (
+            <Row
+              icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}
+              title={summary?.branch && summary.branch !== summary.base ? `Le travail est sur la branche ${summary.branch}` : undefined}
+            >
+              {summary?.base ?? summary?.branch}
+            </Row>
           )}
-        </Row>
-        {(summary?.base ?? summary?.branch) && (
-          // Comme dans Claude : la branche du projet. Le travail de l'agent est sur sa propre branche.
-          <div title={summary?.branch && summary.branch !== summary.base ? `Le travail est sur la branche ${summary.branch}` : undefined}>
-            <Row icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}>{summary?.base ?? summary?.branch}</Row>
-          </div>
-        )}
-      </Card>
+        </Section>
 
-      <Card title="Modifications">
-        <Row
-          icon={<FileDiff className="h-4 w-4" strokeWidth={1.7} />}
-          trailing={
-            <button className={pill} onClick={onOpenDiff}>
-              Voir
-            </button>
-          }
-        >
-          <span className="text-[#3fb950]">+{summary?.additions ?? 0}</span>{" "}
-          <span className="text-[#f85149]">−{summary?.deletions ?? 0}</span>
-          <span className="text-[#8c8b83]">
-            {" "}
-            · {summary?.files ?? 0} fichier{(summary?.files ?? 0) > 1 ? "s" : ""}
-            {summary && summary.ahead > 0 ? ` · ${summary.ahead} commit${summary.ahead > 1 ? "s" : ""}` : ""}
-          </span>
-        </Row>
-        <div className="mt-2 flex justify-end">
-          <button className={pill} onClick={startPr} disabled={prBlocked !== null} title={prBlocked ?? "Pousser la branche et ouvrir une pull request"}>
+        <Section title="Modifications" count={changed.length}>
+          <Row
+            icon={<FileDiff className="h-4 w-4" strokeWidth={1.7} />}
+            trailing={
+              <span className="shrink-0 rounded-md px-2 py-0.5 text-[12.5px] text-[#8c8b83] hover:bg-[#333331] hover:text-[#ecebe4]" onClick={onOpenDiff} role="button">
+                Voir le diff
+              </span>
+            }
+          >
+            <span className="text-[#3fb950]">+{summary?.additions ?? 0}</span> <span className="text-[#f85149]">−{summary?.deletions ?? 0}</span>
+          </Row>
+          {changed.length === 0 && <Empty>Aucun fichier modifié pour l'instant.</Empty>}
+          {(allFiles ? changed : changed.slice(0, SHOWN)).map((file) => (
+            <Row
+              key={file.path}
+              onClick={onOpenDiff}
+              title={file.path}
+              icon={<FileText className={`h-4 w-4 ${statusColor[file.status] ?? ""}`} strokeWidth={1.6} />}
+              trailing={
+                <span className="shrink-0 text-[12.5px]">
+                  <span className="text-[#3fb950]">+{file.additions}</span> <span className="text-[#f85149]">−{file.deletions}</span>
+                </span>
+              }
+            >
+              {baseName(file.path)}
+              {dirName(file.path) && <span className="text-[#6f6e68]"> · {dirName(file.path)}</span>}
+            </Row>
+          ))}
+          {changed.length > SHOWN && (
+            <MoreButton onClick={() => setAllFiles((v) => !v)}>
+              {allFiles ? "Réduire" : `Afficher ${changed.length - SHOWN} de plus`}
+            </MoreButton>
+          )}
+        </Section>
+
+        {commits.length > 0 && (
+          <Section title="Commits" count={summary?.ahead}>
+            {(allCommits ? commits : commits.slice(0, 3)).map((commit) => (
+              <Row
+                key={commit.hash}
+                icon={<GitCommitHorizontal className="h-4 w-4" strokeWidth={1.7} />}
+                trailing={<span className="shrink-0 font-mono text-[12px] text-[#6f6e68]">{commit.hash}</span>}
+              >
+                {commit.subject}
+              </Row>
+            ))}
+            {commits.length > 3 && (
+              <MoreButton onClick={() => setAllCommits((v) => !v)}>{allCommits ? "Réduire" : `Afficher ${commits.length - 3} de plus`}</MoreButton>
+            )}
+          </Section>
+        )}
+
+        {pulls.length > 0 && (
+          <Section title="Pull requests" count={pulls.length}>
+            {pulls.map((pr) => (
+              <button
+                key={pr.url}
+                onClick={() => onOpenLink(pr.url)}
+                className="flex w-full items-start gap-3 rounded-lg px-1 py-1.5 text-left transition hover:bg-[#2a2a28]"
+              >
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                  <PullIcon state={pr.state} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] text-[#ecebe4]">
+                    {pr.isDraft ? "[Brouillon] " : ""}
+                    {pr.title}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-2 text-[12.5px] text-[#8c8b83]">
+                    <span className="truncate">
+                      {pr.repo ? `${pr.repo.split("/")[1]} ` : ""}#{pr.number}
+                    </span>
+                    <span className="text-[#3fb950]">+{pr.additions}</span>
+                    <span className="text-[#f85149]">−{pr.deletions}</span>
+                    {pr.checksFailed > 0 && <span className="ml-auto text-[#f87171]">{pr.checksFailed} en échec</span>}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </Section>
+        )}
+
+        <Section title="Plan et tâches" count={plan.length}>
+          {plan.length === 0 && <Empty>L'agent n'a pas annoncé de plan.</Empty>}
+          {plan.map((item, index) => (
+            <Row key={index} icon={<PlanIcon status={item.status} />}>
+              <span className={item.status === "completed" ? "text-[#8c8b83] line-through" : ""}>{item.content}</span>
+            </Row>
+          ))}
+        </Section>
+
+        <Section title="Activité" count={tools.length}>
+          {recent.length === 0 && <Empty>Aucune commande lancée.</Empty>}
+          {recent.map((tool) => (
+            <Row key={tool.id} icon={<ToolStatus status={tool.status} />} title={toolCommand(tool) ?? undefined}>
+              <span className="font-mono text-[12.5px]">{(toolCommand(tool) ?? toolLabel(tool)).split("\n")[0]}</span>
+            </Row>
+          ))}
+          {tools.length > 0 && (
+            <p className="px-1 pt-1 text-[12.5px] text-[#6f6e68]">
+              {running > 0 ? `${running} en cours · ` : ""}
+              {tools.length - running} terminée{tools.length - running > 1 ? "s" : ""}
+            </p>
+          )}
+        </Section>
+
+        <Section title="Artéfacts" count={created.length + links.length}>
+          {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
+          {created.slice(0, 5).map((file) => (
+            <Row key={file.path} onClick={onOpenDiff} title={file.path} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
+              {baseName(file.path)}
+            </Row>
+          ))}
+          {links.map((url) => (
+            <Row key={url} onClick={() => onOpenLink(url)} title={url} icon={<SiteIcon url={url} />}>
+              {shortLink(url)}
+            </Row>
+          ))}
+        </Section>
+
+        </div>
+
+        <div className="shrink-0 border-t border-[#2f2f2c] p-3">
+          <button
+            onClick={startPr}
+            disabled={prBlocked !== null}
+            title={prBlocked ?? "Pousser la branche et ouvrir une pull request"}
+            className="w-full rounded-xl bg-[#333331] px-3 py-2 text-[13.5px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]"
+          >
             Créer une PR
           </button>
         </div>
-      </Card>
-
-      {pulls.length > 0 && (
-        <Card title="Pull requests">
-          <ul className="space-y-1">
-            {pulls.map((pr) => (
-              <li key={pr.url}>
-                <button
-                  onClick={() => onOpenLink(pr.url)}
-                  className="flex w-full items-start gap-3 rounded-xl px-1 py-2 text-left transition hover:bg-[#2a2a28]"
-                >
-                  <span className="mt-0.5 shrink-0">
-                    <PullIcon state={pr.state} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] text-[#ecebe4]">
-                      {pr.isDraft ? "[Brouillon] " : ""}
-                      {pr.title}
-                    </span>
-                    <span className="mt-0.5 flex items-center gap-2 text-[12.5px] text-[#8c8b83]">
-                      <span className="truncate">
-                        {pr.repo ? `${pr.repo.split("/")[1]} ` : ""}#{pr.number}
-                      </span>
-                      <span className="text-[#3fb950]">+{pr.additions}</span>
-                      <span className="text-[#f85149]">−{pr.deletions}</span>
-                      {pr.checksFailed > 0 && <span className="ml-auto text-[#f87171]">{pr.checksFailed} en échec</span>}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      <Card title="Tâches en arrière-plan">
-        {running.length === 0 && <p className="py-1 text-[13px] text-[#8c8b83]">Aucune tâche en cours.</p>}
-        {running.map((tool) => (
-          <Row key={tool.id} icon={<SquareTerminal className="h-4 w-4" strokeWidth={1.7} />}>
-            <span className="font-mono text-[12.5px]">{(toolCommand(tool) ?? toolLabel(tool)).split("\n")[0]}</span>
-          </Row>
-        ))}
-        <p className="mt-1 text-[13px] text-[#8c8b83]">Terminées : {finished}</p>
-      </Card>
-
-      {showPlan && (
-        <Card title="Plan et tâches">
-          <p className="text-[13px] text-[#8c8b83]">Aucune tâche pour cette conversation.</p>
-        </Card>
-      )}
-      {showArtifacts && (
-        <Card title="Artéfacts">
-          <p className="text-[13px] text-[#8c8b83]">Aucun artéfact généré dans cette session.</p>
-        </Card>
-      )}
-
       </div>
 
       {creating && summary?.branch && (
@@ -222,7 +334,9 @@ export default function SessionPanel({
             <li>
               pousser la branche <code>{summary.branch}</code> vers <code>origin</code> (publiquement visible si le dépôt l'est) ;
             </li>
-            <li>ouvrir une pull request vers <code>{summary.base ?? "la branche principale"}</code>.</li>
+            <li>
+              ouvrir une pull request vers <code>{summary.base ?? "la branche principale"}</code>.
+            </li>
           </ol>
           <input
             value={title}
