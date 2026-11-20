@@ -15,6 +15,29 @@ use crate::{
     browser_agent::AgentState,
 };
 
+/// Script qui trouve l'icône de la page ; à défaut, `/favicon.ico` à la racine du site.
+const FAVICON_JS: &str = r#"(() => {
+  const link = document.querySelector('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]');
+  return (link && link.href) || (location.origin + '/favicon.ico');
+})()"#;
+
+#[derive(Clone, Serialize)]
+struct FaviconEvent {
+    /// Adresse de la page, dont l'interface retient le domaine.
+    page: String,
+    icon: String,
+}
+
+/// Une fois la page chargée, annonce son icône à l'interface pour les liens qui y mènent.
+fn report_favicon(webview: &tauri::Webview, app: AppHandle, page: String) {
+    let _ = webview.eval_with_callback(FAVICON_JS, move |raw| {
+        let Ok(icon) = serde_json::from_str::<String>(&raw) else { return };
+        if icon.starts_with("http://") || icon.starts_with("https://") {
+            let _ = app.emit("browser-favicon", FaviconEvent { page, icon });
+        }
+    });
+}
+
 /// Position et taille de la vue, en pixels logiques dans la fenêtre.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct Bounds {
@@ -72,8 +95,11 @@ pub fn browser_open(app: AppHandle, id: String, url: String, bounds: Bounds) -> 
             let _ = navigated.emit("browser-navigated", UrlEvent { id: nav_id.clone(), url: target.to_string() });
             true
         })
-        .on_page_load(move |_, payload| {
+        .on_page_load(move |webview, payload| {
             let loading = matches!(payload.event(), PageLoadEvent::Started);
+            if !loading {
+                report_favicon(&webview, loaded.clone(), payload.url().to_string());
+            }
             let _ = loaded.emit("browser-loading", LoadingEvent { id: load_id.clone(), loading });
             let _ = loaded.emit("browser-navigated", UrlEvent { id: load_id.clone(), url: payload.url().to_string() });
         })
