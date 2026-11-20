@@ -52,6 +52,7 @@ export default function ConversationTitle({
           sections={sections}
           actions={actions}
           anchor={anchor}
+          canMarkUnread={false}
           onClose={close}
         />
       )}
