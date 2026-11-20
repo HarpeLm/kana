@@ -161,7 +161,7 @@ export default function ProjectPicker({
                 className="w-full rounded-lg border border-[#3d3d3a] bg-[#222220] px-2.5 py-1.5 text-[13px] text-[#ecebe4] placeholder-[#7e7d76] outline-none focus:border-[#55554f]"
               />
               <p className="mt-1.5 px-0.5 text-[11.5px] leading-snug text-[#8c8b83]">
-                Créé dans ~/Kana avec un dépôt git. Entrée pour valider.
+                Créé dans ~/Projets Kana avec un dépôt git. Entrée pour valider.
               </p>
               {error && <p className="mt-1 px-0.5 text-[11.5px] text-red-300">{error}</p>}
             </div>
