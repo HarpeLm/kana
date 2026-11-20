@@ -89,8 +89,7 @@
   text-decoration: none;
 }
 .markdown-body.chat-markdown a:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: #7db4ff; /* au survol le lien s'éclaircit, sans trait dessous */
 }
 .markdown-body code {
   background: #232321;
