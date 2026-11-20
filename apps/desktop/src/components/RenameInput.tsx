@@ -30,7 +30,7 @@ export default function RenameInput({ initial, onCommit, onCancel }: RenameInput
         if (e.key === "Escape") finish(false);
       }}
       aria-label="Nom de la conversation"
-      className="h-7 w-full rounded-lg border border-[#4a4a44] bg-[#1d1d1b] px-2 text-[14px] text-[#ecebe4] outline-none select-text"
+      className="h-8 w-full rounded-lg border border-[#4a4a44] bg-[#1d1d1b] px-2 text-[14px] text-[#ecebe4] outline-none select-text"
     />
   );
 }
