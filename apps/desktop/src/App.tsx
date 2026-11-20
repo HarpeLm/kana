@@ -3,6 +3,7 @@ import "./App.css";
 import { AGENTS, type View } from "./data";
 import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
+import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
 import { useNavHistory } from "./hooks/useNavHistory";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { sectionsOf } from "./lib/conversations";
@@ -21,6 +22,7 @@ import Sidebar from "./components/Sidebar";
 const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
 
 export default function App() {
+  useNativeContextMenu();
   const [view, setView] = useState<View>("workspace");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
