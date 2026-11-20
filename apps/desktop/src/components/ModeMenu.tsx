@@ -47,7 +47,7 @@ export default function ModeMenu({ mode, onChange, align = "left" }: ModeMenuPro
     <div ref={root} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] transition hover:bg-[#262624] ${
+        className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] transition hover:bg-[#262624] ${
           full ? "text-[#e8743b]" : "text-[#9a9992] hover:text-[#ecebe4]"
         }`}
       >
