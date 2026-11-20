@@ -24,10 +24,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 kana-acp = { path = "../../../crates/kana-acp" }
 kana-git = { path = "../../../crates/kana-git" }
+kana-mcp = { path = "../../../crates/kana-mcp" }
 kana-pty = { path = "../../../crates/kana-pty" }
 tokio = { workspace = true }
 keyring = { version = "3", features = ["apple-native"] }
 base64 = "0.23.1"
+getrandom = "0.4.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
