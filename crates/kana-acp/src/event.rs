@@ -10,6 +10,14 @@ pub struct PermissionOption {
     pub kind: String,
 }
 
+/// Une étape du plan que l'agent annonce.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PlanEntry {
+    pub content: String,
+    /// `pending`, `in_progress` ou `completed`.
+    pub status: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AcpEvent {
@@ -27,6 +35,8 @@ pub enum AcpEvent {
         /// Résultat de l'outil, en texte, quand l'agent le donne.
         output: Option<String>,
     },
+    /// Le plan complet de l'agent : chaque mise à jour remplace la précédente.
+    Plan { entries: Vec<PlanEntry> },
     /// L'agent demande l'autorisation d'agir ; répondre avec `resolve_permission`.
     Permission {
         request_id: String,
@@ -77,6 +87,18 @@ impl AcpEvent {
                 status: string_of(&update["status"]),
                 raw_input: update.get("rawInput").filter(|v| !v.is_null()).cloned(),
                 output: tool_output(update),
+            }),
+            "plan" => Some(Self::Plan {
+                entries: update["entries"]
+                    .as_array()?
+                    .iter()
+                    .filter_map(|e| {
+                        Some(PlanEntry {
+                            content: string_of(&e["content"])?,
+                            status: string_of(&e["status"]).unwrap_or_else(|| "pending".into()),
+                        })
+                    })
+                    .collect(),
             }),
             _ => None,
         }
@@ -160,8 +182,28 @@ mod tests {
     }
 
     #[test]
+    fn plan_updates_list_their_entries() {
+        let update = json!({
+            "sessionUpdate": "plan",
+            "entries": [
+                { "content": "Lire le code", "status": "completed", "priority": "high" },
+                { "content": "Écrire le test" }
+            ]
+        });
+        assert_eq!(
+            AcpEvent::from_update(&update),
+            Some(AcpEvent::Plan {
+                entries: vec![
+                    PlanEntry { content: "Lire le code".into(), status: "completed".into() },
+                    PlanEntry { content: "Écrire le test".into(), status: "pending".into() },
+                ]
+            })
+        );
+    }
+
+    #[test]
     fn unknown_updates_are_ignored() {
-        assert_eq!(AcpEvent::from_update(&json!({ "sessionUpdate": "plan" })), None);
+        assert_eq!(AcpEvent::from_update(&json!({ "sessionUpdate": "usage_update" })), None);
         assert_eq!(AcpEvent::from_update(&json!({})), None);
     }
 
