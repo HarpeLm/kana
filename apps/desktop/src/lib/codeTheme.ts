@@ -7,7 +7,7 @@ const ACTIVE = "#1f1f1d";
 
 const view = EditorView.theme(
   {
-    "&": { height: "100%", color: "#d4d3cb", backgroundColor: "#181817", fontSize: "13px" },
+    "&": { height: "100%", color: "#d4d4d4", backgroundColor: "#181817", fontSize: "13px" },
     "&.cm-focused": { outline: "none" },
     ".cm-scroller": { fontFamily: TERMINAL_FONT, lineHeight: "1.6", overflow: "auto" },
     ".cm-content": { caretColor: "#d97757", padding: "8px 0" },
@@ -36,21 +36,27 @@ const view = EditorView.theme(
   { dark: true },
 );
 
+// Palette de VS Code (thème « Dark+ ») : des couleurs franches, reconnaissables.
 const highlight = HighlightStyle.define([
-  { tag: [t.keyword, t.modifier, t.operatorKeyword], color: "#e69b80" },
-  { tag: [t.propertyName, t.attributeName], color: "#e69b80" },
-  { tag: [t.string, t.special(t.string), t.regexp], color: "#9bd4a6" },
-  { tag: [t.number, t.integer, t.float], color: "#6fc3c9" },
-  { tag: [t.bool, t.null, t.atom], color: "#8ab9f0" },
-  { tag: [t.typeName, t.className, t.namespace], color: "#e0b25f" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#8ab9f0" },
-  { tag: [t.tagName], color: "#e69b80" },
-  { tag: [t.heading, t.strong], color: "#8ab9f0", fontWeight: "bold" },
+  { tag: [t.controlKeyword, t.moduleKeyword], color: "#c586c0" },
+  { tag: [t.keyword, t.definitionKeyword, t.modifier, t.operatorKeyword, t.self], color: "#569cd6" },
+  { tag: [t.string, t.special(t.string)], color: "#ce9178" },
+  { tag: [t.escape], color: "#d7ba7d" },
+  { tag: [t.regexp], color: "#d16969" },
+  { tag: [t.number, t.integer, t.float], color: "#b5cea8" },
+  { tag: [t.bool, t.null, t.atom], color: "#569cd6" },
+  { tag: [t.typeName, t.className, t.namespace], color: "#4ec9b0" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#dcdcaa" },
+  { tag: [t.variableName, t.definition(t.variableName)], color: "#9cdcfe" },
+  { tag: [t.propertyName, t.attributeName], color: "#9cdcfe" },
+  { tag: [t.tagName], color: "#569cd6" },
+  { tag: [t.heading], color: "#569cd6", fontWeight: "bold" },
+  { tag: [t.strong], fontWeight: "bold" },
   { tag: [t.emphasis], fontStyle: "italic" },
-  { tag: [t.link, t.url], color: "#6aa6e8" },
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "#787770", fontStyle: "italic" },
-  { tag: [t.operator, t.punctuation, t.bracket], color: "#a3a29a" },
-  { tag: [t.meta, t.processingInstruction], color: "#8ab9f0" },
+  { tag: [t.link, t.url], color: "#3794ff", textDecoration: "underline" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "#6a9955" },
+  { tag: [t.operator, t.punctuation, t.bracket], color: "#d4d4d4" },
+  { tag: [t.meta, t.processingInstruction], color: "#569cd6" },
 ]);
 
 /** Thème de l'éditeur : couleurs de l'app et coloration syntaxique. */
