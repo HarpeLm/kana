@@ -2,7 +2,7 @@ use std::{path::Path, sync::Mutex};
 
 use rusqlite::{Connection, params};
 
-use crate::{StoredConversation, StoredMessage};
+use crate::{StoredConversation, StoredMessage, StoredProject};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS conversations (
     branch TEXT,
     forked_from TEXT,
     fork_context TEXT
+);
+CREATE TABLE IF NOT EXISTS projects (
+    path TEXT PRIMARY KEY,
+    position INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    last_used INTEGER
 );
 CREATE TABLE IF NOT EXISTS messages (
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -135,6 +141,32 @@ impl Store {
         };
         for id in existing.iter().filter(|id| !keep.contains(&id.as_str())) {
             tx.execute("DELETE FROM conversations WHERE id = ?1", params![id])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Les projets connus, dans l'ordre où ils ont été enregistrés.
+    pub fn projects(&self) -> Result<Vec<StoredProject>, StoreError> {
+        let conn = self.lock()?;
+        let mut statement = conn.prepare("SELECT name, path, last_used FROM projects ORDER BY position")?;
+        let rows = statement.query_map([], |row| {
+            Ok(StoredProject { name: row.get(0)?, path: row.get(1)?, last_used: row.get(2)? })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remplace la liste des projets.
+    pub fn save_projects(&self, items: &[StoredProject]) -> Result<(), StoreError> {
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM projects", [])?;
+        {
+            let mut insert =
+                tx.prepare("INSERT OR REPLACE INTO projects (path, position, name, last_used) VALUES (?1, ?2, ?3, ?4)")?;
+            for (position, p) in items.iter().enumerate() {
+                insert.execute(params![p.path, position as i64, p.name, p.last_used])?;
+            }
         }
         tx.commit()?;
         Ok(())
@@ -257,6 +289,19 @@ mod tests {
         // Une seconde sauvegarde remplace la première.
         store.save_messages("a", &messages[..1]).unwrap();
         assert_eq!(store.messages("a").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn projects_round_trip_in_order() {
+        let store = Store::open_in_memory().unwrap();
+        let items = vec![
+            StoredProject { name: "kana".into(), path: "/a/kana".into(), last_used: Some(3) },
+            StoredProject { name: "autre".into(), path: "/a/autre".into(), last_used: None },
+        ];
+        store.save_projects(&items).unwrap();
+        assert_eq!(store.projects().unwrap(), items);
+        store.save_projects(&items[..1]).unwrap();
+        assert_eq!(store.projects().unwrap().len(), 1);
     }
 
     #[test]
