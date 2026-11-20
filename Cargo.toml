@@ -5,6 +5,7 @@ members = [
     "crates/kana-acp",
     "crates/kana-git",
     "crates/kana-db",
+    "crates/kana-pty",
     "apps/desktop/src-tauri",
 ]
 
