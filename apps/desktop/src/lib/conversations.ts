@@ -24,6 +24,8 @@ export interface Conversation {
   projectPath?: string;
   /** Travaille dans un dossier de travail git à part (par défaut oui). */
   useWorktree?: boolean;
+  /** Modèle choisi (identifiant de l'agent) ; absent : celui que l'agent propose par défaut. */
+  modelId?: string;
 }
 
 export const DEFAULT_PROJECT = "kana";
