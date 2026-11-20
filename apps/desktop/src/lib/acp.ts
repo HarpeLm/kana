@@ -20,6 +20,7 @@ export type AcpEvent =
       raw_input?: unknown;
       output?: string | null;
     }
+  | { kind: "plan"; entries: { content: string; status: string }[] }
   | { kind: "permission"; request_id: string; title: string; options: PermissionOption[] }
   | { kind: "done"; stop_reason: string }
   | { kind: "error"; message: string }
