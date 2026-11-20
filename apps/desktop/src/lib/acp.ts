@@ -32,8 +32,10 @@ export type Unlisten = () => void;
 // Dans un navigateur simple (sans Tauri), on bascule sur un agent simulé.
 
 /** Lance l'agent d'un fil, dans `cwd` (le dossier de travail de la conversation) s'il y en a un. */
-export function startAgent(threadId: string, agent: string, cwd?: string): Promise<void> {
-  return inTauri ? invoke("start_agent", { threadId, agent, cwd: cwd ?? null }) : Promise.resolve();
+export function startAgent(threadId: string, agent: string, cwd?: string, model?: string): Promise<void> {
+  return inTauri
+    ? invoke("start_agent", { threadId, agent, cwd: cwd ?? null, model: model ?? null })
+    : Promise.resolve();
 }
 
 export function sendPrompt(threadId: string, text: string): Promise<void> {
