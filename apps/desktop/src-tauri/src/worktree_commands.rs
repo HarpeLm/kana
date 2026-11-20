@@ -17,6 +17,13 @@ fn root() -> PathBuf {
     default_cwd().join(".kana").join("worktrees")
 }
 
+/// Ce chemin est-il sous `~/.kana/worktrees` ? Les chemins sont comparés après résolution des liens
+/// (sur macOS, `/var` est un lien vers `/private/var` et git rapporte la version résolue).
+fn inside_root(path: &Path) -> bool {
+    let resolve = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    resolve(path).starts_with(resolve(&root()))
+}
+
 /// Un identifiant de conversation devient un nom de dossier et de branche sans surprise.
 fn safe_name(id: &str) -> String {
     id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).collect()
@@ -59,12 +66,103 @@ pub async fn create_worktree(
 pub async fn remove_worktree(path: String, project_path: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = Path::new(&path);
-        if !path.starts_with(root()) {
+        if !inside_root(path) {
             return Err("ce dossier n'est pas un dossier de travail de Kana".to_string());
         }
         let from = project_path.map(PathBuf::from).unwrap_or_else(project_dir);
         let repo = kana_git::repo_root(&from).map_err(|e| e.to_string())?;
         kana_git::remove_worktree(&repo, path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+pub struct Orphan {
+    pub(crate) repo: String,
+    pub(crate) repo_name: String,
+    pub(crate) branch: String,
+    pub(crate) worktree: Option<String>,
+    pub(crate) merged: bool,
+    pub(crate) ahead: u32,
+    pub(crate) dirty: bool,
+}
+
+/// Les branches `kana/…` dont plus aucune conversation ne se sert. `known_ids` : les conversations
+/// qui existent ; `projects` : les dossiers des projets où chercher (le projet du lancement en plus).
+#[tauri::command]
+pub async fn scan_orphan_worktrees(known_ids: Vec<String>, projects: Vec<String>) -> Result<Vec<Orphan>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let known: std::collections::HashSet<String> = known_ids.iter().map(|id| safe_name(id)).collect();
+        let mut repos: Vec<PathBuf> = projects
+            .iter()
+            .filter_map(|p| kana_git::repo_root(Path::new(p)).ok())
+            .chain(kana_git::repo_root(&project_dir()).ok())
+            .collect();
+        repos.sort();
+        repos.dedup();
+        let mut orphans = Vec::new();
+        for repo in repos {
+            let repo_name = repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            for found in kana_git::kana_branches(&repo) {
+                let id = found.branch.trim_start_matches("kana/");
+                if known.contains(id) {
+                    continue;
+                }
+                orphans.push(Orphan {
+                    repo: repo.to_string_lossy().into_owned(),
+                    repo_name: repo_name.clone(),
+                    branch: found.branch,
+                    worktree: found.worktree,
+                    merged: found.merged,
+                    ahead: found.ahead,
+                    dirty: found.dirty,
+                });
+            }
+        }
+        Ok(orphans)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+pub struct CleanOutcome {
+    pub(crate) removed_worktree: bool,
+    pub(crate) deleted_branch: bool,
+    /// Pourquoi tout n'a pas été supprimé : le travail qui reste est toujours gardé.
+    pub(crate) kept: Option<String>,
+}
+
+/// Nettoie une branche orpheline sans jamais perdre de travail : le dossier de travail n'est retiré que
+/// s'il n'a aucun changement non enregistré, la branche que si tout son travail est déjà dans la
+/// branche principale. Le reste est gardé et expliqué.
+#[tauri::command]
+pub async fn clean_orphan_worktree(repo: String, branch: String, worktree: Option<String>) -> Result<CleanOutcome, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !branch.starts_with("kana/") {
+            return Err("ce n'est pas une branche de Kana".to_string());
+        }
+        let repo = kana_git::repo_root(Path::new(&repo)).map_err(|e| e.to_string())?;
+        let mut outcome = CleanOutcome { removed_worktree: false, deleted_branch: false, kept: None };
+        if let Some(path) = worktree {
+            let path = Path::new(&path);
+            if !inside_root(path) {
+                return Err("ce dossier n'est pas un dossier de travail de Kana".to_string());
+            }
+            match kana_git::remove_worktree(&repo, path) {
+                Ok(()) => outcome.removed_worktree = true,
+                Err(_) => {
+                    outcome.kept = Some("le dossier de travail contient du travail non enregistré".into());
+                    return Ok(outcome);
+                }
+            }
+        }
+        match kana_git::delete_merged_branch(&repo, &branch) {
+            Ok(()) => outcome.deleted_branch = true,
+            Err(_) => outcome.kept = Some("la branche a des commits qui ne sont pas dans la branche principale".into()),
+        }
+        Ok(outcome)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -128,6 +226,28 @@ mod tests {
             // 7. Un dossier hors de ~/.kana/worktrees n'est jamais supprimé.
             assert!(remove_worktree(project.path.clone(), Some(project.path.clone())).await.is_err());
             assert!(Path::new(&project.path).exists());
+
+            // 9. Orphelins : conv2 n'a plus de conversation et n'a rien apporté (propre, fusionnée) :
+            //    son dossier et sa branche partent. conv1 est encore connue : on n'y touche pas.
+            let orphans = scan_orphan_worktrees(vec!["conv1".into()], vec![project.path.clone()]).await.unwrap();
+            let conv2 = orphans.iter().find(|o| o.branch == "kana/conv2").expect("conv2 est orpheline");
+            assert!(orphans.iter().all(|o| o.branch != "kana/conv1"));
+            assert!(conv2.worktree.is_some() && !conv2.dirty && conv2.merged);
+            let done = clean_orphan_worktree(conv2.repo.clone(), conv2.branch.clone(), conv2.worktree.clone()).await.unwrap();
+            assert!(done.removed_worktree && done.deleted_branch && done.kept.is_none());
+            assert!(!Path::new(&fork.path).exists());
+
+            // 10. Devenue orpheline à son tour, conv1 a un commit non fusionné (déjà fait à l'étape 6) :
+            //     la branche est gardée, jamais perdue.
+            let later = scan_orphan_worktrees(vec![], vec![project.path.clone()]).await.unwrap();
+            let conv1 = later.iter().find(|o| o.branch == "kana/conv1").expect("conv1 est orpheline");
+            assert!(!conv1.merged && conv1.ahead == 1 && conv1.worktree.is_none());
+            let kept = clean_orphan_worktree(conv1.repo.clone(), conv1.branch.clone(), None).await.unwrap();
+            assert!(!kept.deleted_branch && kept.kept.is_some());
+            assert!(scan_orphan_worktrees(vec![], vec![project.path.clone()]).await.unwrap().iter().any(|o| o.branch == "kana/conv1"));
+
+            // Une branche qui n'est pas de Kana n'est jamais touchée.
+            assert!(clean_orphan_worktree(conv1.repo.clone(), "main".into(), None).await.is_err());
 
             // 8. Un dossier qui n'est pas un dépôt git : pas de dossier de travail, sans erreur.
             let plain = home.join("plain");
