@@ -1,14 +1,9 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Lecture des changements d'un dépôt Git : le diff, analysé en fichiers, blocs et lignes.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod model;
+mod parse;
+mod run;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
+pub use parse::parse_diff;
+pub use run::{GitError, diff, repo_root};
