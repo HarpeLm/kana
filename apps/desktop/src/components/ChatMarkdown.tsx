@@ -19,6 +19,6 @@ export default function ChatMarkdown({ source, onOpenLink }: { source: string; o
 
   return (
     // Le HTML a été nettoyé par DOMPurify dans renderMarkdown.
-    <div onClick={onClick} className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />
+    <div onClick={onClick} className="markdown-body chat-markdown" dangerouslySetInnerHTML={{ __html: html }} />
   );
 }
