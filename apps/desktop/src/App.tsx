@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import { AGENTS, type View } from "./data";
 import { useBrowserAgent } from "./hooks/useBrowserAgent";
-import type { Conversation } from "./lib/conversations";
+import type { Startup } from "./lib/startup";
+import { useProjects } from "./hooks/useProjects";
+import { pickFiles } from "./lib/attachments";
+import { NO_PROJECT, NO_PROJECT_NAME, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
 import { useChat, type PreparedThread } from "./hooks/useChat";
 import { buildForkContext } from "./lib/fork";
 import { createWorktree, removeWorktree } from "./lib/worktree";
@@ -33,7 +36,7 @@ import Sidebar from "./components/Sidebar";
 
 const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
 
-export default function App({ initialConversations }: { initialConversations: Conversation[] }) {
+export default function App({ startup }: { startup: Startup }) {
   useNativeContextMenu();
   const [view, setView] = useState<View>("workspace");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,7 +44,8 @@ export default function App({ initialConversations }: { initialConversations: Co
   /** Conversation dont le dossier de travail est gardé car il contient du travail non enregistré. */
   const [keptWorktree, setKeptWorktree] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const conversations = useConversations(initialConversations);
+  const conversations = useConversations(startup.conversations, startup.selectedId);
+  const projectList = useProjects(startup.projects);
   const { selected } = conversations;
   const sidebar = useSidebarWidth();
 
@@ -67,15 +71,23 @@ export default function App({ initialConversations }: { initialConversations: Co
       const conversation = itemsRef.current.find((c) => c.id === threadId);
       if (!conversation) return {};
       let cwd = conversation.worktree;
-      if (!cwd) {
-        const base = conversation.forkedFrom
-          ? itemsRef.current.find((c) => c.id === conversation.forkedFrom)?.branch
-          : undefined;
-        const info = await createWorktree(threadId, base).catch(() => null);
-        if (info) {
-          cwd = info.path;
-          attachWorktree(threadId, info.path, info.branch);
+      const projectPath = conversation.projectPath;
+      if (projectPath === NO_PROJECT) {
+        // Sans projet : un dossier neutre, jamais le dossier personnel.
+        cwd = await scratchDir();
+      } else if (!cwd) {
+        if (conversation.useWorktree !== false) {
+          const base = conversation.forkedFrom
+            ? itemsRef.current.find((c) => c.id === conversation.forkedFrom)?.branch
+            : undefined;
+          const info = await createWorktree(threadId, base, projectPath).catch(() => null);
+          if (info) {
+            cwd = info.path;
+            attachWorktree(threadId, info.path, info.branch);
+          }
         }
+        // Sans dossier de travail à part, l'agent travaille directement dans le dossier du projet.
+        if (!cwd) cwd = projectPath;
       }
       const preface = conversation.forkContext;
       if (preface) clearForkContext(threadId);
@@ -84,6 +96,49 @@ export default function App({ initialConversations }: { initialConversations: Co
     [attachWorktree, clearForkContext],
   );
   const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread);
+
+  // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
+  const { setProject, setUseWorktree } = conversations;
+  const selectProject = (project: Project | null) => {
+    if (project) {
+      projectList.use(project);
+      setProject(selected.id, project.name, project.path);
+    } else {
+      setProject(selected.id, NO_PROJECT_NAME, NO_PROJECT);
+    }
+  };
+  const openFolder = async () => {
+    const [path] = await pickFiles(true).catch(() => [] as string[]);
+    if (path) selectProject(await describeFolder(path));
+  };
+  const createNewProject = async (name: string): Promise<string | null> => {
+    try {
+      selectProject(await createProject(name));
+      return null;
+    } catch (error) {
+      return String(error);
+    }
+  };
+  const newSession = {
+    projectName: selected.project,
+    projectPath: selected.projectPath,
+    projects: projectList.projects,
+    useWorktree: selected.useWorktree !== false,
+    onSelectProject: selectProject,
+    onOpenFolder: () => void openFolder(),
+    onCreateProject: createNewProject,
+    onToggleWorktree: (value: boolean) => setUseWorktree(selected.id, value),
+  };
+
+  // Le premier message donne son titre à la conversation et remet son projet en tête des récents.
+  const sendMessage = (text: string) => {
+    if (selected.title === "Nouvelle conversation") {
+      conversations.rename(selected.id, text.split("\n")[0].slice(0, 48));
+    }
+    const project = projectList.projects.find((p) => p.path === selected.projectPath);
+    if (project) projectList.use(project);
+    return send(text);
+  };
 
   /** Bifurque : une nouvelle conversation qui reprend l'échange jusqu'à ce message. */
   const forkFrom = (messageId: string) => {
@@ -288,13 +343,14 @@ export default function App({ initialConversations }: { initialConversations: Co
             <ChatView
               agentLabel={agentLabel}
               chat={chat}
-              onSend={send}
+              onSend={sendMessage}
               onStop={stop}
               onAnswer={answer}
               onOpenLink={openInGlobe}
               onFork={forkFrom}
               mode={permissionMode}
               onModeChange={changeMode}
+              newSession={newSession}
             />
             {showRightPanel && (
               <RightPanel
@@ -324,7 +380,7 @@ export default function App({ initialConversations }: { initialConversations: Co
         />
 
         <DiffDock
-          path={selected.worktree}
+          path={selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined)}
           visible={diffVisible}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
@@ -390,7 +446,7 @@ export default function App({ initialConversations }: { initialConversations: Co
             // Le dossier de travail part avec la conversation, sauf s'il contient du travail non enregistré.
             if (deleting.worktree && keptWorktree !== deleting.id) {
               try {
-                await removeWorktree(deleting.worktree);
+                await removeWorktree(deleting.worktree, deleting.projectPath);
               } catch {
                 setKeptWorktree(deleting.id);
                 return;
