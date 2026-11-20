@@ -29,7 +29,8 @@ import ConversationTitle from "./components/ConversationTitle";
 import Header from "./components/Header";
 import NavButtons from "./components/NavButtons";
 import RelayView from "./components/RelayView";
-import RightPanel from "./components/RightPanel";
+import SessionPanel from "./components/SessionPanel";
+import { useSessionSummary } from "./hooks/useSessionSummary";
 import ScheduledView from "./components/ScheduledView";
 import SearchPalette from "./components/SearchPalette";
 import TerminalDock from "./components/TerminalDock";
@@ -242,6 +243,10 @@ export default function App({ startup }: { startup: Startup }) {
   };
 
   const showRightPanel = showPlan || showArtifacts || showBackgroundTasks;
+  // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
+  const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
+  // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
+  const sessionSummary = useSessionSummary(showRightPanel, workPath, chat.busy);
 
   const nav = {
     onToggleSidebar: toggle(setShowSidebar),
@@ -373,10 +378,17 @@ export default function App({ startup }: { startup: Startup }) {
               }
             />
             {showRightPanel && (
-              <RightPanel
+              <SessionPanel
+                conversation={selected}
+                messages={chat.messages}
+                summary={sessionSummary.summary}
+                pulls={sessionSummary.pulls}
+                workPath={workPath}
+                onOpenDiff={() => setShowDiff(true)}
+                onOpenLink={openInGlobe}
+                onRefresh={() => void sessionSummary.refresh()}
                 showPlan={showPlan}
                 showArtifacts={showArtifacts}
-                showBackgroundTasks={showBackgroundTasks}
               />
             )}
           </div>
@@ -400,7 +412,7 @@ export default function App({ startup }: { startup: Startup }) {
         />
 
         <DiffDock
-          path={selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined)}
+          path={workPath}
           visible={diffVisible}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
