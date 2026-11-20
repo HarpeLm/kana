@@ -1,5 +1,7 @@
-import { useMemo, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, type MouseEvent } from "react";
+import { useFaviconVersion } from "../lib/favicons";
 import { linkifyGithubRefs } from "../lib/githubRefs";
+import { addLinkIcons, globeIcon } from "../lib/linkIcons";
 import { renderMarkdown } from "../lib/markdown";
 
 /**
@@ -7,7 +9,17 @@ import { renderMarkdown } from "../lib/markdown";
  * les adresses qui ne sont pas du web (mailto:, file:…) ne sont jamais suivies.
  */
 export default function ChatMarkdown({ source, onOpenLink }: { source: string; onOpenLink: (url: string) => void }) {
-  const html = useMemo(() => renderMarkdown(linkifyGithubRefs(source)), [source]);
+  // Les icônes se redessinent quand le Globe découvre le favicon d'un site.
+  const icons = useFaviconVersion();
+  const html = useMemo(() => addLinkIcons(renderMarkdown(linkifyGithubRefs(source))), [source, icons]);
+  const root = useRef<HTMLDivElement>(null);
+
+  // Un favicon introuvable est remplacé par le globe.
+  useEffect(() => {
+    root.current?.querySelectorAll<HTMLImageElement>("img[data-favicon]").forEach((image) => {
+      image.addEventListener("error", () => image.replaceWith(globeIcon(document)), { once: true });
+    });
+  }, [html]);
 
   const onClick = (event: MouseEvent) => {
     const link = (event.target as HTMLElement).closest("a");
@@ -19,6 +31,6 @@ export default function ChatMarkdown({ source, onOpenLink }: { source: string; o
 
   return (
     // Le HTML a été nettoyé par DOMPurify dans renderMarkdown.
-    <div onClick={onClick} className="markdown-body chat-markdown" dangerouslySetInnerHTML={{ __html: html }} />
+    <div ref={root} onClick={onClick} className="markdown-body chat-markdown" dangerouslySetInnerHTML={{ __html: html }} />
   );
 }
