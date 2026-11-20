@@ -2,19 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_AGENT,
   DEFAULT_PROJECT,
-  loadConversations,
   makeConversation,
   moveDown as moveItemDown,
-  saveConversations,
   type Conversation,
 } from "../lib/conversations";
+import { saveStoredConversations } from "../lib/store";
 
 /** Liste des conversations et toutes les actions possibles sur elles. */
-export function useConversations() {
-  const [items, setItems] = useState(loadConversations);
+export function useConversations(initial: Conversation[]) {
+  const [items, setItems] = useState(initial);
   const [selectedId, setSelectedId] = useState(() => items[0].id);
 
-  useEffect(() => saveConversations(items), [items]);
+  // Chaque changement est rangé dans la base, un court instant après le dernier.
+  useEffect(() => {
+    const timer = setTimeout(() => void saveStoredConversations(items).catch(() => {}), 250);
+    return () => clearTimeout(timer);
+  }, [items]);
 
   const selected = items.find((c) => c.id === selectedId) ?? items[0];
 
@@ -89,6 +92,37 @@ export function useConversations() {
     [items],
   );
 
+  /** Garde le dossier de travail créé pour une conversation. */
+  const attachWorktree = useCallback(
+    (id: string, worktree: string, branch: string) => patch(id, (c) => ({ ...c, worktree, branch })),
+    [patch],
+  );
+
+  /** Le résumé de la conversation d'origine a été donné à l'agent : on ne le redonne pas. */
+  const clearForkContext = useCallback(
+    (id: string) => patch(id, (c) => ({ ...c, forkContext: undefined })),
+    [patch],
+  );
+
+  /** Crée une conversation qui prolonge celle-ci (même projet et même agent) ; renvoie son identifiant. */
+  const fork = useCallback(
+    (id: string, context: string): string | null => {
+      const source = items.find((c) => c.id === id);
+      if (!source) return null;
+      const copy: Conversation = {
+        ...makeConversation(source.project, source.agentId),
+        title: `${source.title} (bifurcation)`,
+        forkedFrom: source.id,
+        forkContext: context,
+      };
+      const index = items.indexOf(source);
+      setItems([...items.slice(0, index + 1), copy, ...items.slice(index + 1)]);
+      setSelectedId(copy.id);
+      return copy.id;
+    },
+    [items],
+  );
+
   const remove = useCallback(
     (id: string) => {
       const next = items.filter((c) => c.id !== id);
@@ -117,5 +151,8 @@ export function useConversations() {
     moveDown,
     duplicate,
     remove,
+    attachWorktree,
+    clearForkContext,
+    fork,
   };
 }
