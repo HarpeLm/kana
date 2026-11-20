@@ -25,10 +25,14 @@ pub enum GitError {
     NotARepository(String),
     #[error("git a échoué : {0}")]
     Failed(String),
+    #[error("chemin refusé : {0}")]
+    InvalidPath(String),
+    #[error("lecture impossible : {0}")]
+    Read(String),
 }
 
 /// Lance git dans `dir` ; `ok_codes` liste les codes de sortie acceptés en plus de 0.
-fn git(dir: &Path, args: &[&str], ok_codes: &[i32]) -> Result<String, GitError> {
+pub(crate) fn git(dir: &Path, args: &[&str], ok_codes: &[i32]) -> Result<String, GitError> {
     let output = Command::new("git")
         .args(["-c", "core.quotepath=off"])
         .args(args)
