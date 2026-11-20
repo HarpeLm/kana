@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import { useDroppedFiles } from "../hooks/useDroppedFiles";
 import { pickFiles, withAttachments } from "../lib/attachments";
@@ -14,20 +14,11 @@ interface ComposerProps {
   onStop: () => void;
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
-  /** Texte à reprendre dans la zone de saisie ; `id` change à chaque demande. */
-  draft?: { id: number; text: string } | null;
 }
 
-export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange, draft }: ComposerProps) {
+export default function Composer({ agentLabel, busy, onSend, onStop, mode, onModeChange }: ComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
-
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!draft) return;
-    setText(draft.text);
-    input.current?.focus();
-  }, [draft]);
 
   const addFiles = (paths: string[]) => setFiles((current) => [...new Set([...current, ...paths])]);
   const attach = (directory = false) => {
@@ -67,7 +58,6 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
         >
           <PlusMenu onAddFiles={() => attach()} onAddFolder={() => attach(true)} onSlash={() => setText((t) => (t ? t : "/"))} />
           <input
-            ref={input}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
