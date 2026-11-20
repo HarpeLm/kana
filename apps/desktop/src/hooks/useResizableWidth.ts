@@ -7,10 +7,19 @@ interface ResizableWidthOptions {
   fallback: number;
   /** Bord de la fenêtre contre lequel le volet est collé. */
   from: "left" | "right";
+  /** Largeur occupée par d'autres volets entre ce volet et le bord droit de la fenêtre. */
+  offsetRight?: number;
 }
 
 /** Largeur d'un volet réglable en tirant son bord, mémorisée entre deux lancements. */
-export function useResizableWidth({ storageKey, min, max, fallback, from }: ResizableWidthOptions) {
+export function useResizableWidth({
+  storageKey,
+  min,
+  max,
+  fallback,
+  from,
+  offsetRight = 0,
+}: ResizableWidthOptions) {
   const clamp = useCallback((value: number) => Math.min(max, Math.max(min, value)), [min, max]);
 
   const [width, setWidth] = useState(() => {
@@ -31,7 +40,7 @@ export function useResizableWidth({ storageKey, min, max, fallback, from }: Resi
       let latest = 0;
 
       const move = (e: globalThis.PointerEvent) => {
-        latest = clamp(from === "left" ? e.clientX : window.innerWidth - e.clientX);
+        latest = clamp(from === "left" ? e.clientX : window.innerWidth - offsetRight - e.clientX);
         setWidth(latest);
       };
       const stop = () => {
@@ -49,7 +58,7 @@ export function useResizableWidth({ storageKey, min, max, fallback, from }: Resi
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", stop);
     },
-    [clamp, from, storageKey],
+    [clamp, from, offsetRight, storageKey],
   );
 
   return { width, dragging, startDrag };
