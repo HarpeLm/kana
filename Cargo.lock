@@ -779,8 +779,10 @@ name = "desktop"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "getrandom 0.4.3",
  "kana-acp",
  "kana-git",
+ "kana-mcp",
  "kana-pty",
  "keyring",
  "serde",
