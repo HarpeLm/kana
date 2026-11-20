@@ -5,10 +5,10 @@ export const TERMINAL_FONT =
 
 /** Couleurs du terminal, accordées au reste de l'application. */
 export const TERMINAL_THEME: ITheme = {
-  background: "#161614",
+  background: "#181817",
   foreground: "#d4d3cb",
   cursor: "#d97757",
-  cursorAccent: "#161614",
+  cursorAccent: "#181817",
   selectionBackground: "#3d3d39",
   black: "#2b2b29",
   red: "#e5786d",
