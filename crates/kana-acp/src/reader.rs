@@ -43,11 +43,25 @@ async fn on_response(shared: &Shared, id: &Value, message: &Value) {
     let reply = match message.get("error") {
         Some(error) => Err(AcpError::Rpc {
             code: error["code"].as_i64().unwrap_or(-1),
-            message: error["message"].as_str().unwrap_or("erreur inconnue").to_owned(),
+            message: rpc_error_message(error),
         }),
         None => Ok(message["result"].clone()),
     };
     let _ = sender.send(reply);
+}
+
+/// Message d'une erreur JSON-RPC, complété par la cause réelle quand l'agent la fournit
+/// dans `data.message` (souvent une erreur de l'API sous forme de JSON).
+fn rpc_error_message(error: &Value) -> String {
+    let base = error["message"].as_str().unwrap_or("erreur inconnue");
+    let Some(detail) = error["data"]["message"].as_str() else {
+        return base.to_owned();
+    };
+    let cause = serde_json::from_str::<Value>(detail)
+        .ok()
+        .and_then(|v| v["error"]["message"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| detail.to_owned());
+    format!("{base} : {cause}")
 }
 
 fn on_notification(shared: &Shared, method: &str, params: &Value) {
@@ -79,4 +93,30 @@ async fn on_agent_request(shared: &Arc<Shared>, id: Value, method: &str, params:
         };
         let _ = shared.send(&protocol::response(&id, json!({ "outcome": outcome }))).await;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn plain_error_keeps_its_message() {
+        let error = json!({ "code": -1, "message": "Boom" });
+        assert_eq!(rpc_error_message(&error), "Boom");
+    }
+
+    #[test]
+    fn api_error_in_data_is_unwrapped() {
+        let inner = r#"{"error":{"message":"Modèle non pris en charge"}}"#;
+        let error = json!({ "message": "Internal error", "data": { "message": inner } });
+        assert_eq!(rpc_error_message(&error), "Internal error : Modèle non pris en charge");
+    }
+
+    #[test]
+    fn non_json_detail_is_kept_as_is() {
+        let error = json!({ "message": "Internal error", "data": { "message": "disque plein" } });
+        assert_eq!(rpc_error_message(&error), "Internal error : disque plein");
+    }
 }
