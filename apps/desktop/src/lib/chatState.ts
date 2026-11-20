@@ -6,6 +6,8 @@ export interface ToolCall {
   status: string;
   /** Paramètres annoncés par l'agent pour cet outil. */
   input?: unknown;
+  /** Texte produit par l'outil. */
+  output?: string;
 }
 
 export interface ChatMessage {
@@ -73,6 +75,7 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
                   title: event.title ?? t.title,
                   status: event.status ?? t.status,
                   input: event.raw_input ?? t.input,
+                  output: event.output ?? t.output,
                 }
               : t,
           )
@@ -83,6 +86,7 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
               title: event.title ?? "Outil",
               status: event.status ?? "pending",
               input: event.raw_input,
+              output: event.output ?? undefined,
             },
           ];
       return { ...chat, messages: [...rest, { ...agent, tools }] };
