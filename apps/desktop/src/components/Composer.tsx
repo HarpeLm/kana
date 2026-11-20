@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArrowUp, FileText, Square, X } from "lucide-react";
-import { fileName, pickFiles, withAttachments } from "../lib/attachments";
+import { ArrowUp, Square } from "lucide-react";
+import { useDroppedFiles } from "../hooks/useDroppedFiles";
+import { pickFiles, withAttachments } from "../lib/attachments";
 import type { PermissionMode } from "../lib/permissionMode";
+import AttachmentList from "./AttachmentList";
 import ModeMenu from "./ModeMenu";
 import PlusMenu from "./PlusMenu";
 
@@ -18,11 +20,12 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
 
+  const addFiles = (paths: string[]) => setFiles((current) => [...new Set([...current, ...paths])]);
   const attach = (directory = false) => {
-    pickFiles(directory)
-      .then((paths) => setFiles((current) => [...new Set([...current, ...paths])]))
-      .catch(() => {});
+    pickFiles(directory).then(addFiles).catch(() => {});
   };
+  // Un fichier déposé sur la fenêtre depuis le Finder rejoint les pièces jointes.
+  const dragging = useDroppedFiles(addFiles);
 
   // Cmd+U ouvre le sélecteur de fichiers, comme dans Claude.
   useEffect(() => {
@@ -47,28 +50,12 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
   return (
     <div className="px-6 pb-3 pt-2">
       <div className="mx-auto max-w-[740px]">
-        {files.length > 0 && (
-          <ul className="mb-2 flex flex-wrap gap-1.5 px-1">
-            {files.map((path) => (
-              <li
-                key={path}
-                title={path}
-                className="flex max-w-[260px] items-center gap-1.5 rounded-full bg-[#232322] py-1 pl-2.5 pr-1.5 text-[12px] text-[#c4c3bc]"
-              >
-                <FileText className="h-3.5 w-3.5 shrink-0 text-[#8c8b83]" strokeWidth={1.6} />
-                <span className="truncate">{fileName(path)}</span>
-                <button
-                  onClick={() => setFiles((current) => current.filter((p) => p !== path))}
-                  aria-label={`Retirer ${fileName(path)}`}
-                  className="flex h-4 w-4 items-center justify-center rounded-full text-[#8c8b83] hover:bg-[#333331] hover:text-[#ecebe4]"
-                >
-                  <X className="h-3 w-3" strokeWidth={2} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex items-center gap-2 rounded-full border border-[#2f2f2d] bg-[#232322] py-2 pl-2.5 pr-2.5 transition focus-within:border-[#454542]">
+        <AttachmentList paths={files} onRemove={(path) => setFiles((current) => current.filter((p) => p !== path))} />
+        <div
+          className={`flex items-center gap-2 rounded-full border bg-[#232322] py-2 pl-2.5 pr-2.5 transition focus-within:border-[#454542] ${
+            dragging ? "border-dashed border-[#2f6bd8] bg-[#232a38]" : "border-[#2f2f2d]"
+          }`}
+        >
           <PlusMenu onAddFiles={() => attach()} onAddFolder={() => attach(true)} onSlash={() => setText((t) => (t ? t : "/"))} />
           <input
             value={text}
@@ -76,7 +63,7 @@ export default function Composer({ agentLabel, busy, onSend, onStop, mode, onMod
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) submit();
             }}
-            placeholder="Demander à Kana d'écrire, refactorer ou déboguer..."
+            placeholder={dragging ? "Dépose les fichiers ici" : "Demander à Kana d'écrire, refactorer ou déboguer..."}
             className="min-w-0 flex-1 bg-transparent text-[15px] text-[#ecebe4] placeholder-[#7e7d76] outline-none"
           />
           {busy ? (
