@@ -27,13 +27,21 @@ export interface PermissionRequest {
   options: PermissionOption[];
 }
 
+/** Une étape du plan que l'agent annonce. */
+export interface PlanItem {
+  content: string;
+  status: string;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
+  /** Le plan en cours de l'agent (chaque annonce remplace la précédente). */
+  plan: PlanItem[];
   permissions: PermissionRequest[];
   busy: boolean;
 }
 
-export const EMPTY_CHAT: ChatState = { messages: [], permissions: [], busy: false };
+export const EMPTY_CHAT: ChatState = { messages: [], plan: [], permissions: [], busy: false };
 
 let counter = 0;
 // L'heure rend l'identifiant unique d'un lancement à l'autre : les messages rechargés gardent le leur.
@@ -102,6 +110,8 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
           ];
       return { ...chat, messages: [...rest, { ...agent, tools }] };
     }
+    case "plan":
+      return { ...chat, plan: event.entries };
     case "permission":
       return {
         ...chat,
