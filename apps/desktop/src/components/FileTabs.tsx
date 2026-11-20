@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { OpenTab } from "../hooks/useOpenFiles";
 import { baseName } from "../lib/fileKinds";
+import FileIcon from "./FileIcon";
 
 interface FileTabsProps {
   tabs: OpenTab[];
@@ -35,9 +36,12 @@ export default function FileTabs({ tabs, activePath, isDirty, onSelect, onClose 
             <button
               onClick={() => onSelect(tab.path)}
               title={tab.path}
-              className={`h-full max-w-[200px] truncate pl-3 pr-1.5 ${tab.preview ? "italic" : ""}`}
+              className={`flex h-full max-w-[210px] items-center gap-1.5 pl-3 pr-1.5 ${
+                tab.preview ? "italic" : ""
+              }`}
             >
-              {baseName(tab.path)}
+              <FileIcon path={tab.path} className="h-[14px] w-[14px]" />
+              <span className="truncate">{baseName(tab.path)}</span>
             </button>
             <button
               onClick={() => onClose(tab.path)}
