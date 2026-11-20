@@ -6,7 +6,8 @@ import { DiffBoxIcon } from "./icons";
 type MoreMenuProps = Parameters<typeof MoreMenu>[0];
 
 interface ToolbarProps {
-  onToggleSidebar: () => void;
+  showPlan: boolean;
+  onPlan: () => void;
   showTerminal: boolean;
   onTerminal: () => void;
   showDiff: boolean;
@@ -23,7 +24,7 @@ const ICON = "h-[17px] w-[17px]";
 export default function Toolbar(p: ToolbarProps) {
   return (
     <div className="flex items-center gap-1">
-      <ToolbarButton title="Threads" onClick={p.onToggleSidebar}>
+      <ToolbarButton title="Plan et tâches" active={p.showPlan} onClick={p.onPlan}>
         <List className={ICON} strokeWidth={1.6} />
       </ToolbarButton>
       <ToolbarButton title="Terminal" active={p.showTerminal} onClick={p.onTerminal}>
