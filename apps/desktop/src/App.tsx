@@ -16,7 +16,7 @@ export default function App() {
   const { chat, send, stop, answer } = useChat(thread.id, thread.agentId);
 
   // Boutons de la barre en haut à droite
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
