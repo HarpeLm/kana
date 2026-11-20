@@ -24,14 +24,17 @@ fn safe_name(id: &str) -> String {
 
 /// Crée le dossier de travail d'une conversation, sur sa propre branche `kana/<id>`.
 /// `base_branch` : la branche dont on part (celle de la conversation d'origine pour une bifurcation).
-/// Renvoie `None` quand Kana n'est pas lancé dans un dépôt git : l'agent travaillera alors sans.
+/// `project_path` : le projet de la conversation (sinon celui du lancement).
+/// Renvoie `None` quand le projet n'est pas un dépôt git : l'agent travaillera alors sans.
 #[tauri::command]
 pub async fn create_worktree(
     conversation_id: String,
     base_branch: Option<String>,
+    project_path: Option<String>,
 ) -> Result<Option<WorktreeInfo>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let Ok(repo) = kana_git::repo_root(&project_dir()) else { return Ok(None) };
+        let from = project_path.map(PathBuf::from).unwrap_or_else(project_dir);
+        let Ok(repo) = kana_git::repo_root(&from) else { return Ok(None) };
         let name = safe_name(&conversation_id);
         let repo_name = repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "repo".into());
         let path = root().join(safe_name(&repo_name)).join(&name);
@@ -53,13 +56,14 @@ pub async fn create_worktree(
 /// Supprime le dossier de travail d'une conversation. Refuse s'il contient du travail non
 /// enregistré, et ne touche jamais à un dossier hors de `~/.kana/worktrees`.
 #[tauri::command]
-pub async fn remove_worktree(path: String) -> Result<(), String> {
+pub async fn remove_worktree(path: String, project_path: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = Path::new(&path);
         if !path.starts_with(root()) {
             return Err("ce dossier n'est pas un dossier de travail de Kana".to_string());
         }
-        let repo = kana_git::repo_root(&project_dir()).map_err(|e| e.to_string())?;
+        let from = project_path.map(PathBuf::from).unwrap_or_else(project_dir);
+        let repo = kana_git::repo_root(&from).map_err(|e| e.to_string())?;
         kana_git::remove_worktree(&repo, path).map_err(|e| e.to_string())
     })
     .await
