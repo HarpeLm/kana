@@ -68,30 +68,29 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#181817] text-[#e6e5df] select-none">
-      {showSidebar && (
-        <Sidebar
-          conversations={conversations.items}
-          selectedId={selected.id}
-          editingId={editingId}
-          view={view}
-          width={sidebar.width}
-          dragging={sidebar.dragging}
-          onResizeStart={sidebar.startDrag}
-          nav={nav}
-          onCreate={createConversation}
-          onArtifacts={() => {
-            setShowArtifacts((v) => !v);
-            setView("workspace");
-          }}
-          onOpenSettings={() => setView("settings")}
-          onSelect={openConversation}
-          onPin={conversations.togglePin}
-          onStartRename={setEditingId}
-          onRename={rename}
-          onCancelRename={() => setEditingId(null)}
-          onDelete={conversations.remove}
-        />
-      )}
+      <Sidebar
+        open={showSidebar}
+        conversations={conversations.items}
+        selectedId={selected.id}
+        editingId={editingId}
+        view={view}
+        width={sidebar.width}
+        dragging={sidebar.dragging}
+        onResizeStart={sidebar.startDrag}
+        nav={nav}
+        onCreate={createConversation}
+        onArtifacts={() => {
+          setShowArtifacts((v) => !v);
+          setView("workspace");
+        }}
+        onOpenSettings={() => setView("settings")}
+        onSelect={openConversation}
+        onPin={conversations.togglePin}
+        onStartRename={setEditingId}
+        onRename={rename}
+        onCancelRename={() => setEditingId(null)}
+        onDelete={conversations.remove}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#181817]">
         <Header
