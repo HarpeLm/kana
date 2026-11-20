@@ -7,15 +7,21 @@ const ACTIVE = "#1f1f1d";
 
 const view = EditorView.theme(
   {
-    "&": { height: "100%", color: "#d4d4d4", backgroundColor: "#181817", fontSize: "13px" },
+    "&": { height: "100%", color: "#ececec", backgroundColor: "#181817", fontSize: "13px" },
     "&.cm-focused": { outline: "none" },
-    ".cm-scroller": { fontFamily: TERMINAL_FONT, lineHeight: "1.6", overflow: "auto" },
-    ".cm-content": { caretColor: "#d97757", padding: "8px 0" },
+    ".cm-scroller": {
+      fontFamily: TERMINAL_FONT,
+      lineHeight: "1.6",
+      overflow: "auto",
+      // Le lissage « antialiased » de l'app amincit le texte clair sur fond sombre : ici on le rétablit.
+      "-webkit-font-smoothing": "subpixel-antialiased",
+    },
+    ".cm-content": { caretColor: "#d97757", padding: "8px 0", fontWeight: "500" },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#d97757" },
-    ".cm-gutters": { backgroundColor: "#181817", color: "#6c6b65", border: "none" },
+    ".cm-gutters": { backgroundColor: "#181817", color: "#8b8a83", border: "none" },
     ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 16px", minWidth: "44px" },
     ".cm-activeLine": { backgroundColor: ACTIVE },
-    ".cm-activeLineGutter": { backgroundColor: ACTIVE, color: "#c4c3bc" },
+    ".cm-activeLineGutter": { backgroundColor: ACTIVE, color: "#e0dfd8" },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection": {
       backgroundColor: "#3d3d39",
     },
@@ -36,27 +42,27 @@ const view = EditorView.theme(
   { dark: true },
 );
 
-// Palette de VS Code (thème « Dark+ ») : des couleurs franches, reconnaissables.
+// Palette inspirée de VS Code « Dark+ », avancée en luminosité et en saturation pour le fond sombre de Kana.
 const highlight = HighlightStyle.define([
-  { tag: [t.controlKeyword, t.moduleKeyword], color: "#c586c0" },
-  { tag: [t.keyword, t.definitionKeyword, t.modifier, t.operatorKeyword, t.self], color: "#569cd6" },
-  { tag: [t.string, t.special(t.string)], color: "#ce9178" },
-  { tag: [t.escape], color: "#d7ba7d" },
-  { tag: [t.regexp], color: "#d16969" },
-  { tag: [t.number, t.integer, t.float], color: "#b5cea8" },
-  { tag: [t.bool, t.null, t.atom], color: "#569cd6" },
-  { tag: [t.typeName, t.className, t.namespace], color: "#4ec9b0" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#dcdcaa" },
-  { tag: [t.variableName, t.definition(t.variableName)], color: "#9cdcfe" },
-  { tag: [t.propertyName, t.attributeName], color: "#9cdcfe" },
-  { tag: [t.tagName], color: "#569cd6" },
-  { tag: [t.heading], color: "#569cd6", fontWeight: "bold" },
+  { tag: [t.controlKeyword, t.moduleKeyword], color: "#e68cf5" },
+  { tag: [t.keyword, t.definitionKeyword, t.modifier, t.operatorKeyword, t.self], color: "#4fb3ff" },
+  { tag: [t.string, t.special(t.string)], color: "#ffa66b" },
+  { tag: [t.escape], color: "#ffd27a" },
+  { tag: [t.regexp], color: "#ff7a7a" },
+  { tag: [t.number, t.integer, t.float], color: "#8ee073" },
+  { tag: [t.bool, t.null, t.atom], color: "#4fb3ff" },
+  { tag: [t.typeName, t.className, t.namespace], color: "#3de0c0" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#ffe08a" },
+  { tag: [t.variableName, t.definition(t.variableName)], color: "#85d4ff" },
+  { tag: [t.propertyName, t.attributeName], color: "#85d4ff" },
+  { tag: [t.tagName], color: "#4fb3ff" },
+  { tag: [t.heading], color: "#4fb3ff", fontWeight: "bold" },
   { tag: [t.strong], fontWeight: "bold" },
   { tag: [t.emphasis], fontStyle: "italic" },
-  { tag: [t.link, t.url], color: "#3794ff", textDecoration: "underline" },
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "#6a9955" },
-  { tag: [t.operator, t.punctuation, t.bracket], color: "#d4d4d4" },
-  { tag: [t.meta, t.processingInstruction], color: "#569cd6" },
+  { tag: [t.link, t.url], color: "#5aa9ff", textDecoration: "underline" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "#7ab55c" },
+  { tag: [t.operator, t.punctuation, t.bracket], color: "#ececec" },
+  { tag: [t.meta, t.processingInstruction], color: "#4fb3ff" },
 ]);
 
 /** Thème de l'éditeur : couleurs de l'app et coloration syntaxique. */
