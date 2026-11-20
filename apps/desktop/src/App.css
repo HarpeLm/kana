@@ -37,6 +37,13 @@
   font-size: 14px;
   line-height: 1.65;
 }
+/* Texte de la conversation, aux proportions de l'app Codex : un peu plus grand et plus aéré. */
+.markdown-body.chat-markdown {
+  color: #ececea;
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
 .markdown-body > :first-child {
   margin-top: 0;
 }
