@@ -10,6 +10,7 @@ import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { sectionsOf } from "./lib/conversations";
 import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
+import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
 import DiffDock from "./components/DiffDock";
 import FilesDock from "./components/FilesDock";
@@ -61,6 +62,7 @@ export default function App() {
 
   // Le terminal est monté à la première ouverture puis gardé : son shell survit quand on le masque.
   const [terminalOpened, setTerminalOpened] = useState(false);
+  const [browserOpened, setBrowserOpened] = useState(false);
   const [terminalMaximized, setTerminalMaximized] = useState(false);
   const [filesMaximized, setFilesMaximized] = useState(false);
   const terminalPanel = useResizableWidth({
@@ -73,13 +75,26 @@ export default function App() {
   const terminalFills = showTerminal && terminalMaximized;
   const filesFill = showFiles && filesMaximized && !terminalFills;
   const terminalIsSide = showTerminal && !terminalMaximized;
+  // Largeur des volets placés à droite de chacun, pour que la poignée suive bien la souris.
+  const terminalWidth = terminalIsSide ? terminalPanel.width : 0;
+  const browserVisible = showBrowser && !terminalFills && !filesFill;
+  const browserPanel = useResizableWidth({
+    storageKey: "kana-browser-width",
+    min: 360,
+    max: 1100,
+    fallback: 640,
+    from: "right",
+    offsetRight: terminalWidth,
+  });
+  const browserWidth = browserVisible ? browserPanel.width : 0;
+  const diffVisible = showDiff && !terminalFills && !filesFill;
   const diffPanel = useResizableWidth({
     storageKey: "kana-diff-width",
     min: 360,
     max: 1000,
     fallback: 560,
     from: "right",
-    offsetRight: terminalIsSide ? terminalPanel.width : 0,
+    offsetRight: terminalWidth + browserWidth,
   });
   const filesPanel = useResizableWidth({
     storageKey: "kana-files-width",
@@ -87,10 +102,12 @@ export default function App() {
     max: 1100,
     fallback: 700,
     from: "right",
-    offsetRight:
-      (terminalIsSide ? terminalPanel.width : 0) +
-      (showDiff && !terminalFills && !filesFill ? diffPanel.width : 0),
+    offsetRight: terminalWidth + browserWidth + (diffVisible ? diffPanel.width : 0),
   });
+  const toggleBrowser = () => {
+    setShowBrowser((v) => !v);
+    setBrowserOpened(true);
+  };
   const toggleTerminal = () => {
     setShowTerminal((v) => !v);
     setTerminalOpened(true);
@@ -169,7 +186,7 @@ export default function App() {
             showDiff,
             onDiff: toggle(setShowDiff),
             showBrowser,
-            onBrowser: toggle(setShowBrowser),
+            onBrowser: toggleBrowser,
             showFiles,
             onFiles: toggle(setShowFiles),
             more: {
@@ -241,12 +258,23 @@ export default function App() {
         />
 
         <DiffDock
-          visible={showDiff && !terminalFills && !filesFill}
+          visible={diffVisible}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
           onResizeStart={diffPanel.startDrag}
           onClose={() => setShowDiff(false)}
         />
+
+        {browserOpened && (
+          <BrowserDock
+            visible={browserVisible}
+            suspended={searchOpen || deletingId !== null}
+            width={browserPanel.width}
+            dragging={browserPanel.dragging}
+            onResizeStart={browserPanel.startDrag}
+            onClose={() => setShowBrowser(false)}
+          />
+        )}
 
         {terminalOpened && (
           <TerminalDock
