@@ -11,13 +11,15 @@ interface DiffDockProps {
   dragging: boolean;
   onResizeStart: (event: PointerEvent) => void;
   onClose: () => void;
+  /** Dossier de travail de la conversation ; sans lui, le dépôt où l'app a été lancée. */
+  path?: string;
 }
 
 const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
 /** Volet Diff : les changements du dépôt, fichier par fichier. */
-export default function DiffDock({ visible, width, dragging, onResizeStart, onClose }: DiffDockProps) {
-  const { report, loading, error, refresh } = useGitDiff(visible);
+export default function DiffDock({ visible, width, dragging, onResizeStart, onClose, path }: DiffDockProps) {
+  const { report, loading, error, refresh } = useGitDiff(visible, path);
   const files = report?.files ?? [];
   const additions = files.reduce((sum, f) => sum + f.additions, 0);
   const deletions = files.reduce((sum, f) => sum + f.deletions, 0);
