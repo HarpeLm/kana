@@ -20,10 +20,13 @@ export async function listenBrowserAgent(handlers: {
   /** Un agent a besoin du navigateur : il faut ouvrir le Globe. */
   onOpen: () => void;
   onApproval: (approval: AgentApproval) => void;
+  /** Un agent vient d'utiliser un outil du navigateur. */
+  onActive: () => void;
 }): Promise<() => void> {
   const unlisteners = await Promise.all([
     listen("browser-agent-open", () => handlers.onOpen()),
     listen<AgentApproval>("browser-agent-approval", (e) => handlers.onApproval(e.payload)),
+    listen("browser-agent-active", () => handlers.onActive()),
   ]);
   return () => unlisteners.forEach((off) => off());
 }
