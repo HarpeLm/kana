@@ -54,7 +54,7 @@
   object-fit: contain;
 }
 .markdown-body .link-icon-svg {
-  color: #d4d3cb;
+  color: inherit; /* l'icône prend la couleur bleue du lien */
 }
 .markdown-body > :first-child {
   margin-top: 0;
