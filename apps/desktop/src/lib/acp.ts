@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import * as mock from "./acpMock";
+import { inTauri } from "./env";
 
 export interface PermissionOption {
   id: string;
@@ -21,8 +22,7 @@ export type ThreadEvent = AcpEvent & { threadId: string };
 
 export type Unlisten = () => void;
 
-/** Dans un navigateur simple (sans Tauri), on bascule sur un agent simulé. */
-const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+// Dans un navigateur simple (sans Tauri), on bascule sur un agent simulé.
 
 export function startAgent(threadId: string, agent: string): Promise<void> {
   return inTauri ? invoke("start_agent", { threadId, agent }) : Promise.resolve();
