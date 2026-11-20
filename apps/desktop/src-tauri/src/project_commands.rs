@@ -8,8 +8,8 @@ use crate::agent_spec::{default_cwd, project_dir};
 
 #[derive(Serialize)]
 pub struct ProjectInfo {
-    name: String,
-    path: String,
+    pub(crate) name: String,
+    pub(crate) path: String,
 }
 
 fn info(path: PathBuf) -> ProjectInfo {
@@ -35,12 +35,14 @@ fn folder_name(name: &str) -> Option<String> {
     (!clean.is_empty()).then_some(clean)
 }
 
-/// Crée un projet neuf : un dossier `~/Kana/<nom>` avec un dépôt git (pour les dossiers de travail).
+/// Crée un projet neuf : un dossier `~/Projets Kana/<nom>` avec un dépôt git (pour les dossiers de travail).
+/// Surtout pas `~/Kana` : sur macOS les noms de dossier ne distinguent pas majuscules et minuscules,
+/// et ce serait le dépôt `~/kana` lui-même.
 #[tauri::command]
 pub async fn create_project(name: String) -> Result<ProjectInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let folder = folder_name(&name).ok_or("le nom du projet est vide")?;
-        let path = default_cwd().join("Kana").join(folder);
+        let path = default_cwd().join("Projets Kana").join(folder);
         if path.exists() {
             return Err(format!("{} existe déjà", path.display()));
         }
