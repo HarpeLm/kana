@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 const THRESHOLD = 5;
 /** Marge entre deux dossiers (mt-6). */
 const GAP = 24;
+/** Espace laissé entre le dossier saisi et le haut / le bas de la liste, pour qu'il ne colle jamais aux boutons fixes. */
+const INSET_TOP = 10;
+const INSET_BOTTOM = 16;
 /** Durée de l'animation de pose (doit correspondre à `duration-200` des dossiers). */
 const SETTLE_MS = 200;
 
@@ -66,8 +69,8 @@ export function useSectionDrag(
     // Le dossier saisi reste dans la zone de la liste : jamais par-dessus la navigation ni les réglages.
     const area = bounds?.current;
     if (area) {
-      const min = area.scrollTop - tops[from];
-      const max = area.scrollTop + area.clientHeight - (tops[from] + heights[from]);
+      const min = area.scrollTop - tops[from] + INSET_TOP;
+      const max = area.scrollTop + area.clientHeight - (tops[from] + heights[from]) - INSET_BOTTOM;
       dy = Math.min(Math.max(dy, min), Math.max(min, max));
     }
     const center = tops[from] + heights[from] / 2 + dy;
