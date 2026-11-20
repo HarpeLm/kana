@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ChatState } from "../lib/chatState";
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
@@ -17,6 +18,8 @@ interface ChatViewProps {
   onModeChange: (mode: PermissionMode) => void;
   /** Ce qu'affiche l'écran d'une conversation vide (projet, dossier de travail). */
   newSession: NewSessionProps;
+  /** Choix du fournisseur et du modèle (le fournisseur ne change que dans une conversation vide). */
+  modelPicker: ReactNode;
 }
 
 export default function ChatView({
@@ -30,6 +33,7 @@ export default function ChatView({
   mode,
   onModeChange,
   newSession,
+  modelPicker,
 }: ChatViewProps) {
   // Une conversation vide s'ouvre sur l'écran de nouvelle session : les projets au centre,
   // et sous la saisie, l'endroit où l'agent travaillera.
@@ -45,6 +49,7 @@ export default function ChatView({
           mode={mode}
           onModeChange={onModeChange}
           footerLeft={<EnvironmentRow session={newSession} />}
+          modelPicker={modelPicker}
           placeholder="Décrivez une tâche ou posez une question."
         />
       </main>
@@ -72,7 +77,15 @@ export default function ChatView({
         </div>
       )}
 
-      <Composer agentLabel={agentLabel} busy={chat.busy} onSend={onSend} onStop={onStop} mode={mode} onModeChange={onModeChange} />
+      <Composer
+        agentLabel={agentLabel}
+        busy={chat.busy}
+        onSend={onSend}
+        onStop={onStop}
+        mode={mode}
+        onModeChange={onModeChange}
+        modelPicker={modelPicker}
+      />
     </main>
   );
 }
