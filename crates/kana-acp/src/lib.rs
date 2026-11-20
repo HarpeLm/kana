@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Client Agent Client Protocol (ACP) : lance un agent de code et dialogue avec lui en JSON-RPC.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod agents;
+mod client;
+mod error;
+mod event;
+mod protocol;
+mod reader;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use agents::{AgentSpec, preset};
+pub use client::AcpClient;
+pub use error::AcpError;
+pub use event::{AcpEvent, PermissionOption};
