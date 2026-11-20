@@ -17,7 +17,7 @@ export default function ConversationGroup({
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
-    <section className="mt-5 first:mt-2">
+    <section className="mt-6">
       <button
         onClick={() => setCollapsed((v) => !v)}
         aria-expanded={!collapsed}
