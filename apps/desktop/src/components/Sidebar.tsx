@@ -1,4 +1,4 @@
-import { useState, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { Settings } from "lucide-react";
 import { loadView } from "../lib/sidebarView";
 import type { View } from "../data";
@@ -72,7 +72,8 @@ export default function Sidebar({
   const sections = sectionsOf(conversations);
   // Les dossiers qu'on peut déplacer, dans l'ordre affiché (seulement avec « Mon ordre »).
   const movable = listView.groupBy === "folder" && listView.sortBy === "manual" ? groups.map((g) => g.name).filter((n) => n !== PINNED_GROUP && n !== ARCHIVED_GROUP) : [];
-  const sectionDrag = useSectionDrag(movable, actions.onMoveSection);
+  const listArea = useRef<HTMLDivElement>(null);
+  const sectionDrag = useSectionDrag(movable, actions.onMoveSection, listArea);
   const isFolder = (name: string) => listView.groupBy === "folder" && name !== PINNED_GROUP && name !== ARCHIVED_GROUP;
 
   // Le conteneur change de largeur et le panneau garde la sienne en s'estompant :
@@ -105,7 +106,7 @@ export default function Sidebar({
           onCustomize={onOpenSettings}
         />
 
-        <div className="flex-1 overflow-y-auto px-2 pb-3">
+        <div ref={listArea} className="flex-1 overflow-y-auto px-2 pb-3">
           {newSection && (
             <div className="mt-2">
               <RenameInput
