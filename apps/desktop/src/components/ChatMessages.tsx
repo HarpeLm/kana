@@ -12,9 +12,19 @@ interface ChatMessagesProps {
   busy: boolean;
   /** Envoyer un texte à l'agent (renvoi ou message modifié). */
   onSend: (text: string) => void;
+  /** Bifurquer la conversation à partir d'un message. */
+  onFork: (messageId: string) => void;
 }
 
-function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLink: (url: string) => void }) {
+function AgentMessage({
+  message,
+  onOpenLink,
+  onFork,
+}: {
+  message: ChatMessage;
+  onOpenLink: (url: string) => void;
+  onFork?: () => void;
+}) {
   return (
     <div className="group/message space-y-2 text-[#dfded8]">
       {message.thought && (
@@ -25,12 +35,12 @@ function AgentMessage({ message, onOpenLink }: { message: ChatMessage; onOpenLin
       )}
       {message.tools.length > 0 && <ToolGroup tools={message.tools} startedAt={message.startedAt} endedAt={message.endedAt} />}
       {message.text && <ChatMarkdown source={message.text} onOpenLink={onOpenLink} />}
-      {message.text && <MessageActions text={message.text} at={message.endedAt ?? message.startedAt} />}
+      {message.text && <MessageActions text={message.text} at={message.endedAt ?? message.startedAt} onFork={onFork} />}
     </div>
   );
 }
 
-export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onSend }: ChatMessagesProps) {
+export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onSend, onFork }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,7 +57,7 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
         )}
         {messages.map((message) =>
           message.role === "user" ? (
-            <UserMessage key={message.id} message={message} busy={busy} onSend={onSend} />
+            <UserMessage key={message.id} message={message} busy={busy} onSend={onSend} onFork={() => onFork(message.id)} />
           ) : message.role === "error" ? (
             <div
               key={message.id}
@@ -56,7 +66,12 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
               {message.text}
             </div>
           ) : (
-            <AgentMessage key={message.id} message={message} onOpenLink={onOpenLink} />
+            <AgentMessage
+              key={message.id}
+              message={message}
+              onOpenLink={onOpenLink}
+              onFork={busy ? undefined : () => onFork(message.id)}
+            />
           ),
         )}
         <div ref={endRef} />
