@@ -16,6 +16,9 @@ export interface ChatMessage {
   text: string;
   thought: string;
   tools: ToolCall[];
+  /** Début et fin du travail de l'agent sur ce message (ms), pour afficher la durée. */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export interface PermissionRequest {
@@ -36,7 +39,14 @@ let counter = 0;
 const nextId = () => `m${++counter}`;
 
 export function makeMessage(role: ChatMessage["role"], text = ""): ChatMessage {
-  return { id: nextId(), role, text, thought: "", tools: [] };
+  return { id: nextId(), role, text, thought: "", tools: [], startedAt: Date.now() };
+}
+
+/** Marque la fin du travail de l'agent sur son dernier message. */
+function endLastAgentMessage(messages: ChatMessage[]): ChatMessage[] {
+  const last = messages[messages.length - 1];
+  if (last?.role !== "agent" || last.endedAt) return messages;
+  return [...messages.slice(0, -1), { ...last, endedAt: Date.now() }];
 }
 
 /** Renvoie la liste avec un message d'agent en dernière position, en le créant si besoin. */
@@ -100,7 +110,7 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
         ],
       };
     case "done":
-      return { ...chat, busy: false };
+      return { ...chat, busy: false, messages: endLastAgentMessage(chat.messages) };
     case "error":
       return addError(chat, event.message);
     case "closed":
