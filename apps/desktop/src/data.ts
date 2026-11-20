@@ -1,4 +1,35 @@
-export type View = "workspace" | "relay";
+export type View = "workspace" | "relay" | "settings";
+
+export interface AgentInfo {
+  /** Identifiant du préréglage ACP côté Rust. */
+  id: string;
+  name: string;
+  hint: string;
+  /** Variable d'environnement de la clé d'API, si l'agent en accepte une. */
+  keyVariable?: string;
+}
+
+export const AGENTS: AgentInfo[] = [
+  {
+    id: "codex",
+    name: "Codex",
+    hint: "Compte ChatGPT ou clé d'API OpenAI.",
+    keyVariable: "OPENAI_API_KEY",
+  },
+  {
+    id: "claude",
+    name: "Claude Code",
+    hint: "Compte Claude ou clé d'API Anthropic.",
+    keyVariable: "ANTHROPIC_API_KEY",
+  },
+  {
+    id: "gemini",
+    name: "Gemini CLI",
+    hint: "Compte Google ou clé d'API Gemini.",
+    keyVariable: "GEMINI_API_KEY",
+  },
+  { id: "opencode", name: "OpenCode", hint: "Connexion par la commande opencode auth login." },
+];
 
 export type ProviderState = "cooldown" | "active" | "standby";
 
