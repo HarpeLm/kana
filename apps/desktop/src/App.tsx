@@ -149,6 +149,7 @@ export default function App({ startup }: { startup: Startup }) {
     }
     const project = projectList.projects.find((p) => p.path === selected.projectPath);
     if (project) projectList.use(project);
+    conversations.touch(selected.id);
     return send(text);
   };
 
@@ -264,6 +265,14 @@ export default function App({ startup }: { startup: Startup }) {
     conversations.rename(id, title);
     setEditingId(null);
   };
+  // « + » au survol d'un dossier : une conversation vide directement dedans, dans le bon projet.
+  const createInSection = (name: string) => {
+    const project = projectList.projects.find((p) => p.name === name);
+    const path = project?.path ?? conversations.items.find((c) => c.project === name && c.projectPath)?.projectPath;
+    conversations.createIn(name, path);
+    setView("workspace");
+  };
+
   const actions: ConversationActions = {
     onSelect: openConversation,
     onPin: conversations.togglePin,
@@ -273,6 +282,8 @@ export default function App({ startup }: { startup: Startup }) {
     onCancelRename: () => setEditingId(null),
     onDuplicate: conversations.duplicate,
     onMoveDown: conversations.moveDown,
+    onMoveSection: conversations.moveSection,
+    onCreateIn: createInSection,
     onMoveToSection: conversations.moveToSection,
     onArchive: conversations.toggleArchive,
     onDelete: setDeletingId,
