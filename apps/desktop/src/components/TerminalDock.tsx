@@ -38,8 +38,11 @@ export default function TerminalDock({
   const active = () => handleOf(activeId).current;
 
   const closeTab = (id: string) => {
+    const wasLast = tabs.length === 1;
     close(id);
     handles.current.delete(id);
+    // Fermer le dernier onglet ferme le volet ; il rouvrira sur un shell neuf.
+    if (wasLast) onClose();
   };
 
   return (
@@ -52,7 +55,7 @@ export default function TerminalDock({
       onResizeStart={onResizeStart}
       header={
         <>
-          <TerminalTabs tabs={tabs} activeId={activeId} onSelect={select} onClose={closeTab} onAdd={add} />
+          <TerminalTabs tabs={tabs} activeId={activeId} onSelect={select} onClose={closeTab} onAdd={add} closeLast />
           <div className="flex items-center gap-1">
             <TerminalMenu onClear={() => active()?.clear()} onRestart={() => active()?.restart()} />
             <ToolbarButton title={maximized ? "Réduire" : "Agrandir"} onClick={onToggleMaximize}>
