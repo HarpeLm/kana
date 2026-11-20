@@ -21,6 +21,7 @@ interface SidebarProps extends ConversationActions {
   nav: NavButtonsProps;
   onCreate: () => void;
   onArtifacts: () => void;
+  onOpenScheduled: () => void;
   onOpenSettings: () => void;
 }
 
@@ -36,6 +37,7 @@ export default function Sidebar({
   nav,
   onCreate,
   onArtifacts,
+  onOpenScheduled,
   onOpenSettings,
   ...actions
 }: SidebarProps) {
@@ -69,10 +71,13 @@ export default function Sidebar({
       </div>
 
       <SidebarNav
+        view={view}
         searching={searching}
         onCreate={onCreate}
         onToggleSearch={toggleSearch}
         onArtifacts={onArtifacts}
+        onScheduled={onOpenScheduled}
+        onCustomize={onOpenSettings}
       />
 
       {searching && (
