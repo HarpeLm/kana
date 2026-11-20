@@ -8,8 +8,8 @@ use crate::agent_spec::{default_cwd, project_dir};
 
 #[derive(Serialize)]
 pub struct WorktreeInfo {
-    path: String,
-    branch: String,
+    pub(crate) path: String,
+    pub(crate) branch: String,
 }
 
 /// Là où vivent les dossiers de travail des conversations : `~/.kana/worktrees`.
@@ -68,4 +68,72 @@ pub async fn remove_worktree(path: String, project_path: Option<String>) -> Resu
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, process::Command};
+
+    use super::*;
+    use crate::project_commands::create_project;
+
+    /// Parcours complet sur de vrais dossiers : projet neuf → dossier de travail → travail non
+    /// enregistré → suppression refusée → suppression après commit. HOME est remplacé par un dossier
+    /// temporaire pour ne toucher à rien de réel.
+    #[test]
+    fn project_worktree_lifecycle() {
+        let home = std::env::temp_dir().join(format!("kana-e2e-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).unwrap();
+        // Un seul test modifie HOME : les autres n'en dépendent pas.
+        unsafe { std::env::set_var("HOME", &home) };
+
+        tauri::async_runtime::block_on(async {
+            // 1. Un projet neuf est créé dans ~/Projets Kana avec un dépôt git.
+            let project = create_project("Mon essai".into()).await.unwrap();
+            assert_eq!(project.path, home.join("Projets Kana").join("Mon essai").to_string_lossy());
+            assert!(Path::new(&project.path).join(".git").exists());
+            assert!(create_project("Mon essai".into()).await.is_err(), "un projet existant n'est pas écrasé");
+
+            // 2. Une conversation de ce projet reçoit son dossier de travail et sa branche.
+            let info = create_worktree("conv1".into(), None, Some(project.path.clone())).await.unwrap().unwrap();
+            assert_eq!(info.branch, "kana/conv1");
+            assert!(Path::new(&info.path).starts_with(home.join(".kana").join("worktrees")));
+            // Redemandé (relance de l'app) : le même dossier est réutilisé.
+            let again = create_worktree("conv1".into(), None, Some(project.path.clone())).await.unwrap().unwrap();
+            assert_eq!(again.path, info.path);
+
+            // 3. Le travail d'un agent y reste : le projet principal n'est pas touché.
+            fs::write(Path::new(&info.path).join("hello.txt"), "salut").unwrap();
+            assert!(!Path::new(&project.path).join("hello.txt").exists());
+
+            // 4. Une bifurcation part de la branche de l'original.
+            let fork = create_worktree("conv2".into(), Some(info.branch.clone()), Some(project.path.clone()))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(kana_git::current_branch(Path::new(&fork.path)).as_deref(), Some("kana/conv2"));
+
+            // 5. Du travail non enregistré empêche la suppression ; le fichier survit.
+            assert!(remove_worktree(info.path.clone(), Some(project.path.clone())).await.is_err());
+            assert!(Path::new(&info.path).join("hello.txt").exists());
+
+            // 6. Une fois enregistré (commit), la suppression passe.
+            for args in [vec!["add", "-A"], vec!["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "work"]] {
+                assert!(Command::new("git").args(&args).current_dir(&info.path).status().unwrap().success());
+            }
+            remove_worktree(info.path.clone(), Some(project.path.clone())).await.unwrap();
+            assert!(!Path::new(&info.path).exists());
+
+            // 7. Un dossier hors de ~/.kana/worktrees n'est jamais supprimé.
+            assert!(remove_worktree(project.path.clone(), Some(project.path.clone())).await.is_err());
+            assert!(Path::new(&project.path).exists());
+
+            // 8. Un dossier qui n'est pas un dépôt git : pas de dossier de travail, sans erreur.
+            let plain = home.join("plain");
+            fs::create_dir_all(&plain).unwrap();
+            let none = create_worktree("conv3".into(), None, Some(plain.to_string_lossy().into_owned())).await.unwrap();
+            assert!(none.is_none());
+        });
+    }
 }
