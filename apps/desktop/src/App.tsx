@@ -3,6 +3,7 @@ import "./App.css";
 import { AGENTS, type View } from "./data";
 import { useBrowserAgent } from "./hooks/useBrowserAgent";
 import { useChat } from "./hooks/useChat";
+import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
 import { useConversations } from "./hooks/useConversations";
 import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
 import { useResizableWidth } from "./hooks/useResizableWidth";
@@ -44,7 +45,12 @@ export default function App() {
     setView("workspace");
   };
   const history = useNavHistory(selected.id, openConversation);
-  const { chat, send, stop, answer } = useChat(selected.id, selected.agentId);
+  const [permissionMode, setPermissionMode] = useState(loadMode);
+  const changeMode = (mode: PermissionMode) => {
+    setPermissionMode(mode);
+    saveMode(mode);
+  };
+  const { chat, send, stop, answer } = useChat(selected.id, selected.agentId, permissionMode);
   const agentLabel = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
 
   // Barre latérale et boutons du haut
@@ -244,6 +250,8 @@ export default function App() {
               onStop={stop}
               onAnswer={answer}
               onOpenLink={openInGlobe}
+              mode={permissionMode}
+              onModeChange={changeMode}
             />
             {showRightPanel && (
               <RightPanel
