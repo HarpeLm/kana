@@ -2078,6 +2078,10 @@ version = "0.1.0"
 [[package]]
 name = "kana-git"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "kana-pty"
