@@ -1,7 +1,14 @@
 import { AGENTS } from "../data";
 import AccountCard from "./AccountCard";
+import OrphanCleaner from "./OrphanCleaner";
 
-export default function SettingsView() {
+interface SettingsViewProps {
+  /** Identifiants des conversations et dossiers des projets, pour retrouver les dossiers de travail orphelins. */
+  conversationIds: string[];
+  projectPaths: string[];
+}
+
+export default function SettingsView({ conversationIds, projectPaths }: SettingsViewProps) {
   return (
     <div className="flex-1 overflow-y-auto p-7">
       <div className="mx-auto max-w-[620px]">
@@ -17,6 +24,8 @@ export default function SettingsView() {
             <AccountCard key={agent.id} agent={agent} />
           ))}
         </div>
+
+        <OrphanCleaner knownIds={conversationIds} projects={projectPaths} />
       </div>
     </div>
   );
