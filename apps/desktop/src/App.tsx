@@ -166,11 +166,15 @@ export default function App({ startup }: { startup: Startup }) {
     projectPath: selected.projectPath,
     projects: projectList.projects,
     useWorktree: selected.useWorktree !== false,
+    activeAgentId: selected.agentId,
     onSelectProject: selectProject,
     onOpenFolder: () => void openFolder(),
     onCreateProject: createNewProject,
     onRemoveProject: (project: Project) => projectList.remove(project.path),
     onToggleWorktree: (value: boolean) => setUseWorktree(selected.id, value),
+    onOpenAdvisor: () => crossReview.openAdvisor(""),
+    onOpenGlobe: () => docks.setShowBrowser(true),
+    onOpenRelay: () => setView("relay"),
   };
 
   // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
