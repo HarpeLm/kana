@@ -403,7 +403,7 @@ export default function SessionWorktreeCard({
                   type="button"
                   disabled={resolvingConflicts}
                   onClick={() => void resolveMergeConflictsWithAgent()}
-                  className="w-full rounded-lg bg-[#d97757] px-3 py-1.5 text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-50"
+                  className="w-full rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-50"
                 >
                   {resolvingConflicts ? "Inspection des conflits…" : "Résoudre les conflits avec l'agent"}
                 </button>
