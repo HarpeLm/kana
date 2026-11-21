@@ -5,6 +5,7 @@ mod browser;
 mod browser_agent;
 mod browser_agent_tools;
 mod browser_commands;
+mod cloud_server;
 mod db_commands;
 mod git_commands;
 mod project_commands;
@@ -80,6 +81,12 @@ pub fn run() {
             settings_commands::list_adapter_caches,
             settings_commands::install_adapter_cache,
             settings_commands::check_app_update,
+            settings_commands::scheduled_daemon_status,
+            settings_commands::scheduled_daemon_install,
+            settings_commands::scheduled_daemon_uninstall,
+            cloud_server::cloud_health_check,
+            cloud_server::cloud_submit_job,
+            cloud_server::cloud_list_jobs,
             git_commands::git_diff,
             git_commands::git_branch_summary,
             git_commands::git_pull_requests,
@@ -275,6 +282,58 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
             println!("{}", kana_core::format_bench_report(&report, json));
             0
         }
+        kana_core::CliCommand::Daemon {
+            once,
+            interval_secs,
+            json,
+        } => {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    eprintln!("impossible d'initialiser le runtime Tokio : {e}");
+                    return 1;
+                }
+            };
+            rt.block_on(async move {
+                let home = agent_spec::default_cwd();
+                loop {
+                    let executed = run_daemon_tick(&home, json).await;
+                    if once {
+                        return if executed.is_ok() { 0 } else { 1 };
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(interval_secs.max(30))).await;
+                }
+            })
+        }
+        kana_core::CliCommand::Serve {
+            host,
+            port,
+            token,
+            cwd,
+        } => {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    eprintln!("impossible d'initialiser le runtime Tokio : {e}");
+                    return 1;
+                }
+            };
+            let resolved_token = token.or_else(|| {
+                std::env::var("KANA_CLOUD_TOKEN")
+                    .ok()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            });
+            rt.block_on(async move {
+                match cloud_server::run_cloud_server(host, port, resolved_token, cwd).await {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        eprintln!("erreur Kana Cloud : {e}");
+                        1
+                    }
+                }
+            })
+        }
         kana_core::CliCommand::Run {
             prompt,
             agent,
@@ -413,6 +472,166 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
             })
         }
     }
+}
+
+fn daemon_now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+async fn run_daemon_tick(home: &std::path::Path, json: bool) -> Result<usize, String> {
+    let cfg_path = kana_db::shared_config_path(home);
+    let mut settings = kana_db::read_shared_config(&cfg_path);
+    let mut tasks: Vec<kana_core::ScheduledTask> = settings
+        .get("kana-scheduled-tasks")
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or_default();
+    let mut runs: Vec<kana_core::ScheduledRunRecord> = settings
+        .get("kana-scheduled-runs")
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or_default();
+
+    let now_ms = daemon_now_millis();
+    let mut executed = 0usize;
+    let mut tick_records = Vec::new();
+
+    for task in tasks.iter_mut() {
+        if !kana_core::is_task_due(task, now_ms) {
+            continue;
+        }
+        let workdir = if task.project_path.trim().is_empty() || task.project_path == "none" {
+            agent_spec::project_dir()
+        } else {
+            std::path::PathBuf::from(&task.project_path)
+        };
+        let shared_ctx = load_cli_shared_context(home, &workdir);
+        let full_prompt = if shared_ctx.memory_preface.is_empty() {
+            task.prompt.clone()
+        } else {
+            format!("{}{}", shared_ctx.memory_preface, task.prompt)
+        };
+
+        let mut tokens_used: u64 = 0;
+        let mut output = String::new();
+        let mut err_msg: Option<String> = None;
+
+        match agent_spec::spec_for(&task.agent_id) {
+            Ok(spec) => {
+                match kana_acp::AcpClient::spawn_with_mcp(&spec, &workdir, &shared_ctx.mcp_servers).await {
+                    Ok((client, mut events)) => {
+                        if let Err(e) = client.prompt(&full_prompt).await {
+                            err_msg = Some(e.to_string());
+                        } else {
+                            while let Some(ev) = events.recv().await {
+                                match ev {
+                                    kana_acp::AcpEvent::Message { text } => output.push_str(&text),
+                                    kana_acp::AcpEvent::TurnUsage { total_tokens, .. } => {
+                                        tokens_used = tokens_used.saturating_add(total_tokens);
+                                    }
+                                    kana_acp::AcpEvent::Permission {
+                                        request_id,
+                                        title,
+                                        options,
+                                    } => {
+                                        let choices: Vec<kana_core::PermissionChoice> = options
+                                            .iter()
+                                            .map(|o| kana_core::PermissionChoice {
+                                                id: o.id.clone(),
+                                                name: o.name.clone(),
+                                                kind: o.kind.clone(),
+                                            })
+                                            .collect();
+                                        let answer = kana_core::auto_answer_with_rules(
+                                            shared_ctx.permission_mode,
+                                            &title,
+                                            &choices,
+                                            &shared_ctx.rules,
+                                        );
+                                        client.resolve_permission(&request_id, answer).await;
+                                    }
+                                    kana_acp::AcpEvent::Error { message } => {
+                                        err_msg = Some(message);
+                                        break;
+                                    }
+                                    kana_acp::AcpEvent::Done { .. } | kana_acp::AcpEvent::Closed => break,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => err_msg = Some(e.to_string()),
+                }
+            }
+            Err(e) => err_msg = Some(e),
+        }
+
+        let ran_at = daemon_now_millis();
+        let (status, summary) = if let Some(err) = err_msg {
+            ("error".to_string(), format!("Erreur daemon : {err}"))
+        } else if !kana_core::within_budget(tokens_used, task.max_tokens_budget) {
+            (
+                "budget_exceeded".to_string(),
+                format!(
+                    "Budget max dépassé ({tokens_used} / {} jetons).",
+                    task.max_tokens_budget
+                ),
+            )
+        } else {
+            let trimmed = output.trim();
+            let snippet = if trimmed.is_empty() {
+                format!("Exécution daemon terminée pour « {} ».", task.title)
+            } else {
+                trimmed.chars().take(220).collect()
+            };
+            ("ok".to_string(), snippet)
+        };
+
+        task.last_run_at = Some(ran_at);
+        task.last_status = Some(status.clone());
+        let record = kana_core::ScheduledRunRecord {
+            id: format!("daemon-{ran_at}-{}", executed),
+            task_id: task.id.clone(),
+            ran_at,
+            status,
+            tokens_used,
+            summary,
+        };
+        tick_records.push(record.clone());
+        runs.insert(0, record);
+        runs.truncate(50);
+        executed += 1;
+    }
+
+    if executed > 0 {
+        if let Ok(tasks_json) = serde_json::to_string(&tasks) {
+            settings.insert("kana-scheduled-tasks".into(), tasks_json);
+        }
+        if let Ok(runs_json) = serde_json::to_string(&runs) {
+            settings.insert("kana-scheduled-runs".into(), runs_json);
+        }
+        let _ = kana_db::write_shared_config(&cfg_path, &settings);
+    }
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "ok": true,
+                "checked": tasks.len(),
+                "executed": executed,
+                "runs": tick_records,
+            })
+        );
+    } else {
+        println!(
+            "[kana daemon] {} tâche(s) vérifiée(s), {} exécutée(s).",
+            tasks.len(),
+            executed
+        );
+    }
+    Ok(executed)
 }
 
 #[cfg(test)]
