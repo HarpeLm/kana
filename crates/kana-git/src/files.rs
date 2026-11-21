@@ -89,6 +89,32 @@ fn resolve_inside(root: &Path, relative: &str) -> Result<PathBuf, GitError> {
     Ok(full)
 }
 
+/// Met un fichier du dépôt à la corbeille (macOS : `~/.Trash`, on peut le récupérer) ; ailleurs, il est supprimé.
+pub fn trash_file(repo: &Path, relative: &str) -> Result<(), GitError> {
+    let root = repo_root(repo)?;
+    let full = resolve_inside(&root, relative)?;
+    let trash = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".Trash")).filter(|t| t.is_dir());
+    if let (true, Some(trash)) = (cfg!(target_os = "macos"), trash) {
+        let name = full.file_name().and_then(|n| n.to_str()).unwrap_or("fichier").to_owned();
+        let mut target = trash.join(&name);
+        let mut n = 1;
+        while target.exists() {
+            let (stem, ext) = match name.rsplit_once('.') {
+                Some((s, e)) => (s.to_owned(), format!(".{e}")),
+                None => (name.clone(), String::new()),
+            };
+            target = trash.join(format!("{stem} {n}{ext}"));
+            n += 1;
+        }
+        if fs::rename(&full, &target).is_ok() {
+            return Ok(());
+        }
+        // Un autre volume : copie puis suppression.
+        fs::copy(&full, &target).map_err(|e| GitError::Write(e.to_string()))?;
+    }
+    fs::remove_file(&full).map_err(|e| GitError::Write(e.to_string()))
+}
+
 fn modified_ms(path: &Path) -> Result<u64, GitError> {
     let modified = fs::metadata(path)
         .and_then(|m| m.modified())
