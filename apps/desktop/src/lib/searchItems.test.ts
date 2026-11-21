@@ -112,4 +112,20 @@ describe("buildSections", () => {
     expect(filtered[0].kind).toBe("scheduled");
     expect(buildSections(conversations, "inconnu", "scheduled", [], tasks)).toEqual([]);
   });
+
+  it("inclut une section Messages à partir des résultats plein texte", () => {
+    const sections = buildSections(conversations, "sqlite", "all", [], [], [
+      { conversationId: "c2", messageId: "m9", role: "agent", snippet: "Migration vers SQLite FTS5 terminée" },
+    ]);
+    const messagesSection = sections.find((s) => s.name === "Messages");
+    expect(messagesSection?.items).toEqual([
+      {
+        id: "message:c2:m9",
+        kind: "message",
+        title: "Migration vers SQLite FTS5 terminée",
+        hint: "Bug login · aquapp",
+        conversationId: "c2",
+      },
+    ]);
+  });
 });
