@@ -54,7 +54,9 @@ const DANGEROUS =
  * On ne choisit jamais qu'une autorisation ponctuelle : refuser ou retenir un choix reste à lui.
  */
 export function autoAnswer(mode: PermissionMode, request: Pick<PermissionRequest, "title" | "options">): string | null {
-  if (mode === "ask" || mode === "plan") return null;
+  // En plan, Kana refuse lui-même toute demande de modifier quelque chose : le plan ne s'applique pas tant qu'il n'est pas validé.
+  if (mode === "plan") return request.options.find((o) => o.kind === "reject_once")?.id ?? request.options.find((o) => o.kind.startsWith("reject"))?.id ?? null;
+  if (mode === "ask") return null;
   if (mode === "auto" && DANGEROUS.test(request.title)) return null;
   return request.options.find((o) => o.kind === "allow_once")?.id ?? null;
 }
