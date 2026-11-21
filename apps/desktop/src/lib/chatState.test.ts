@@ -7,6 +7,8 @@ import {
   applyTrigger,
   detectTrigger,
   enqueueMessage,
+  extractStructuredQuestion,
+  makeMessage,
   mergeCommands,
   prioritizeQueuedMessage,
   removeQueuedMessage,
@@ -162,5 +164,72 @@ describe("chatState", () => {
     ]);
     expect(buildMentionItems(list, "dossier:src").map((i) => i.insert)).toEqual(["crates/kana-acp/src/"]);
     expect(buildMentionItems(list, "artefact:plan").map((i) => i.insert)).toEqual(["artefacts/plan.html"]);
+  });
+
+  it("extrait une question structurée depuis un bloc ```question JSON ou texte", () => {
+    const jsonMsg = makeMessage(
+      "agent",
+      'Avant de commencer :\n```question\n{"question":"Quels modules migrer ?","options":["Auth","Billing","Search"],"multiSelect":true}\n```',
+    );
+    expect(extractStructuredQuestion([jsonMsg], false)).toEqual({
+      messageId: jsonMsg.id,
+      question: "Quels modules migrer ?",
+      options: ["Auth", "Billing", "Search"],
+      multiSelect: true,
+    });
+    expect(extractStructuredQuestion([jsonMsg], true)).toBeNull();
+
+    const textMsg = makeMessage(
+      "agent",
+      "```question\nquestion: Quel SGBD choisir ?\nmultiSelect: false\noptions:\n- SQLite\n- PostgreSQL\n```",
+    );
+    expect(extractStructuredQuestion([textMsg], false)).toEqual({
+      messageId: textMsg.id,
+      question: "Quel SGBD choisir ?",
+      options: ["SQLite", "PostgreSQL"],
+      multiSelect: false,
+    });
+  });
+
+  it("détecte une question terminée par ? suivie de 2 à 6 options en fin de message agent", () => {
+    const bulletMsg = makeMessage(
+      "agent",
+      "J'ai vérifié la config.\n\n**Quelle approche préfères-tu ?**\n\n- Garder le cache mémoire\n- Passer sur SQLite",
+    );
+    expect(extractStructuredQuestion([bulletMsg], false)).toEqual({
+      messageId: bulletMsg.id,
+      question: "Quelle approche préfères-tu ?",
+      options: ["Garder le cache mémoire", "Passer sur SQLite"],
+    });
+
+    const numberedMsg = makeMessage(
+      "agent",
+      "Quel port utiliser ?\n1. 3000\n2. 8080\n3. 1420",
+    );
+    expect(extractStructuredQuestion([numberedMsg], false)).toEqual({
+      messageId: numberedMsg.id,
+      question: "Quel port utiliser ?",
+      options: ["3000", "8080", "1420"],
+    });
+  });
+
+  it("ignore les listes hors critères, trop longues, ou suivies d'un message utilisateur", () => {
+    const oneOpt = makeMessage("agent", "Continuer ?\n- Oui");
+    expect(extractStructuredQuestion([oneOpt], false)).toBeNull();
+
+    const sevenOpts = makeMessage(
+      "agent",
+      "Quel jour ?\n- Lun\n- Mar\n- Mer\n- Jeu\n- Ven\n- Sam\n- Dim",
+    );
+    expect(extractStructuredQuestion([sevenOpts], false)).toBeNull();
+
+    const notQuestion = makeMessage("agent", "Voici les étapes :\n- Étape 1\n- Étape 2");
+    expect(extractStructuredQuestion([notQuestion], false)).toBeNull();
+
+    const answered = [
+      makeMessage("agent", "Quel choix ?\n- A\n- B"),
+      makeMessage("user", "A"),
+    ];
+    expect(extractStructuredQuestion(answered, false)).toBeNull();
   });
 });
