@@ -1,13 +1,16 @@
-import { useState, type FormEvent } from "react";
-import { Check, Clock, Copy, Pause, Play, Plus, Terminal, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Check, Clock, Copy, Pause, Play, Plus, Power, ShieldCheck, Terminal, Trash2 } from "lucide-react";
 import { AGENTS } from "../data";
 import { onAgentEvent, sendPrompt, startAgent, stopAgent } from "../lib/acp";
 import { inTauri } from "../lib/env";
 import { NO_PROJECT, type Project } from "../lib/projects";
 import {
+  DAEMON_INTERVAL_OPTIONS,
   SCHEDULE_FREQUENCIES,
   TOKEN_BUDGETS,
   executeScheduledTask,
+  getScheduledDaemonStatus,
+  installScheduledDaemon,
   intervalSeconds,
   launchdLabelFor,
   launchdPlist,
@@ -16,6 +19,8 @@ import {
   nextRunAt,
   saveScheduledRuns,
   saveScheduledTasks,
+  uninstallScheduledDaemon,
+  type DaemonStatus,
   type ScheduledRunRecord,
   type ScheduledTask,
 } from "../lib/schedule";
@@ -67,6 +72,58 @@ export default function ScheduledView({ projects = [], defaultProjectPath }: Sch
   const [openPlistId, setOpenPlistId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
+
+  const [daemonStatus, setDaemonStatus] = useState<DaemonStatus | null>(null);
+  const [daemonIntervalSecs, setDaemonIntervalSecs] = useState<number>(300);
+  const [daemonBusy, setDaemonBusy] = useState(false);
+  const [daemonError, setDaemonError] = useState("");
+  const [daemonNotice, setDaemonNotice] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void getScheduledDaemonStatus()
+      .then((status) => {
+        if (active) setDaemonStatus(status);
+      })
+      .catch((err) => {
+        if (active) setDaemonError(String(err));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleInstallDaemon = async () => {
+    if (daemonBusy) return;
+    setDaemonBusy(true);
+    setDaemonError("");
+    setDaemonNotice("");
+    try {
+      const next = await installScheduledDaemon(daemonIntervalSecs);
+      setDaemonStatus(next);
+      setDaemonNotice(next.message);
+    } catch (err) {
+      setDaemonError(String(err));
+    } finally {
+      setDaemonBusy(false);
+    }
+  };
+
+  const handleUninstallDaemon = async () => {
+    if (daemonBusy) return;
+    setDaemonBusy(true);
+    setDaemonError("");
+    setDaemonNotice("");
+    try {
+      const next = await uninstallScheduledDaemon();
+      setDaemonStatus(next);
+      setDaemonNotice(next.message);
+    } catch (err) {
+      setDaemonError(String(err));
+    } finally {
+      setDaemonBusy(false);
+    }
+  };
 
   const updateTasks = (next: ScheduledTask[]) => {
     setTasks(next);
@@ -182,6 +239,99 @@ export default function ScheduledView({ projects = [], defaultProjectPath }: Sch
             configuration daemon macOS <code>launchd</code>.
           </p>
         </div>
+
+        <section
+          aria-label="Daemon système macOS (launchd)"
+          className="space-y-3 rounded-2xl border border-[#343430] bg-[#21211f] p-4"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-[#ecebe4]">
+                <ShieldCheck className="h-4 w-4 text-[#d97757]" strokeWidth={1.8} />
+                <span>Daemon système macOS (<code>launchd</code>)</span>
+                {daemonStatus && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11.5px] font-normal ${
+                      daemonStatus.loaded
+                        ? "bg-[#243828] text-[#8ce09b]"
+                        : daemonStatus.installed
+                          ? "bg-[#3f2c1f] text-[#f0a868]"
+                          : "bg-[#2c2c29] text-[#9a9992]"
+                    }`}
+                  >
+                    {daemonStatus.loaded
+                      ? "Actif (app fermée)"
+                      : daemonStatus.installed
+                        ? "Installé (inactif)"
+                        : "Non installé"}
+                  </span>
+                )}
+              </div>
+              <p className="text-[12.5px] text-[#8c8b83]">
+                Exécute automatiquement les tâches échues en arrière-plan même lorsque l'application Kana est fermée.
+              </p>
+            </div>
+
+            <label className="block space-y-1 text-[12px] text-[#9a9992]">
+              <span>Vérification</span>
+              <select
+                aria-label="Intervalle du daemon"
+                value={daemonIntervalSecs}
+                onChange={(e) => setDaemonIntervalSecs(Number(e.target.value))}
+                className="rounded-lg border border-[#363632] bg-[#181817] px-2.5 py-1 text-[12.5px] text-[#ecebe4] outline-none focus:border-[#55554f]"
+              >
+                {DAEMON_INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.secs} value={opt.secs}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {daemonStatus && (
+            <div className="rounded-xl border border-[#2f2f2c] bg-[#181817] px-3 py-2 font-mono text-[11.5px] text-[#9a9992] space-y-0.5">
+              <div>plist : {daemonStatus.plistPath}</div>
+              <div>log : {daemonStatus.logPath}</div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={daemonBusy || daemonStatus?.platformSupported === false}
+              onClick={() => void handleInstallDaemon()}
+              className="flex items-center gap-1.5 rounded-lg bg-[#d97757] px-3.5 py-1.5 text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Power className="h-3.5 w-3.5" strokeWidth={1.9} />
+              <span>
+                {daemonBusy
+                  ? "Configuration…"
+                  : daemonStatus?.loaded
+                    ? "Mettre à jour le daemon"
+                    : "Installer / Activer le daemon système (launchctl)"}
+              </span>
+            </button>
+
+            {daemonStatus?.installed && (
+              <button
+                type="button"
+                disabled={daemonBusy}
+                onClick={() => void handleUninstallDaemon()}
+                className="rounded-lg bg-[#2b2b29] px-3 py-1.5 text-[12.5px] text-[#dcdbd3] transition hover:bg-[#383835] disabled:opacity-40"
+              >
+                Désactiver le daemon
+              </button>
+            )}
+          </div>
+
+          {daemonNotice && (
+            <p className="rounded-lg bg-[#243828] px-3 py-1.5 text-[12px] text-[#8ce09b]">{daemonNotice}</p>
+          )}
+          {daemonError && (
+            <p className="rounded-lg bg-[#3d2324] px-3 py-1.5 text-[12px] text-[#f48b87]">{daemonError}</p>
+          )}
+        </section>
 
         <form
           onSubmit={createTask}
