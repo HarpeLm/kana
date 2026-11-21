@@ -5,10 +5,11 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     path::{Component, Path, PathBuf},
+    process::Command,
     time::UNIX_EPOCH,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     run::{GitError, git, repo_root},
@@ -407,6 +408,192 @@ pub fn sync_rule_files(repo: &Path, content: &str, targets: &[String]) -> Result
     Ok(updated)
 }
 
+/// Diagnostic compilateur ou LSP remonté dans `FilesDock` et envoyé à l'agent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CodeDiagnostic {
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    /// `"error"` | `"warning"` | `"info"`
+    pub severity: String,
+    pub code: Option<String>,
+    pub message: String,
+    pub source: String,
+}
+
+fn parse_rustc_or_colon_line(line: &str, default_source: &str) -> Option<CodeDiagnostic> {
+    // 1. Format tsc : `src/app.ts(14,7): error TS2322: Type 'string' is not assignable...`
+    if let Some((loc, rest)) = line.split_once("): ")
+        && let Some((file, coords)) = loc.rsplit_once('(')
+    {
+        let mut nums = coords.split(',');
+        let l: u32 = nums.next()?.trim().parse().ok()?;
+        let c: u32 = nums.next()?.trim().parse().ok()?;
+        let (severity, code, message) = parse_severity_and_code(rest)?;
+        return Some(CodeDiagnostic {
+            file: file.trim().replace('\\', "/"),
+            line: l,
+            column: c,
+            severity,
+            code,
+            message,
+            source: default_source.to_string(),
+        });
+    }
+
+    // 2. Format tsc pretty : `src/app.ts:14:7 - error TS2322: Message`
+    if let Some((loc, rest)) = line.split_once(" - ")
+        && let Some((file, l, c)) = split_file_line_col(loc)
+    {
+        let (severity, code, message) = parse_severity_and_code(rest)?;
+        return Some(CodeDiagnostic {
+            file,
+            line: l,
+            column: c,
+            severity,
+            code,
+            message,
+            source: default_source.to_string(),
+        });
+    }
+
+    // 3. Format rustc / cargo --message-format=short : `crates/foo/src/lib.rs:42:9: error[E0308]: mismatched types`
+    let (file_part, after_col) = split_short_diagnostic(line)?;
+    let (severity, code, message) = parse_severity_and_code(after_col)?;
+    Some(CodeDiagnostic {
+        file: file_part.0,
+        line: file_part.1,
+        column: file_part.2,
+        severity,
+        code,
+        message,
+        source: default_source.to_string(),
+    })
+}
+
+fn split_file_line_col(raw: &str) -> Option<(String, u32, u32)> {
+    let mut parts = raw.rsplitn(3, ':');
+    let col: u32 = parts.next()?.trim().parse().ok()?;
+    let line: u32 = parts.next()?.trim().parse().ok()?;
+    let file = parts.next()?.trim();
+    if file.is_empty() {
+        return None;
+    }
+    Some((file.replace('\\', "/"), line, col))
+}
+
+fn split_short_diagnostic(line: &str) -> Option<((String, u32, u32), &str)> {
+    let colon_positions: Vec<usize> = line.match_indices(':').map(|(i, _)| i).collect();
+    if colon_positions.len() < 3 {
+        return None;
+    }
+    for w in colon_positions.windows(3) {
+        let (c1, c2, c3) = (w[0], w[1], w[2]);
+        let file = line[..c1].trim();
+        if file.is_empty() {
+            continue;
+        }
+        let Ok(l) = line[c1 + 1..c2].trim().parse::<u32>() else { continue };
+        let Ok(col) = line[c2 + 1..c3].trim().parse::<u32>() else { continue };
+        let rest = line[c3 + 1..].trim();
+        return Some(((file.replace('\\', "/"), l, col), rest));
+    }
+    None
+}
+
+fn parse_severity_and_code(raw: &str) -> Option<(String, Option<String>, String)> {
+    let trimmed = raw.trim();
+    let (sev, after_sev) = if let Some(r) = trimmed.strip_prefix("error") {
+        ("error", r)
+    } else if let Some(r) = trimmed.strip_prefix("warning") {
+        ("warning", r)
+    } else if let Some(r) = trimmed.strip_prefix("info") {
+        ("info", r)
+    } else {
+        return None;
+    };
+
+    let after_sev = after_sev.trim_start();
+    // `[E0308]: message`
+    if let Some(rest) = after_sev.strip_prefix('[')
+        && let Some((code, msg_part)) = rest.split_once("]:")
+    {
+        let msg = msg_part.trim();
+        if msg.is_empty() {
+            return None;
+        }
+        return Some((sev.to_string(), Some(code.trim().to_string()), msg.to_string()));
+    }
+    // `TS2322: message`
+    if let Some((code_candidate, msg_part)) = after_sev.split_once(':') {
+        let code_clean = code_candidate.trim();
+        if !code_clean.is_empty() && code_clean.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            let msg = msg_part.trim();
+            if !msg.is_empty() {
+                return Some((sev.to_string(), Some(code_clean.to_string()), msg.to_string()));
+            }
+        } else if code_clean.is_empty() {
+            let msg = msg_part.trim();
+            if !msg.is_empty() {
+                return Some((sev.to_string(), None, msg.to_string()));
+            }
+        }
+    }
+    None
+}
+
+/// Analyse la sortie texte d'un compilateur ou serveur LSP (`cargo check --message-format=short`, `rustc`, `tsc --noEmit`).
+pub fn parse_diagnostics_output(output: &str, default_source: &str) -> Vec<CodeDiagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut seen = HashSet::new();
+    for raw_line in output.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(diag) = parse_rustc_or_colon_line(line, default_source) {
+            let key = (
+                diag.file.clone(),
+                diag.line,
+                diag.column,
+                diag.severity.clone(),
+                diag.message.clone(),
+            );
+            if seen.insert(key) {
+                diagnostics.push(diag);
+            }
+        }
+    }
+    diagnostics
+}
+
+/// Collecte les diagnostics compilateur/LSP d'un dépôt (analyse statique rapide + `.kana/diagnostics.json` éventuel).
+pub fn collect_repo_diagnostics(repo: &Path) -> Result<Vec<CodeDiagnostic>, GitError> {
+    let root = repo_root(repo)?;
+    let custom_log = root.join(".kana").join("diagnostics.log");
+    if custom_log.is_file()
+        && let Ok(raw) = fs::read_to_string(&custom_log)
+    {
+        return Ok(parse_diagnostics_output(&raw, "rustc/tsc"));
+    }
+
+    let mut out = Vec::new();
+    if root.join("tsconfig.json").is_file()
+        && let Ok(res) = Command::new("npx")
+            .args(["--no-install", "tsc", "--noEmit", "--pretty", "false"])
+            .current_dir(&root)
+            .output()
+    {
+        let combined = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&res.stdout),
+            String::from_utf8_lossy(&res.stderr)
+        );
+        out.extend(parse_diagnostics_output(&combined, "tsc"));
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{env, process::Command, thread, time::Duration};
@@ -609,5 +796,37 @@ mod tests {
         assert!(!after.iter().find(|r| r.path == "GEMINI.md").unwrap().exists);
         assert!(after.iter().find(|r| r.path == ".kana/rules.md").unwrap().exists);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn parses_rustc_and_tsc_diagnostics_outputs() {
+        let sample = "\
+crates/kana-core/src/lib.rs:18:5: error[E0308]: mismatched types
+crates/kana-git/src/files.rs:92:13: warning: unused variable `tmp`
+apps/desktop/src/App.tsx(144,9): error TS2322: Type 'number' is not assignable to type 'string'.
+apps/desktop/src/components/FilesDock.tsx:62:11 - error TS2551: Property 'openFile' does not exist.
+";
+        let diags = parse_diagnostics_output(sample, "rustc");
+        assert_eq!(diags.len(), 4);
+        assert_eq!(
+            diags[0],
+            CodeDiagnostic {
+                file: "crates/kana-core/src/lib.rs".into(),
+                line: 18,
+                column: 5,
+                severity: "error".into(),
+                code: Some("E0308".into()),
+                message: "mismatched types".into(),
+                source: "rustc".into(),
+            }
+        );
+        assert_eq!(diags[1].severity, "warning");
+        assert_eq!(diags[1].code, None);
+        assert_eq!(diags[2].file, "apps/desktop/src/App.tsx");
+        assert_eq!(diags[2].line, 144);
+        assert_eq!(diags[2].column, 9);
+        assert_eq!(diags[2].code.as_deref(), Some("TS2322"));
+        assert_eq!(diags[3].file, "apps/desktop/src/components/FilesDock.tsx");
+        assert_eq!(diags[3].code.as_deref(), Some("TS2551"));
     }
 }
