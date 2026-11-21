@@ -1,12 +1,24 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { ArrowUp, Code2, CornerDownRight, FileText, Folder, ListPlus, Sparkles, Square, Terminal, X } from "lucide-react";
+import { ArrowUp, Code2, CornerDownRight, FileText, Folder, ListPlus, Loader2, Mic, MicOff, Sparkles, Square, Terminal, X } from "lucide-react";
 import { useDroppedFiles } from "../hooks/useDroppedFiles";
 import type { AvailableCommand } from "../lib/acp";
 import { pickFiles, readClipboardImages, withAttachments } from "../lib/attachments";
 import { applyTrigger, detectTrigger, mergeCommands } from "../lib/chatState";
+import { inTauri } from "../lib/env";
 import { buildMentionItems, loadFileList, type FileList, type MentionItem, type MentionKind } from "../lib/files";
 import { tr, useLocale } from "../lib/i18n";
 import type { PermissionMode } from "../lib/permissionMode";
+import {
+  formatRecordingDuration,
+  getSpeechRecognitionCtor,
+  getVoiceCapabilities,
+  mergeTranscript,
+  transcribeAudioWithWhisper,
+  triggerMacosDictation,
+  type SpeechRecognitionLike,
+  type VoiceCapabilities,
+  type VoiceStatus,
+} from "../lib/voice";
 import AttachmentList from "./AttachmentList";
 import ModeMenu from "./ModeMenu";
 import PlusMenu from "./PlusMenu";
@@ -81,6 +93,253 @@ export default function Composer({
   const [fileList, setFileList] = useState<FileList | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const [voiceEngine, setVoiceEngine] = useState<"web-speech" | "whisper">("web-speech");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voiceCapabilities, setVoiceCapabilities] = useState<VoiceCapabilities | null>(null);
+
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const abortVoiceRef = useRef(false);
+  const cursorRef = useRef(0);
+  const toggleVoiceRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    cursorRef.current = cursor;
+  }, [cursor]);
+
+  useEffect(() => {
+    let live = true;
+    void getVoiceCapabilities().then((caps) => {
+      if (live) setVoiceCapabilities(caps);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (voiceStatus !== "listening") return;
+    setRecordingSeconds(0);
+    const id = window.setInterval(() => {
+      setRecordingSeconds((s) => s + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [voiceStatus]);
+
+  const stopVoice = (abort = false) => {
+    abortVoiceRef.current = abort;
+    const recognition = recognitionRef.current;
+    if (recognition) {
+      recognitionRef.current = null;
+      try {
+        if (abort) recognition.abort();
+        else recognition.stop();
+      } catch {
+        // Ignorer si déjà arrêté.
+      }
+      setInterimTranscript("");
+      if (!abort) setVoiceStatus("idle");
+    }
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {
+        // Ignorer si déjà arrêté.
+      }
+    } else if (mediaStreamRef.current) {
+      for (const track of mediaStreamRef.current.getTracks()) {
+        track.stop();
+      }
+      mediaStreamRef.current = null;
+      if (!abort) setVoiceStatus("idle");
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopVoice(true);
+    };
+  }, []);
+
+  const insertDictatedText = (dictated: string) => {
+    if (!dictated.trim()) return;
+    setText((prev) => {
+      const merged = mergeTranscript(prev, dictated, cursorRef.current);
+      cursorRef.current = merged.cursor;
+      setCursor(merged.cursor);
+      return merged.text;
+    });
+    setPaletteClosed(false);
+  };
+
+  const startVoice = async () => {
+    if (voiceStatus === "listening" || voiceStatus === "transcribing") {
+      stopVoice(false);
+      return;
+    }
+
+    abortVoiceRef.current = false;
+    setVoiceError(null);
+    setInterimTranscript("");
+
+    const SpeechCtor = getSpeechRecognitionCtor();
+    if (SpeechCtor) {
+      try {
+        const recognition = new SpeechCtor();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = locale === "fr" ? "fr-FR" : "en-US";
+        recognitionRef.current = recognition;
+        setVoiceEngine("web-speech");
+        setVoiceStatus("listening");
+
+        recognition.onresult = (event) => {
+          let finalChunk = "";
+          let interimChunk = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            const transcript = result?.[0]?.transcript ?? "";
+            if (!transcript) continue;
+            if (result.isFinal) {
+              finalChunk += `${finalChunk ? " " : ""}${transcript.trim()}`;
+            } else {
+              interimChunk += `${interimChunk ? " " : ""}${transcript.trim()}`;
+            }
+          }
+          setInterimTranscript(interimChunk);
+          if (finalChunk) {
+            insertDictatedText(finalChunk);
+          }
+        };
+
+        recognition.onerror = (event) => {
+          if (abortVoiceRef.current && event.error === "aborted") return;
+          recognitionRef.current = null;
+          setInterimTranscript("");
+          const msg =
+            event.error === "not-allowed" || event.error === "service-not-allowed"
+              ? tr("Accès au microphone refusé. Autorise le micro dans les réglages système.", "Microphone access denied. Allow microphone access in system settings.", locale)
+              : event.error === "no-speech"
+                ? tr("Aucune voix détectée. Réessaie en parlant plus près du micro.", "No speech detected. Try speaking closer to the microphone.", locale)
+                : tr("Erreur de dictée vocale.", "Voice dictation error.", locale);
+          setVoiceError(msg);
+          setVoiceStatus("error");
+        };
+
+        recognition.onend = () => {
+          if (recognitionRef.current === recognition) {
+            recognitionRef.current = null;
+            setInterimTranscript("");
+            setVoiceStatus((current) => (current === "listening" ? "idle" : current));
+          }
+        };
+
+        recognition.start();
+        textareaRef.current?.focus();
+      } catch {
+        recognitionRef.current = null;
+        setVoiceError(tr("Impossible de démarrer la reconnaissance vocale.", "Unable to start speech recognition.", locale));
+        setVoiceStatus("error");
+      }
+      return;
+    }
+
+    const caps = voiceCapabilities ?? (await getVoiceCapabilities());
+    setVoiceCapabilities(caps);
+
+    if (
+      inTauri &&
+      typeof navigator !== "undefined" &&
+      Boolean(navigator.mediaDevices?.getUserMedia) &&
+      typeof MediaRecorder !== "undefined" &&
+      caps.whisperAvailable
+    ) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+        audioChunksRef.current = [];
+        const recorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        setVoiceEngine("whisper");
+        setVoiceStatus("listening");
+
+        recorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size > 0) {
+            audioChunksRef.current.push(ev.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const streamToClose = mediaStreamRef.current;
+          mediaStreamRef.current = null;
+          mediaRecorderRef.current = null;
+          if (streamToClose) {
+            for (const track of streamToClose.getTracks()) {
+              track.stop();
+            }
+          }
+          if (abortVoiceRef.current) {
+            audioChunksRef.current = [];
+            return;
+          }
+          const chunks = audioChunksRef.current;
+          audioChunksRef.current = [];
+          if (chunks.length === 0) {
+            setVoiceStatus("idle");
+            return;
+          }
+          const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+          setVoiceStatus("transcribing");
+          void transcribeAudioWithWhisper(blob, locale === "fr" ? "fr" : "en")
+            .then((transcript) => {
+              if (transcript.trim()) {
+                insertDictatedText(transcript);
+              }
+              setVoiceStatus("idle");
+            })
+            .catch((err: unknown) => {
+              const message = err instanceof Error ? err.message : String(err);
+              setVoiceError(message || tr("Échec de la transcription Whisper locale.", "Local Whisper transcription failed.", locale));
+              setVoiceStatus("error");
+            });
+        };
+
+        recorder.start();
+        textareaRef.current?.focus();
+      } catch {
+        setVoiceError(tr("Impossible d'accéder au microphone pour Whisper local.", "Unable to access the microphone for local Whisper.", locale));
+        setVoiceStatus("error");
+      }
+      return;
+    }
+
+    if (inTauri && caps.macosDictationSupported) {
+      textareaRef.current?.focus();
+      void triggerMacosDictation();
+      return;
+    }
+
+    setVoiceError(
+      tr(
+        "Active la dictée native macOS (Fn Fn) ou installe whisper-cpp (brew install whisper-cpp).",
+        "Enable native macOS Dictation (Fn Fn) or install whisper-cpp (brew install whisper-cpp).",
+        locale,
+      ),
+    );
+    setVoiceStatus("error");
+  };
+
+  toggleVoiceRef.current = () => {
+    void startVoice();
+  };
+
   const addFiles = (paths: string[]) => setFiles((current) => [...new Set([...current, ...paths])]);
   const attach = (directory = false) => {
     pickFiles(directory).then(addFiles).catch(() => {});
@@ -88,12 +347,17 @@ export default function Composer({
   // Un fichier déposé sur la fenêtre depuis le Finder rejoint les pièces jointes.
   const dragging = useDroppedFiles(addFiles);
 
-  // Cmd+U ouvre le sélecteur de fichiers, comme dans Claude.
+  // Cmd+U ouvre le sélecteur de fichiers, Alt+Espace démarre/arrête la dictée vocale.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "u") {
         event.preventDefault();
         attach();
+        return;
+      }
+      if (event.altKey && !event.metaKey && !event.ctrlKey && event.code === "Space") {
+        event.preventDefault();
+        toggleVoiceRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -166,11 +430,15 @@ export default function Composer({
   };
 
   const submit = () => {
+    if (voiceStatus === "listening") {
+      stopVoice(false);
+    }
     const value = text.trim();
     if (!value && files.length === 0) return;
     onSend(withAttachments(value || tr("Analyse ces fichiers joints.", "Analyze these attached files.", locale), files));
     setText("");
     setCursor(0);
+    cursorRef.current = 0;
     setFiles([]);
     setPaletteClosed(false);
     setMentionFilter("all");
@@ -361,6 +629,68 @@ export default function Composer({
           </div>
         )}
 
+        {voiceStatus !== "idle" && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`mb-2 flex items-center gap-2 rounded-2xl border px-3 py-1.5 text-[12.5px] ${
+              voiceStatus === "error"
+                ? "border-[#5a2d2d] bg-[#2a1d1d] text-[#f0b4b0]"
+                : "border-[#32322f] bg-[#1e1e1c] text-[#dcdbd3]"
+            }`}
+          >
+            {voiceStatus === "listening" && (
+              <>
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#e5534b]" aria-hidden="true" />
+                <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-[#ecebe4]">
+                  {formatRecordingDuration(recordingSeconds)}
+                </span>
+                <span className="min-w-0 flex-1 truncate italic text-[#b5b4ac]">
+                  {interimTranscript || tr("Écoute en cours...", "Listening...", locale)}
+                </span>
+                <span className="shrink-0 rounded-md bg-[#2a2a28] px-1.5 py-0.5 text-[11px] text-[#9a9992]">
+                  {voiceEngine === "whisper" ? tr("Whisper local", "Local Whisper", locale) : tr("Dictée vocale", "Voice dictation", locale)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => stopVoice(false)}
+                  className="shrink-0 rounded-lg bg-[#2f2f2c] px-2 py-0.5 text-[11.5px] font-medium text-[#ecebe4] transition hover:bg-[#3b3b37]"
+                >
+                  {tr("Arrêter", "Stop", locale)}
+                </button>
+              </>
+            )}
+            {voiceStatus === "transcribing" && (
+              <>
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#8ab4f8]" strokeWidth={2} />
+                <span className="min-w-0 flex-1 truncate text-[#dcdbd3]">
+                  {tr("Transcription Whisper en cours...", "Transcribing with Whisper...", locale)}
+                </span>
+                <span className="shrink-0 rounded-md bg-[#2a2a28] px-1.5 py-0.5 text-[11px] text-[#9a9992]">
+                  {tr("Whisper local", "Local Whisper", locale)}
+                </span>
+              </>
+            )}
+            {voiceStatus === "error" && (
+              <>
+                <MicOff className="h-3.5 w-3.5 shrink-0 text-[#e5534b]" strokeWidth={1.8} />
+                <span className="min-w-0 flex-1 text-[12px] leading-snug">{voiceError}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceError(null);
+                    setVoiceStatus("idle");
+                  }}
+                  aria-label={tr("Fermer", "Close", locale)}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[#c79995] transition hover:bg-[#3a2525] hover:text-[#f8d7d5]"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div
           className={`flex items-end gap-2 rounded-[24px] border bg-[#232322] py-2 pl-2.5 pr-2.5 transition focus-within:border-[#454542] ${
             dragging ? "border-dashed border-[#2f6bd8] bg-[#232a38]" : "border-[#2f2f2d]"
@@ -402,6 +732,45 @@ export default function Composer({
             }
             className="[field-sizing:content] my-1 h-auto min-h-[24px] max-h-[10lh] w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-[1.45] text-[#ecebe4] placeholder-[#7e7d76] outline-none"
           />
+          <button
+            type="button"
+            onClick={() => void startVoice()}
+            disabled={voiceStatus === "transcribing"}
+            aria-label={
+              voiceStatus === "listening"
+                ? tr("Arrêter la dictée vocale", "Stop voice dictation", locale)
+                : tr("Dictée vocale", "Voice dictation", locale)
+            }
+            aria-pressed={voiceStatus === "listening"}
+            title={
+              locale === "fr"
+                ? `Dictée vocale (⌥Espace · ${
+                    getSpeechRecognitionCtor()
+                      ? "Dictée temps réel"
+                      : voiceCapabilities?.whisperAvailable
+                        ? "Whisper local"
+                        : "Dictée native"
+                  })`
+                : `Voice dictation (Option+Space · ${
+                    getSpeechRecognitionCtor()
+                      ? "Live dictation"
+                      : voiceCapabilities?.whisperAvailable
+                        ? "Local Whisper"
+                        : "Native dictation"
+                  })`
+            }
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition disabled:opacity-50 ${
+              voiceStatus === "listening"
+                ? "bg-[#e5534b]/20 text-[#ff7b72] hover:bg-[#e5534b]/30"
+                : "text-[#8c8b83] hover:bg-[#2f2f2c] hover:text-[#ecebe4]"
+            }`}
+          >
+            {voiceStatus === "transcribing" ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+            ) : (
+              <Mic className="h-4 w-4" strokeWidth={1.9} />
+            )}
+          </button>
           {busy ? (
             <div className="flex shrink-0 items-center gap-1.5">
               {(text.trim() || files.length > 0) && (
