@@ -1,6 +1,6 @@
 /** Formules d'introduction qu'on retire du début d'une demande pour garder l'essentiel. */
 const LEAD =
-  /^(?:(?:bonjour|salut|hello|hey|coucou|s'il (?:te|vous) pla[iî]t|stp|svp|merci|ok|alors|du coup|et|donc|bon)[\s,!.:;-]+)*(?:(?:est-ce que|est ce que)\s+)?(?:(?:tu|vous)\s+(?:peux|pouvez|pourrais|pourriez|veux|voudrais)(?:-tu|-vous)?|(?:peux|pouvez|pourrais|pourriez)[- ](?:tu|vous)|(?:je|j')\s*(?:voudrais|veux|aimerais|souhaite|aurais besoin|dois|cherche à|essaie de|essaye de)|on (?:peut|pourrait|doit)|il faut|il faudrait|comment|can you|could you|please|i (?:want|need|would like) to|help me)\s*(?:me |m'|nous |qu'on |que l'on |de |d')?/i;
+  /^(?:(?:bonjour|salut|hello|hey|coucou|s'il (?:te|vous) pla[iî]t|stp|svp|merci|ok|alors|du coup|et|donc|bon)[\s,!.:;-]+)*(?:(?:est-ce que|est ce que)\s+)?(?:(?:tu|vous)\s+(?:peux|pouvez|pourrais|pourriez|veux|voudrais)(?:-tu|-vous)?|(?:peux|pouvez|pourrais|pourriez)[- ](?:tu|vous)|(?:je|j')\s*(?:voudrais|veux|aimerais|souhaite|aurais besoin|dois|cherche à|essaie de|essaye de)|on (?:peut|pourrait|doit)|il faut|il faudrait|comment|can you|could you|please|i (?:want|need|would like) to|help me)\s*(?:me |m'|nous |de |d')?/i;
 
 const MAX = 44;
 
