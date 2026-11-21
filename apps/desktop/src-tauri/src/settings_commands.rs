@@ -192,6 +192,65 @@ pub fn core_auto_answer(
     kana_core::auto_answer(mode, &title, &options)
 }
 
+const HOOK_TIMEOUT_SECS: u64 = 15;
+
+/// Exécute une commande de hook déterministe (PreToolUse, PostToolUse, Stop) avec un délai court.
+#[tauri::command]
+pub async fn run_hook_command(cwd: Option<String>, command: String) -> Result<String, String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err("commande de hook vide".into());
+    }
+    let dir = match cwd.as_deref().map(str::trim).filter(|s| !s.is_empty() && *s != "none") {
+        Some(path) => {
+            let p = std::path::PathBuf::from(path);
+            if !p.is_dir() {
+                return Err(format!("dossier du hook introuvable : {path}"));
+            }
+            p
+        }
+        None => project_dir(),
+    };
+
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = tokio::process::Command::new("cmd");
+        c.args(["/C", trimmed]);
+        c
+    } else {
+        let mut c = tokio::process::Command::new("sh");
+        c.args(["-c", trimmed]);
+        c
+    };
+    cmd.current_dir(&dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+
+    let output = tokio::time::timeout(std::time::Duration::from_secs(HOOK_TIMEOUT_SECS), cmd.output())
+        .await
+        .map_err(|_| format!("hook expiré après {HOOK_TIMEOUT_SECS} s"))?
+        .map_err(|e| format!("impossible de lancer le hook : {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    let combined = match (stdout.is_empty(), stderr.is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => stdout,
+        (true, false) => stderr,
+        (false, false) => format!("{stdout}\n{stderr}"),
+    };
+    if !output.status.success() {
+        let code = output.status.code().unwrap_or(-1);
+        return Err(if combined.is_empty() {
+            format!("hook terminé avec le code {code}")
+        } else {
+            format!("hook terminé avec le code {code} : {combined}")
+        });
+    }
+    Ok(combined)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,5 +305,19 @@ mod tests {
             notification_script("Kana", "Terminé", false),
             "display notification \"Terminé\" with title \"Kana\""
         );
+    }
+
+    #[test]
+    fn runs_hook_commands_and_reports_failures() {
+        tauri::async_runtime::block_on(async {
+            let dir = std::env::temp_dir().to_string_lossy().into_owned();
+            let out = run_hook_command(Some(dir.clone()), "echo hook-ok".into()).await.unwrap();
+            assert_eq!(out, "hook-ok");
+
+            let err = run_hook_command(Some(dir), "echo boom >&2 && exit 2".into()).await.unwrap_err();
+            assert!(err.contains("boom") && err.contains("2"), "{err}");
+
+            assert!(run_hook_command(None, "   ".into()).await.is_err());
+        });
     }
 }
