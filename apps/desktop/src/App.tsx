@@ -12,7 +12,7 @@ import { useChat, type PreparedThread } from "./hooks/useChat";
 import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
 import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
-import { buildCompactContext, buildForkContext } from "./lib/fork";
+import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
 import { createWorktree, removeWorktree } from "./lib/worktree";
 import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
@@ -121,7 +121,7 @@ export default function App({ startup }: { startup: Startup }) {
       if (agent && problem) markProblem(agent, problem, message);
     },
   };
-  const { chat, send, stop, answer, seed, clearContext } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
+  const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
 
   // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
   const { setProject, setUseWorktree, setAgent } = conversations;
@@ -179,16 +179,15 @@ export default function App({ startup }: { startup: Startup }) {
   /** Compacte la session : l'agent s'éteint et repart avec un résumé ; l'historique reste affiché. */
   const compactSession = () => {
     if (chat.busy || chat.messages.length === 0) return;
-    stopAgent(selected.id).catch(() => {});
-    conversations.setForkContext(selected.id, buildCompactContext(chat.messages));
-    clearContext(selected.id);
+    // On demande le compactage à l'agent lui-même, comme si l'utilisateur tapait /compact.
+    void send("/compact");
   };
 
   // Un fichier cliqué dans le panneau s'ouvre dans le volet Fichiers (une page HTML y est modifiable à même la page).
   const [fileRequest, setFileRequest] = useState<{ id: number; path: string } | null>(null);
   const openFile = (path: string) => {
     setFileRequest((r) => ({ id: (r?.id ?? 0) + 1, path }));
-    setShowFiles(true);
+    setShowArtDock(true);
   };
 
   const relayBanner = useRelayFlow({
@@ -216,6 +215,8 @@ export default function App({ startup }: { startup: Startup }) {
   const [showDiff, setShowDiff] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
+  const [showArtDock, setShowArtDock] = useState(false);
+  const [artMaximized, setArtMaximized] = useState(false);
 
   // Entrées du menu "..."
   const [showArtifacts, setShowArtifacts] = useState(false);
@@ -267,6 +268,14 @@ export default function App({ startup }: { startup: Startup }) {
     fallback: 700,
     from: "right",
     offsetRight: terminalWidth + browserWidth + (diffVisible ? diffPanel.width : 0),
+  });
+  const artPanel = useResizableWidth({
+    storageKey: "kana-artifacts-width",
+    min: 420,
+    max: 1100,
+    fallback: 700,
+    from: "right",
+    offsetRight: terminalWidth + browserWidth + (diffVisible ? diffPanel.width : 0) + (showFiles && !terminalFills ? filesPanel.width : 0),
   });
   const toggleBrowser = () => {
     setShowBrowser((v) => !v);
@@ -474,7 +483,6 @@ export default function App({ startup }: { startup: Startup }) {
           // Un autre dossier de travail repart d'un volet neuf : ses fichiers ouverts ne sont pas les mêmes.
           key={workPath ?? "depot"}
           root={workPath}
-          openRequest={fileRequest}
           visible={showFiles && !terminalFills}
           maximized={filesMaximized}
           width={filesPanel.width}
@@ -484,6 +492,23 @@ export default function App({ startup }: { startup: Startup }) {
           onClose={() => {
             setShowFiles(false);
             setFilesMaximized(false);
+          }}
+        />
+
+        <FilesDock
+          key={"art-" + (workPath ?? "depot")}
+          variant="artifacts"
+          root={workPath}
+          openRequest={fileRequest}
+          visible={showArtDock && !terminalFills}
+          maximized={artMaximized}
+          width={artPanel.width}
+          dragging={artPanel.dragging}
+          onResizeStart={artPanel.startDrag}
+          onToggleMaximize={() => setArtMaximized((v) => !v)}
+          onClose={() => {
+            setShowArtDock(false);
+            setArtMaximized(false);
           }}
         />
 
