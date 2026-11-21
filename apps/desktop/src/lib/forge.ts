@@ -70,3 +70,23 @@ export const createPullRequest = (branch: string, title: string, path?: string):
   inTauri
     ? invoke("git_create_pull_request", { path: path ?? null, branch, title })
     : Promise.reject(new Error("Disponible dans l'app Kana seulement."));
+
+export interface MergeResult {
+  base: string;
+  merged_commits: number;
+  fast_forward: boolean;
+  /** Des changements non enregistrés ont été mis dans un commit avant la fusion. */
+  saved: boolean;
+}
+
+/** Fusionne le travail de la conversation dans la branche principale du projet (sans GitHub). */
+export const mergeWork = (projectPath: string, worktree: string, branch: string, title: string): Promise<MergeResult> =>
+  inTauri
+    ? invoke("merge_worktree", { projectPath, worktree, branch, title })
+    : Promise.reject(new Error("Disponible dans l'app Kana seulement."));
+
+/** Abandonne le travail : supprime son dossier de travail et sa branche. Définitif. */
+export const discardWork = (projectPath: string, worktree: string, branch: string): Promise<void> =>
+  inTauri
+    ? invoke("discard_worktree", { projectPath, worktree, branch })
+    : Promise.reject(new Error("Disponible dans l'app Kana seulement."));
