@@ -1,6 +1,7 @@
 import { sectionsOf, type Conversation } from "./conversations";
 import type { ArtifactEntry } from "./artifactIndex";
 import type { ScheduledTask } from "./schedule";
+import type { StoredMessageHit } from "./store";
 
 export type SearchTab = "all" | "sessions" | "projects" | "artifacts" | "scheduled";
 
@@ -24,14 +25,16 @@ export const ACTION_CYCLE_MODE = "action:cycle-mode";
 export const ACTION_OPEN_RELAY = "action:open-relay";
 
 export interface SearchItem {
-  /** `conversation:<id>`, `project:<nom>` ou `action:<nom>`. */
+  /** `conversation:<id>`, `project:<nom>`, `message:<conv>:<msg>` ou `action:<nom>`. */
   id: string;
-  kind: "conversation" | "project" | "action" | "artifact" | "scheduled";
+  kind: "conversation" | "project" | "action" | "artifact" | "scheduled" | "message";
   title: string;
   /** Texte discret à côté du titre (le projet, le nombre de conversations). */
   hint?: string;
   /** Pour un artéfact : la page à ouvrir et à prévisualiser. */
   artifact?: ArtifactEntry;
+  /** Pour un résultat de message plein texte : la conversation à ouvrir. */
+  conversationId?: string;
 }
 
 export interface SearchSection {
@@ -90,6 +93,18 @@ function projectItems(names: string[], conversations: Conversation[]): SearchIte
   });
 }
 
+function messageItem(hit: StoredMessageHit, conversations: Conversation[]): SearchItem {
+  const conv = conversations.find((c) => c.id === hit.conversationId);
+  const convLabel = conv ? `${conv.title} · ${conv.project}` : hit.conversationId;
+  return {
+    id: `message:${hit.conversationId}:${hit.messageId}`,
+    kind: "message",
+    title: hit.snippet,
+    hint: convLabel,
+    conversationId: hit.conversationId,
+  };
+}
+
 /** Sections affichées dans la fenêtre de recherche selon le texte saisi et l'onglet. */
 export function buildSections(
   conversations: Conversation[],
@@ -97,6 +112,7 @@ export function buildSections(
   tab: SearchTab,
   artifacts: ArtifactEntry[] = [],
   scheduledTasks: ScheduledTask[] = [],
+  messageHits: StoredMessageHit[] = [],
 ): SearchSection[] {
   const needle = query.trim().toLowerCase();
   const matches = (text: string) => text.toLowerCase().includes(needle);
@@ -137,6 +153,9 @@ export function buildSections(
 
   if (tab === "all" || tab === "sessions") {
     add("Sessions", conversations.filter((c) => matches(c.title)).map(conversationItem));
+    if (messageHits.length > 0) {
+      add("Messages", messageHits.map((hit) => messageItem(hit, conversations)));
+    }
   }
   if (tab === "all" || tab === "projects") {
     add("Projets", projectItems(projects.filter(matches), conversations));
