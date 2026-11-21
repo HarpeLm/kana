@@ -48,7 +48,7 @@ pub struct BranchSummary {
 }
 
 /// La branche principale du dépôt : celle vers laquelle `origin/HEAD` pointe, sinon `main` ou `master`.
-fn base_branch(dir: &Path) -> Option<String> {
+pub fn base_branch(dir: &Path) -> Option<String> {
     if let Ok(head) = git(dir, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], &[]) {
         if let Some(name) = head.trim().strip_prefix("origin/") {
             return Some(name.to_owned());
@@ -210,14 +210,81 @@ pub fn pull_requests(dir: &Path, branch: &str) -> Vec<PullRequest> {
     }
 }
 
+/// Enregistre les changements en cours dans un commit (au nom de l'utilisateur, sans mention en plus).
+/// Renvoie `false` s'il n'y avait rien à enregistrer.
+pub fn save_work(dir: &Path, message: &str) -> Result<bool, GitError> {
+    if git(dir, &["status", "--porcelain"], &[])?.trim().is_empty() {
+        return Ok(false);
+    }
+    git(dir, &["add", "-A"], &[])?;
+    git(dir, &["commit", "-q", "-m", message], &[])?;
+    Ok(true)
+}
+
+/// Le résultat d'une fusion.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MergeReport {
+    /// La branche principale qui a reçu le travail.
+    pub base: String,
+    /// Commits de la branche qui sont entrés dans la branche principale.
+    pub merged_commits: u32,
+    /// Fusion « en avance rapide » : la branche principale n'avait pas bougé, aucun commit de fusion.
+    pub fast_forward: bool,
+}
+
+/// Fusionne `branch` dans la branche principale du projet `repo` (là où le projet est ouvert, avec sa
+/// branche principale extraite). Refuse si le projet a des changements non enregistrés ou s'il est sur
+/// une autre branche. En cas de conflit, la fusion est annulée : le projet reste exactement comme avant.
+pub fn merge_branch(repo: &Path, branch: &str) -> Result<MergeReport, GitError> {
+    let base = base_branch(repo).ok_or_else(|| GitError::Failed("branche principale introuvable".into()))?;
+    let current = crate::worktree::current_branch(repo);
+    if current.as_deref() != Some(base.as_str()) {
+        return Err(GitError::Failed(format!(
+            "le projet est sur la branche « {} » et non sur « {base} » : revenir sur « {base} » avant de fusionner",
+            current.unwrap_or_else(|| "(aucune)".into())
+        )));
+    }
+    if !git(repo, &["status", "--porcelain"], &[])?.trim().is_empty() {
+        return Err(GitError::Failed(
+            "le projet a des changements non enregistrés : les enregistrer ou les mettre de côté avant de fusionner".into(),
+        ));
+    }
+    let count: u32 = git(repo, &["rev-list", "--count", &format!("{base}..{branch}")], &[])?.trim().parse().unwrap_or(0);
+    let fast_forward = is_ancestor(repo, &base, branch);
+    match git(repo, &["merge", "--no-edit", branch], &[]) {
+        Ok(_) => Ok(MergeReport { base, merged_commits: count, fast_forward }),
+        Err(error) => {
+            // Conflit : on annule, le projet retrouve son état d'avant.
+            let _ = git(repo, &["merge", "--abort"], &[]);
+            Err(GitError::Failed(format!(
+                "la fusion a des conflits avec « {base} » : elle est annulée, rien n'a changé ({error})"
+            )))
+        }
+    }
+}
+
+fn is_ancestor(repo: &Path, ancestor: &str, descendant: &str) -> bool {
+    Command::new("git")
+        .args(["merge-base", "--is-ancestor", ancestor, descendant])
+        .current_dir(repo)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Abandonne un travail : supprime son dossier de travail (avec tout ce qu'il contient) et sa branche,
+/// commits non fusionnés compris. Définitif : l'appelant doit avoir demandé confirmation.
+pub fn discard_work(repo: &Path, worktree: &Path, branch: &str) -> Result<(), GitError> {
+    let target = worktree.to_string_lossy();
+    git(repo, &["worktree", "remove", "--force", target.as_ref()], &[])?;
+    git(repo, &["branch", "-D", branch], &[]).map(|_| ())
+}
+
 /// Crée une pull request pour la branche : enregistre d'abord les changements en cours (un commit
 /// au nom de l'utilisateur, sans mention supplémentaire), pousse la branche vers `origin`, puis
 /// ouvre la pull request avec `gh`. Renvoie son adresse.
 pub fn create_pull_request(dir: &Path, branch: &str, title: &str) -> Result<String, GitError> {
-    if !git(dir, &["status", "--porcelain"], &[])?.trim().is_empty() {
-        git(dir, &["add", "-A"], &[])?;
-        git(dir, &["commit", "-q", "-m", title], &[])?;
-    }
+    save_work(dir, title)?;
     git(dir, &["push", "-u", "origin", branch], &[])?;
     let out = Command::new("gh")
         .args(["pr", "create", "--head", branch, "--title", title, "--fill"])
@@ -286,6 +353,93 @@ mod tests {
         assert_eq!(by_path("a.txt").status, "modified");
         assert_eq!(summary.commits.len(), 1);
         assert_eq!(summary.commits[0].subject, "ajoute trois");
+    }
+
+    fn project(name: &str) -> std::path::PathBuf {
+        let repo = std::env::temp_dir().join(format!("kana-merge-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&repo);
+        let _ = fs::remove_dir_all(repo.with_extension("wt"));
+        fs::create_dir_all(&repo).unwrap();
+        run(&repo, &["init", "-q", "-b", "main"]);
+        fs::write(repo.join("a.txt"), "un\n").unwrap();
+        run(&repo, &["add", "-A"]);
+        run(&repo, &["commit", "-q", "-m", "init"]);
+        repo
+    }
+
+    fn commit_in(dir: &Path, file: &str, text: &str, message: &str) {
+        fs::write(dir.join(file), text).unwrap();
+        run(dir, &["add", "-A"]);
+        run(dir, &["commit", "-q", "-m", message]);
+    }
+
+    #[test]
+    fn merges_a_branch_by_fast_forward() {
+        let repo = project("ff");
+        let work = repo.with_extension("wt");
+        add_worktree(&repo, &work, "kana/a", None).unwrap();
+        assert!(!save_work(&work, "rien").unwrap());
+        fs::write(work.join("b.txt"), "neuf").unwrap();
+        assert!(save_work(&work, "ajoute b").unwrap());
+        let report = merge_branch(&repo, "kana/a").unwrap();
+        assert_eq!(report, MergeReport { base: "main".into(), merged_commits: 1, fast_forward: true });
+        assert_eq!(fs::read_to_string(repo.join("b.txt")).unwrap(), "neuf");
+    }
+
+    #[test]
+    fn merges_with_a_merge_commit_when_main_has_moved() {
+        let repo = project("merge");
+        let work = repo.with_extension("wt");
+        add_worktree(&repo, &work, "kana/a", None).unwrap();
+        commit_in(&work, "b.txt", "b", "branche");
+        commit_in(&repo, "c.txt", "c", "principale");
+        let report = merge_branch(&repo, "kana/a").unwrap();
+        assert!(!report.fast_forward);
+        assert!(repo.join("b.txt").exists() && repo.join("c.txt").exists());
+    }
+
+    #[test]
+    fn refuses_a_dirty_project_or_another_branch() {
+        let repo = project("refuse");
+        let work = repo.with_extension("wt");
+        add_worktree(&repo, &work, "kana/a", None).unwrap();
+        commit_in(&work, "b.txt", "b", "branche");
+        fs::write(repo.join("sale.txt"), "pas enregistré").unwrap();
+        let dirty = merge_branch(&repo, "kana/a").unwrap_err().to_string();
+        assert!(dirty.contains("changements non enregistrés"), "{dirty}");
+        assert!(!repo.join("b.txt").exists());
+        fs::remove_file(repo.join("sale.txt")).unwrap();
+        run(&repo, &["checkout", "-q", "-b", "autre"]);
+        let other = merge_branch(&repo, "kana/a").unwrap_err().to_string();
+        assert!(other.contains("autre"), "{other}");
+    }
+
+    #[test]
+    fn a_conflict_cancels_the_merge_and_leaves_the_project_untouched() {
+        let repo = project("conflict");
+        let work = repo.with_extension("wt");
+        add_worktree(&repo, &work, "kana/a", None).unwrap();
+        commit_in(&work, "a.txt", "version de la branche\n", "branche");
+        commit_in(&repo, "a.txt", "version principale\n", "principale");
+        let before = git(&repo, &["rev-parse", "HEAD"], &[]).unwrap();
+        let error = merge_branch(&repo, "kana/a").unwrap_err().to_string();
+        assert!(error.contains("conflits"), "{error}");
+        assert_eq!(git(&repo, &["rev-parse", "HEAD"], &[]).unwrap(), before);
+        assert!(git(&repo, &["status", "--porcelain"], &[]).unwrap().trim().is_empty());
+        assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "version principale\n");
+    }
+
+    #[test]
+    fn discarding_removes_the_folder_and_the_branch_even_with_unmerged_work() {
+        let repo = project("discard");
+        let work = repo.with_extension("wt");
+        add_worktree(&repo, &work, "kana/a", None).unwrap();
+        commit_in(&work, "b.txt", "b", "travail jamais fusionné");
+        fs::write(work.join("c.txt"), "pas enregistré").unwrap();
+        discard_work(&repo, &work, "kana/a").unwrap();
+        assert!(!work.exists());
+        assert!(crate::worktree::kana_branches(&repo).is_empty());
+        assert!(!repo.join("b.txt").exists());
     }
 
     #[test]
