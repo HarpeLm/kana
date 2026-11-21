@@ -29,13 +29,9 @@ export const buildRelayContext = (messages: ChatMessage[], fromName: string) =>
 const RECENT_CHARS = 8_000;
 const OLD_MESSAGE_CHARS = 240;
 const COMPACT_INTRO = "La session de l'agent a été compactée pour libérer sa mémoire : voici un résumé de la conversation, avec les échanges récents en entier et les plus anciens raccourcis.";
+const RESUME_INTRO = "Cette conversation reprend après un redémarrage de l'application ou de l'agent : voici le contexte des échanges précédents, avec les plus récents en entier et les plus anciens raccourcis.";
 
-/**
- * Le contexte d'une session compactée : l'agent repart de zéro avec ce résumé au lieu de tout l'historique.
- * Les messages les plus récents restent complets, les anciens sont réduits à leur début.
- */
-export function buildCompactContext(messages: ChatMessage[]): string {
-  const talk = messages.filter((m) => (m.role === "user" || m.role === "agent") && m.text.trim());
+function formatCondensedHistory(talk: ChatMessage[], intro: string): string {
   const lines: string[] = [];
   let recent = 0;
   for (let i = talk.length - 1; i >= 0; i--) {
@@ -46,5 +42,26 @@ export function buildCompactContext(messages: ChatMessage[]): string {
     const shown = full ? text : text.length > OLD_MESSAGE_CHARS ? `${text.slice(0, OLD_MESSAGE_CHARS)}…` : text;
     lines.unshift(`${m.role === "user" ? "Utilisateur" : "Agent"} : ${shown}`);
   }
-  return `${COMPACT_INTRO}\n\n${lines.join("\n\n")}\n\n---\nMaintenant, voici mon nouveau message :\n\n`;
+  return `${intro}\n\n${lines.join("\n\n")}\n\n---\nMaintenant, voici mon nouveau message :\n\n`;
+}
+
+function talkMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((m) => (m.role === "user" || m.role === "agent") && m.text.trim());
+}
+
+/**
+ * Le contexte d'une session compactée : l'agent repart de zéro avec ce résumé au lieu de tout l'historique.
+ * Les messages les plus récents restent complets, les anciens sont réduits à leur début.
+ */
+export function buildCompactContext(messages: ChatMessage[]): string {
+  return formatCondensedHistory(talkMessages(messages), COMPACT_INTRO);
+}
+
+/**
+ * Le contexte de reprise après un redémarrage lorsque l'agent ne peut pas reprendre via `session/load`.
+ * Renvoie une chaîne vide s'il n'y a aucun échange exploitable.
+ */
+export function buildResumeContext(messages: ChatMessage[]): string {
+  const talk = talkMessages(messages);
+  return talk.length > 0 ? formatCondensedHistory(talk, RESUME_INTRO) : "";
 }
