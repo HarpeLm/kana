@@ -55,6 +55,7 @@ pub fn run() {
             agent_commands::set_effort,
             agent_commands::stop_agent,
             settings_commands::list_models,
+            settings_commands::suggest_title,
             agent_commands::answer_permission,
             settings_commands::check_agent,
             settings_commands::login_agent,
