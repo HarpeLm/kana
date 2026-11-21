@@ -113,7 +113,7 @@ export default function InspectorModal({ open, conversation, messages, onClose }
       >
         <div className="flex items-center justify-between border-b border-[#2f2f2c] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <Activity className="h-4 w-4 text-[#d97757]" strokeWidth={1.8} />
+            <Activity className="h-4 w-4 text-[#60a5fa]" strokeWidth={1.8} />
             <h2 className="text-[15px] font-semibold text-[#ecebe4]">
               {tr("Inspecteur ACP/MCP & Export", "ACP/MCP Inspector & Export", locale)}
             </h2>
@@ -143,7 +143,7 @@ export default function InspectorModal({ open, conversation, messages, onClose }
             <button
               type="button"
               onClick={handleExportMd}
-              className="flex items-center gap-1.5 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768]"
+              className="flex items-center gap-1.5 rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
             >
               <Download className="h-3.5 w-3.5" strokeWidth={1.8} />
               <span>{tr("Exporter Markdown (.md)", "Export Markdown (.md)", locale)}</span>
