@@ -313,17 +313,132 @@ pub async fn install_adapter_cache(agent_id: String) -> Result<AdapterCacheInfo,
         .ok_or_else(|| "adaptateur introuvable après installation".to_string())
 }
 
-/// Vérifie la disponibilité d'une mise à jour de l'application Tauri Kana.
+const LATEST_RELEASE_MANIFEST_URL: &str =
+    "https://github.com/HarpeLm/kana/releases/latest/download/latest.json";
+
+fn strip_version_prefix(version: &str) -> &str {
+    version.trim().trim_start_matches(['v', 'V'])
+}
+
+fn parse_semver_tuple(version: &str) -> Option<([u64; 3], bool)> {
+    let clean = strip_version_prefix(version);
+    if clean.is_empty() {
+        return None;
+    }
+    let without_build = clean.split('+').next().unwrap_or(clean);
+    let (core, is_prerelease) = match without_build.split_once('-') {
+        Some((c, _)) => (c, true),
+        None => (without_build, false),
+    };
+    let mut parts = [0u64; 3];
+    let mut count = 0usize;
+    for (idx, seg) in core.split('.').enumerate() {
+        if idx >= 3 {
+            break;
+        }
+        parts[idx] = seg.parse::<u64>().ok()?;
+        count += 1;
+    }
+    if count == 0 {
+        return None;
+    }
+    Some((parts, is_prerelease))
+}
+
+/// Compare deux versions semver (`latest > current`).
+pub(crate) fn is_newer_version(latest: &str, current: &str) -> bool {
+    let Some((latest_parts, latest_pre)) = parse_semver_tuple(latest) else {
+        return false;
+    };
+    let Some((current_parts, current_pre)) = parse_semver_tuple(current) else {
+        return false;
+    };
+    match latest_parts.cmp(&current_parts) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Less => false,
+        std::cmp::Ordering::Equal => !latest_pre && current_pre,
+    }
+}
+
+/// Analyse le manifeste JSON Tauri `latest.json` (GitHub Releases) et compare avec `current_version`.
+pub(crate) fn parse_release_manifest(
+    current_version: &str,
+    json_body: &str,
+) -> Result<AppUpdateInfo, String> {
+    let value: serde_json::Value = serde_json::from_str(json_body)
+        .map_err(|e| format!("manifeste de release JSON invalide : {e}"))?;
+
+    let raw_latest = value
+        .get("version")
+        .or_else(|| value.get("tag_name"))
+        .and_then(serde_json::Value::as_str)
+        .map(strip_version_prefix)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "champ `version` absent du manifeste de release".to_string())?;
+
+    let current_clean = strip_version_prefix(current_version);
+    let update_available = is_newer_version(raw_latest, current_clean);
+    let channel = value
+        .get("channel")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("stable")
+        .to_string();
+
+    let notes = value
+        .get("notes")
+        .or_else(|| value.get("body"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if update_available {
+                format!("Nouvelle version v{raw_latest} disponible sur GitHub Releases.")
+            } else {
+                format!("Kana est à jour (v{current_clean}).")
+            }
+        });
+
+    Ok(AppUpdateInfo {
+        current_version: current_clean.to_string(),
+        latest_version: raw_latest.to_string(),
+        update_available,
+        channel,
+        release_notes: notes,
+    })
+}
+
+/// Vérifie la disponibilité d'une mise à jour de l'application Tauri Kana via GitHub Releases (`latest.json`).
 #[tauri::command]
 pub async fn check_app_update() -> Result<AppUpdateInfo, String> {
     let current = env!("CARGO_PKG_VERSION").to_string();
-    Ok(AppUpdateInfo {
-        current_version: current.clone(),
-        latest_version: current,
+    let offline_fallback = |ver: &str| AppUpdateInfo {
+        current_version: ver.to_string(),
+        latest_version: ver.to_string(),
         update_available: false,
         channel: "stable".into(),
-        release_notes: "Kana est à jour (auto-updater Tauri v2 + Homebrew Cask).".into(),
-    })
+        release_notes: format!("Aucune release publiée ou hors-ligne — version locale v{ver}."),
+    };
+
+    let mut cmd = tokio::process::Command::new("curl");
+    cmd.args(["-fsSL", "--max-time", "6", LATEST_RELEASE_MANIFEST_URL])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(8), cmd.output()).await {
+        Ok(Ok(out)) if out.status.success() => out,
+        _ => return Ok(offline_fallback(&current)),
+    };
+
+    let body = String::from_utf8_lossy(&output.stdout);
+    match parse_release_manifest(&current, &body) {
+        Ok(info) => Ok(info),
+        Err(_) => Ok(offline_fallback(&current)),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -589,5 +704,46 @@ mod tests {
         assert!(content.contains(".kana/daemon.log"));
 
         let _ = std::fs::remove_dir_all(&tmp_home);
+    }
+
+    #[test]
+    fn compares_semver_versions_correctly() {
+        assert!(is_newer_version("0.1.1", "0.1.0"));
+        assert!(is_newer_version("v0.2.0", "0.1.9"));
+        assert!(is_newer_version("1.0.0", "0.9.9"));
+        assert!(is_newer_version("1.0.0", "1.0.0-beta.1"));
+        assert!(!is_newer_version("0.1.0", "0.1.0"));
+        assert!(!is_newer_version("0.1.0", "0.2.0"));
+        assert!(!is_newer_version("1.0.0-beta.1", "1.0.0"));
+        assert!(!is_newer_version("invalid", "0.1.0"));
+    }
+
+    #[test]
+    fn parses_release_manifest_for_update_and_up_to_date_states() {
+        let newer_json = r#"{
+            "version": "v0.2.0",
+            "notes": "Dictée vocale et Personnalisation MCP.",
+            "channel": "stable"
+        }"#;
+        let info = parse_release_manifest("0.1.0", newer_json).unwrap();
+        assert_eq!(info.current_version, "0.1.0");
+        assert_eq!(info.latest_version, "0.2.0");
+        assert!(info.update_available);
+        assert_eq!(info.channel, "stable");
+        assert_eq!(info.release_notes, "Dictée vocale et Personnalisation MCP.");
+
+        let same_json = r#"{"version": "0.1.0"}"#;
+        let up_to_date = parse_release_manifest("0.1.0", same_json).unwrap();
+        assert!(!up_to_date.update_available);
+        assert_eq!(up_to_date.latest_version, "0.1.0");
+        assert!(up_to_date.release_notes.contains("à jour"));
+
+        let older_json = r#"{"tag_name": "v0.0.9", "body": "Ancienne version"}"#;
+        let older = parse_release_manifest("0.1.0", older_json).unwrap();
+        assert!(!older.update_available);
+        assert_eq!(older.latest_version, "0.0.9");
+
+        assert!(parse_release_manifest("0.1.0", "{not-json").is_err());
+        assert!(parse_release_manifest("0.1.0", r#"{"notes":"sans version"}"#).is_err());
     }
 }
