@@ -40,7 +40,14 @@ pub fn new_session_params(cwd: &Path, mcp_servers: Vec<Value>) -> Value {
 }
 
 pub fn prompt_params(session_id: &str, text: &str) -> Value {
-    json!({ "sessionId": session_id, "prompt": [{ "type": "text", "text": text }] })
+    prompt_params_with_images(session_id, text, &[])
+}
+
+/// Le message avec de vraies images : chacune est `(type MIME, contenu en base64)`.
+pub fn prompt_params_with_images(session_id: &str, text: &str, images: &[(String, String)]) -> Value {
+    let mut blocks = vec![json!({ "type": "text", "text": text })];
+    blocks.extend(images.iter().map(|(mime, data)| json!({ "type": "image", "mimeType": mime, "data": data })));
+    json!({ "sessionId": session_id, "prompt": blocks })
 }
 
 #[cfg(test)]
@@ -61,6 +68,14 @@ mod tests {
         assert_eq!(params["sessionId"], "s1");
         assert_eq!(params["prompt"][0]["type"], "text");
         assert_eq!(params["prompt"][0]["text"], "salut");
+    }
+
+    #[test]
+    fn prompt_can_carry_images() {
+        let params = prompt_params_with_images("s1", "regarde", &[("image/png".into(), "AQID".into())]);
+        assert_eq!(params["prompt"][1]["type"], "image");
+        assert_eq!(params["prompt"][1]["mimeType"], "image/png");
+        assert_eq!(params["prompt"][1]["data"], "AQID");
     }
 
     #[test]
