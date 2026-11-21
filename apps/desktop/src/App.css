@@ -119,3 +119,11 @@ body.kana-grabbing * {
   cursor: grabbing !important;
   user-select: none !important;
 }
+
+.markdown-body .artifact-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin: 0 0.35em -0.12em 0;
+  vertical-align: baseline;
+}
