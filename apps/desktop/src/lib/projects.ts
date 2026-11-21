@@ -60,3 +60,19 @@ export async function describeFolder(path: string): Promise<Project> {
 export async function scratchDir(): Promise<string | undefined> {
   return inTauri ? invoke<string>("scratch_dir") : undefined;
 }
+
+/** La branche git actuelle de chaque dossier, par chemin (absente : pas un dépôt). */
+export async function loadBranches(paths: string[]): Promise<Record<string, string>> {
+  if (!inTauri || paths.length === 0) return {};
+  try {
+    const branches = await invoke<Array<string | null>>("git_current_branches", { paths });
+    const found: Record<string, string> = {};
+    paths.forEach((path, i) => {
+      const branch = branches[i];
+      if (branch) found[path] = branch;
+    });
+    return found;
+  } catch {
+    return {};
+  }
+}
