@@ -5,7 +5,6 @@ import type { View } from "../data";
 import {
   ARCHIVED_GROUP,
   PINNED_GROUP,
-  groupConversations,
   sectionsOf,
   type Conversation,
 } from "../lib/conversations";
@@ -15,7 +14,7 @@ import ConversationRow from "./ConversationRow";
 import RenameInput from "./RenameInput";
 import { useSectionDrag } from "../hooks/useSectionDrag";
 import SidebarViewMenu from "./SidebarViewMenu";
-import { DEFAULT_VIEW, applyView, flatGroups, saveView, type SidebarView } from "../lib/sidebarView";
+import { DEFAULT_VIEW, saveView, visibleGroups, type SidebarView } from "../lib/sidebarView";
 import NavButtons, { type NavButtonsProps } from "./NavButtons";
 import SidebarNav from "./SidebarNav";
 import SidebarResizer from "./SidebarResizer";
@@ -66,9 +65,7 @@ export default function Sidebar({
     setListView(next);
     saveView(next);
   };
-  const shown = applyView(conversations, listView);
-  const grouped = groupConversations(shown, "");
-  const groups = listView.groupBy === "none" ? flatGroups(grouped) : grouped;
+  const groups = visibleGroups(conversations, listView);
   const sections = sectionsOf(conversations);
   // Les dossiers qu'on peut déplacer, dans l'ordre affiché (seulement avec « Mon ordre »).
   const movable = listView.groupBy === "folder" && listView.sortBy === "manual" ? groups.map((g) => g.name).filter((n) => n !== PINNED_GROUP && n !== ARCHIVED_GROUP) : [];
