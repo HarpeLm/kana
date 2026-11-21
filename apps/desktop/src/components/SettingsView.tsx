@@ -164,7 +164,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
                 type="checkbox"
                 checked={notifications.enabled}
                 onChange={(e) => setNotificationPrefs({ ...notifications, enabled: e.target.checked })}
-                className="h-4 w-4 accent-[#d97757]"
+                className="h-4 w-4 accent-[#2563eb]"
               />
             </label>
 
@@ -179,7 +179,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
                 checked={notifications.sound}
                 disabled={!notifications.enabled}
                 onChange={(e) => setNotificationPrefs({ ...notifications, sound: e.target.checked })}
-                className="h-4 w-4 accent-[#d97757] disabled:cursor-not-allowed"
+                className="h-4 w-4 accent-[#2563eb] disabled:cursor-not-allowed"
               />
             </label>
           </div>
@@ -187,7 +187,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
 
         <section className="mt-8 space-y-4 rounded-xl border border-[#2e2e2b] bg-[#21211f] p-4">
           <div className="flex items-start gap-2.5">
-            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-[#d97757]" strokeWidth={1.8} />
+            <Shield className="mt-0.5 h-4 w-4 shrink-0 text-[#60a5fa]" strokeWidth={1.8} />
             <div>
               <h2 className="text-[14px] font-medium text-[#ecebe4]">
                 {tr(
@@ -242,7 +242,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
             <button
               type="submit"
               disabled={!rulePattern.trim()}
-              className="rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-40"
+              className="rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-40"
             >
               {tr("Ajouter la règle", "Add rule", locale)}
             </button>
@@ -264,7 +264,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
                     aria-label={tr(`Activer ${rule.pattern}`, `Enable ${rule.pattern}`, locale)}
                     checked={rule.enabled}
                     onChange={() => togglePermissionRule(rule.id)}
-                    className="h-3.5 w-3.5 accent-[#d97757]"
+                    className="h-3.5 w-3.5 accent-[#2563eb]"
                   />
                   <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] uppercase ${POLICY_STYLE[rule.policy]}`}>
                     {rule.policy}
@@ -333,7 +333,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
         <section className="mt-8 space-y-4 rounded-xl border border-[#2e2e2b] bg-[#21211f] p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
-              <Package className="mt-0.5 h-4 w-4 shrink-0 text-[#d97757]" strokeWidth={1.8} />
+              <Package className="mt-0.5 h-4 w-4 shrink-0 text-[#60a5fa]" strokeWidth={1.8} />
               <div>
                 <h2 className="text-[14px] font-medium text-[#ecebe4]">
                   {tr(
@@ -356,7 +356,7 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
                 type="button"
                 onClick={() => void handleInstallAllAdapters()}
                 disabled={installingAdapter !== null || adapterCaches.length === 0}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-50"
               >
                 <Download className="h-3.5 w-3.5" />
                 <span>{tr("Tout mettre en cache", "Cache all adapters", locale)}</span>
