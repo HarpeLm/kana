@@ -7,7 +7,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 /// Au-delà, on n'affiche pas d'aperçu : l'image est envoyée à l'agent, mais pas montrée.
 const MAX_PREVIEW_BYTES: u64 = 10 * 1024 * 1024;
 
-fn image_mime(path: &Path) -> Option<&'static str> {
+pub(crate) fn image_mime(path: &Path) -> Option<&'static str> {
     match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "png" => Some("image/png"),
         "jpg" | "jpeg" => Some("image/jpeg"),
