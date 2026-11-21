@@ -19,10 +19,19 @@ export function loadLocalConversations(): Conversation[] | null {
   }
 }
 
+function parseFolders(raw: string | null | undefined): string[] | undefined {
+  try {
+    const list = JSON.parse(raw ?? "null");
+    return Array.isArray(list) && list.length > 0 ? list.filter((p) => typeof p === "string") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Les conversations enregistrées dans la base (liste vide si rien n'y a encore été rangé). */
 export async function loadStoredConversations(): Promise<Conversation[]> {
   if (!inTauri) return loadLocalConversations() ?? [];
-  const rows = await invoke<Array<Omit<Conversation, "openedAt"> & { openedAt: number | null }>>(
+  const rows = await invoke<Array<Omit<Conversation, "openedAt" | "extraFolders"> & { openedAt: number | null; extraFolders: string | null }>>(
     "db_load_conversations",
   );
   return rows.map((row) => ({
@@ -35,6 +44,7 @@ export async function loadStoredConversations(): Promise<Conversation[]> {
     projectPath: row.projectPath ?? undefined,
     useWorktree: row.useWorktree ?? true,
     modelId: row.modelId ?? undefined,
+    extraFolders: parseFolders(row.extraFolders),
   }));
 }
 
@@ -60,6 +70,7 @@ export async function saveStoredConversations(items: Conversation[]): Promise<vo
       projectPath: c.projectPath ?? null,
       useWorktree: c.useWorktree ?? true,
       modelId: c.modelId ?? null,
+      extraFolders: c.extraFolders?.length ? JSON.stringify(c.extraFolders) : null,
     })),
   });
 }
