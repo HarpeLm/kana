@@ -66,6 +66,7 @@ pub fn run() {
             git_commands::git_branch_summary,
             git_commands::git_pull_requests,
             git_commands::git_remote_url,
+            git_commands::git_current_branches,
             git_commands::git_create_pull_request,
             git_commands::repo_files,
             git_commands::read_repo_file,
