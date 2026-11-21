@@ -13,7 +13,9 @@ export function subscribe(handler: (event: ThreadEvent) => void): Unlisten {
 
 export async function sendPrompt(threadId: string, text: string): Promise<void> {
   void (async () => {
-    const reply = `Mode navigateur : agent simulé. Tu as écrit « ${text} ».`;
+    // Le début du message contient les consignes de Kana : l'agent simulé ne répond qu'à ce que l'utilisateur a écrit.
+    const written = text.trim().split("\n\n").pop() ?? text;
+    const reply = `Mode navigateur : agent simulé. Tu as écrit « ${written} ».`;
     for (const word of reply.split(" ")) {
       await wait(60);
       emit({ threadId, kind: "message", text: word + " " });
