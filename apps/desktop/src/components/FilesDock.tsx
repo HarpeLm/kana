@@ -2,7 +2,7 @@ import { useState, type PointerEvent } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { useOpenFiles } from "../hooks/useOpenFiles";
 import { useRepoFiles } from "../hooks/useRepoFiles";
-import { baseName, isMarkdown } from "../lib/fileKinds";
+import { baseName, hasRenderedView, showsRendered } from "../lib/fileKinds";
 import ConfirmDialog from "./ConfirmDialog";
 import FileToolbar from "./FileToolbar";
 import FileTabs from "./FileTabs";
@@ -101,8 +101,8 @@ export default function FilesDock({
           dirty={!!path && files.isDirty(path)}
           saving={!!doc?.saving}
           onSave={() => path && void save(path)}
-          canToggleSource={!!path && isMarkdown(path)}
-          sourceMode={!!path && sourcePaths.has(path)}
+          canToggleSource={!!path && hasRenderedView(path)}
+          sourceMode={!!path && hasRenderedView(path) && !showsRendered(path, sourcePaths.has(path))}
           onToggleSource={() => path && toggleSource(path)}
           onCollapseAll={() => setCollapseSignal((n) => n + 1)}
           treeVisible={showTree}
