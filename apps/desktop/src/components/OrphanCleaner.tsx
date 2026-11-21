@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GitBranch } from "lucide-react";
+import { tr, translateRustError, useLocale, type Locale } from "../lib/i18n";
 import { cleanOrphan, scanOrphans, type CleanOutcome, type Orphan } from "../lib/orphans";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -10,10 +11,24 @@ interface OrphanCleanerProps {
   projects: string[];
 }
 
-function describe(orphan: Orphan): string {
-  if (orphan.dirty) return "travail non enregistré dans son dossier : gardé";
-  if (orphan.ahead > 0) return `${orphan.ahead} commit${orphan.ahead > 1 ? "s" : ""} non fusionné${orphan.ahead > 1 ? "s" : ""} : branche gardée`;
-  return orphan.worktree ? "rien à garder : dossier et branche à supprimer" : "branche vide à supprimer";
+function describe(orphan: Orphan, locale: Locale): string {
+  if (orphan.dirty) {
+    return tr(
+      "travail non enregistré dans son dossier : gardé",
+      "uncommitted work in its directory: kept",
+      locale,
+    );
+  }
+  if (orphan.ahead > 0) {
+    return tr(
+      `${orphan.ahead} commit${orphan.ahead > 1 ? "s" : ""} non fusionné${orphan.ahead > 1 ? "s" : ""} : branche gardée`,
+      `${orphan.ahead} unmerged commit${orphan.ahead > 1 ? "s" : ""}: branch kept`,
+      locale,
+    );
+  }
+  return orphan.worktree
+    ? tr("rien à garder : dossier et branche à supprimer", "nothing to keep: directory and branch to remove", locale)
+    : tr("branche vide à supprimer", "empty branch to remove", locale);
 }
 
 /**
@@ -22,6 +37,7 @@ function describe(orphan: Orphan): string {
  * commits ne sont pas fusionnés, est gardé.
  */
 export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps) {
+  const locale = useLocale();
   const [orphans, setOrphans] = useState<Orphan[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -35,7 +51,7 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
     try {
       setOrphans(await scanOrphans(knownIds, projects));
     } catch (e) {
-      setError(String(e));
+      setError(translateRustError(String(e), locale));
     } finally {
       setBusy(false);
     }
@@ -50,7 +66,10 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
       try {
         results.push({ orphan, outcome: await cleanOrphan(orphan) });
       } catch (e) {
-        results.push({ orphan, outcome: { removed_worktree: false, deleted_branch: false, kept: String(e) } });
+        results.push({
+          orphan,
+          outcome: { removed_worktree: false, deleted_branch: false, kept: translateRustError(String(e), locale) },
+        });
       }
     }
     setReport(results);
@@ -63,10 +82,13 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
   return (
     <section className="mt-8 space-y-3 rounded-xl border border-[#2e2e2b] bg-[#21211f] p-4">
       <div>
-        <h2 className="text-[14px] font-medium text-[#ecebe4]">Dossiers de travail</h2>
+        <h2 className="text-[14px] font-medium text-[#ecebe4]">{tr("Dossiers de travail", "Worktrees", locale)}</h2>
         <p className="mt-0.5 text-[12px] text-[#8c8b83]">
-          Chaque conversation travaille sur sa propre branche <code>kana/…</code>. Quand la conversation est supprimée, il
-          peut en rester des traces. Le nettoyage ne supprime jamais de travail non enregistré ni de commits non fusionnés.
+          {tr(
+            "Chaque conversation travaille sur sa propre branche kana/…. Quand la conversation est supprimée, il peut en rester des traces. Le nettoyage ne supprime jamais de travail non enregistré ni de commits non fusionnés.",
+            "Each conversation works on its own kana/… branch. When a conversation is deleted, leftovers may remain. Cleanup never deletes uncommitted work or unmerged commits.",
+            locale,
+          )}
         </p>
       </div>
 
@@ -75,12 +97,24 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
         disabled={busy}
         className="rounded-lg bg-[#2e2e2b] px-3 py-1.5 text-[12px] font-medium text-[#e6e5df] transition hover:bg-[#383835] disabled:opacity-50"
       >
-        {busy ? "Recherche…" : orphans ? "Chercher à nouveau" : "Chercher les dossiers orphelins"}
+        {busy
+          ? tr("Recherche…", "Scanning…", locale)
+          : orphans
+            ? tr("Chercher à nouveau", "Scan again", locale)
+            : tr("Chercher les dossiers orphelins", "Scan orphan worktrees", locale)}
       </button>
 
       {error && <p className="whitespace-pre-wrap text-[12px] text-red-300">{error}</p>}
 
-      {orphans && orphans.length === 0 && <p className="text-[12.5px] text-[#8c8b83]">Rien à nettoyer : chaque branche kana/… a sa conversation.</p>}
+      {orphans && orphans.length === 0 && (
+        <p className="text-[12.5px] text-[#8c8b83]">
+          {tr(
+            "Rien à nettoyer : chaque branche kana/… a sa conversation.",
+            "Nothing to clean: every kana/… branch belongs to a conversation.",
+            locale,
+          )}
+        </p>
+      )}
 
       {orphans && orphans.length > 0 && (
         <>
@@ -92,7 +126,9 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
                   <span className="block truncate text-[#ecebe4]">
                     {orphan.repo_name} · <span className="font-mono text-[12px]">{orphan.branch}</span>
                   </span>
-                  <span className={`block text-[12px] ${orphan.dirty || orphan.ahead > 0 ? "text-[#e69b80]" : "text-[#8c8b83]"}`}>{describe(orphan)}</span>
+                  <span className={`block text-[12px] ${orphan.dirty || orphan.ahead > 0 ? "text-[#e69b80]" : "text-[#8c8b83]"}`}>
+                    {describe(orphan, locale)}
+                  </span>
                 </span>
               </li>
             ))}
@@ -102,7 +138,7 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
             disabled={busy || removable.length === 0}
             className="rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-40"
           >
-            Nettoyer ce qui est sûr ({removable.length})
+            {tr(`Nettoyer ce qui est sûr (${removable.length})`, `Clean safe items (${removable.length})`, locale)}
           </button>
         </>
       )}
@@ -113,9 +149,11 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
             <li key={orphan.branch}>
               <span className="font-mono">{orphan.branch}</span> :{" "}
               {outcome.kept
-                ? `gardée (${outcome.kept})`
-                : "supprimée"}
-              {outcome.removed_worktree && !outcome.deleted_branch && !outcome.kept ? " (dossier seulement)" : ""}
+                ? tr(`gardée (${outcome.kept})`, `kept (${outcome.kept})`, locale)
+                : tr("supprimée", "removed", locale)}
+              {outcome.removed_worktree && !outcome.deleted_branch && !outcome.kept
+                ? tr(" (dossier seulement)", " (directory only)", locale)
+                : ""}
             </li>
           ))}
         </ul>
@@ -123,15 +161,18 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
 
       {confirming && (
         <ConfirmDialog
-          title="Nettoyer les dossiers orphelins ?"
-          confirmLabel="Nettoyer"
+          title={tr("Nettoyer les dossiers orphelins ?", "Clean orphan worktrees?", locale)}
+          confirmLabel={tr("Nettoyer", "Clean", locale)}
           confirmTone="accent"
           initialFocus="cancel"
           onCancel={() => setConfirming(false)}
           onConfirm={() => void clean()}
         >
-          Kana va supprimer {removable.length} dossier{removable.length > 1 ? "s" : ""} de travail ou branche{removable.length > 1 ? "s" : ""} qui ne
-          contiennent plus rien d'utile. Ce qui contient du travail non enregistré ou des commits non fusionnés est gardé.
+          {tr(
+            `Kana va supprimer ${removable.length} dossier${removable.length > 1 ? "s" : ""} de travail ou branche${removable.length > 1 ? "s" : ""} qui ne contiennent plus rien d'utile. Ce qui contient du travail non enregistré ou des commits non fusionnés est gardé.`,
+            `Kana will delete ${removable.length} worktree${removable.length > 1 ? "s" : ""} or branch${removable.length > 1 ? "es" : ""} that no longer hold anything useful. Uncommitted work or unmerged commits are kept.`,
+            locale,
+          )}
         </ConfirmDialog>
       )}
     </section>
