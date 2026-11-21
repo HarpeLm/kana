@@ -1,10 +1,13 @@
 //! Commandes Tauri de l'écran Réglages : connexion des agents et clés d'API.
 
-use kana_acp::{AcpClient, AcpError, AgentModels, AuthMethod};
+use kana_acp::{
+    AcpClient, AcpError, AdapterCacheInfo, AgentModels, AuthMethod, adapter_cache_dir,
+    inspect_adapter_cache,
+};
 use serde::Serialize;
 
 use crate::{
-    agent_spec::{project_dir, spec_for},
+    agent_spec::{default_cwd, project_dir, spec_for},
     secrets,
 };
 
@@ -249,6 +252,78 @@ pub async fn run_hook_command(cwd: Option<String>, command: String) -> Result<St
         });
     }
     Ok(combined)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateInfo {
+    pub current_version: String,
+    pub latest_version: String,
+    pub update_available: bool,
+    pub channel: String,
+    pub release_notes: String,
+}
+
+/// Liste l'état du cache local (`~/.kana/adapters`) pour les adaptateurs ACP (`claude`, `codex`, `gemini`).
+#[tauri::command]
+pub fn list_adapter_caches() -> Vec<AdapterCacheInfo> {
+    let home = default_cwd();
+    ["claude", "codex", "gemini"]
+        .into_iter()
+        .filter_map(|id| inspect_adapter_cache(id, &home))
+        .collect()
+}
+
+/// Pré-installe ou met à jour localement l'adaptateur ACP de `agent_id` dans `~/.kana/adapters`.
+#[tauri::command]
+pub async fn install_adapter_cache(agent_id: String) -> Result<AdapterCacheInfo, String> {
+    let home = default_cwd();
+    let info = inspect_adapter_cache(&agent_id, &home)
+        .ok_or_else(|| format!("aucun adaptateur npm à mettre en cache pour '{agent_id}'"))?;
+    let cache_dir = adapter_cache_dir(&home);
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("impossible de créer le dossier de cache : {e}"))?;
+
+    let npm_cmd = if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" };
+    let mut cmd = tokio::process::Command::new(npm_cmd);
+    cmd.args([
+        "install",
+        "--prefix",
+        &cache_dir.to_string_lossy(),
+        "--no-audit",
+        "--no-fund",
+        &info.package,
+    ])
+    .stdin(std::process::Stdio::null())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .kill_on_drop(true);
+
+    let output = tokio::time::timeout(std::time::Duration::from_secs(120), cmd.output())
+        .await
+        .map_err(|_| "l'installation de l'adaptateur ACP a expiré".to_string())?
+        .map_err(|e| format!("impossible de lancer npm : {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!("échec de `npm install {}` : {stderr}", info.package));
+    }
+
+    inspect_adapter_cache(&agent_id, &home)
+        .ok_or_else(|| "adaptateur introuvable après installation".to_string())
+}
+
+/// Vérifie la disponibilité d'une mise à jour de l'application Tauri Kana.
+#[tauri::command]
+pub async fn check_app_update() -> Result<AppUpdateInfo, String> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    Ok(AppUpdateInfo {
+        current_version: current.clone(),
+        latest_version: current,
+        update_available: false,
+        channel: "stable".into(),
+        release_notes: "Kana est à jour (auto-updater Tauri v2 + Homebrew Cask).".into(),
+    })
 }
 
 #[cfg(test)]
