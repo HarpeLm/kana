@@ -13,7 +13,7 @@ import ToolbarButton from "./ToolbarButton";
 
 interface FilesDockProps {
   /** Un fichier à ouvrir (depuis le panneau de la session) ; `id` change à chaque demande. */
-  openRequest?: { id: number; path: string } | null;
+  openRequest?: { id: number; path: string; line?: number } | null;
   /** Dossier de travail de la conversation ; sans lui, le dépôt où l'app a été lancée. */
   root?: string;
   visible: boolean;
@@ -134,6 +134,7 @@ export default function FilesDock({
               onSave={(target) => void save(target)}
               onOverwrite={(target) => void save(target, true)}
               onReload={(target) => void files.reload(target)}
+              goTo={openRequest?.line ? { id: openRequest.id, path: openRequest.path, line: openRequest.line } : null}
             />
           </div>
 
