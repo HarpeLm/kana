@@ -1,0 +1,47 @@
+# Kana Cloud — Backend managé & compagnon Web/Mobile (`kana serve`)
+# Compatible Fly.io, Railway, Render, Coolify et tout VPS Docker.
+
+FROM rust:1.86-bookworm AS builder
+
+WORKDIR /src
+
+# Dépendances système requises pour compiler le binaire Tauri/Kana en mode headless Linux
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    libgtk-3-dev \
+    libwebkit2gtk-4.1-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY apps/desktop/src-tauri ./apps/desktop/src-tauri
+
+RUN cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml --bin Kana
+
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/target/release/Kana /usr/local/bin/kana
+RUN chmod +x /usr/local/bin/kana
+
+WORKDIR /workspace
+
+ENV KANA_CLOUD_TOKEN=""
+ENV RUST_LOG="info"
+
+EXPOSE 7788
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:7788/api/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/kana", "serve", "--host", "0.0.0.0", "--port", "7788", "--cwd", "/workspace"]
