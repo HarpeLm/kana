@@ -1,33 +1,33 @@
-# Code de conduite
+# Code of conduct
 
-## Notre engagement
+## Our pledge
 
-Nous voulons que participer à Kana soit une expérience agréable et sûre pour tout le monde, quels que soient l'âge, le handicap, l'origine, l'identité ou l'expression de genre, le niveau d'expérience, la nationalité, l'apparence, la religion ou l'orientation.
+We want taking part in Kana to be a pleasant and safe experience for everyone, regardless of age, disability, background, gender identity or expression, level of experience, nationality, appearance, religion or orientation.
 
-## Ce que nous attendons
+## What we expect
 
-- Se montrer respectueux et bienveillant, y compris quand on n'est pas d'accord.
-- Accepter les critiques constructives avec grâce, et les formuler de la même façon.
-- Se concentrer sur ce qui est le mieux pour le projet et la communauté.
-- Assumer ses erreurs, s'en excuser, et apprendre.
+- Be respectful and kind, including when you disagree.
+- Accept constructive criticism gracefully, and give it the same way.
+- Focus on what is best for the project and the community.
+- Own your mistakes, apologize for them, and learn from them.
 
-## Ce qui n'est pas accepté
+## What is not acceptable
 
-- Les propos ou images à caractère sexuel, et les avances non souhaitées.
-- Les insultes, les attaques personnelles, le harcèlement, les menaces.
-- Publier les informations privées de quelqu'un sans son accord.
-- Tout comportement qu'on jugerait raisonnablement déplacé dans un cadre professionnel.
+- Sexualized language or images, and unwelcome advances.
+- Insults, personal attacks, harassment, threats.
+- Publishing someone's private information without their consent.
+- Any conduct that would reasonably be considered inappropriate in a professional setting.
 
-## Application
+## Enforcement
 
-Les mainteneurs peuvent modifier ou supprimer les commentaires, issues, pull requests et autres contributions qui ne respectent pas ce code, et exclure temporairement ou définitivement une personne dont le comportement est inapproprié.
+Maintainers may edit or remove comments, issues, pull requests and other contributions that do not follow this code, and may temporarily or permanently ban a person whose behavior is inappropriate.
 
-Pour signaler un comportement, écrivez aux mainteneurs en privé (voir le profil [@HarpeLm](https://github.com/HarpeLm)). Chaque signalement est traité avec sérieux et dans la confidentialité, pour protéger la personne qui le fait.
+To report behavior, write to the maintainers privately (see the profile [@HarpeLm](https://github.com/HarpeLm)). Every report is taken seriously and handled confidentially, to protect the person who makes it.
 
-## Où il s'applique
+## Scope
 
-Ce code s'applique dans tous les espaces du projet (dépôt, issues, discussions, pull requests), et quand une personne représente publiquement le projet.
+This code applies in all project spaces (repository, issues, discussions, pull requests), and when a person publicly represents the project.
 
-## Source
+## Attribution
 
-Ce texte s'inspire du [Contributor Covenant](https://www.contributor-covenant.org/fr/version/2/1/code_of_conduct/), version 2.1.
+This text is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/), version 2.1.
