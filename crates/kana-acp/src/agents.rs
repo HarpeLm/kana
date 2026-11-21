@@ -1,6 +1,6 @@
 //! Commandes de lancement des agents compatibles ACP.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -229,6 +229,71 @@ pub fn preset(agent_id: &str) -> Option<AgentSpec> {
     }
 }
 
+/// État du cache local d'un adaptateur ACP (évite `npx -y` à chaque démarrage).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterCacheInfo {
+    pub agent_id: String,
+    pub package: String,
+    pub binary: String,
+    pub cached: bool,
+    pub local_path: Option<String>,
+}
+
+/// Dossier où Kana installe et met en cache localement les adaptateurs npm ACP (`~/.kana/adapters`).
+pub fn adapter_cache_dir(home: &Path) -> PathBuf {
+    home.join(".kana").join("adapters")
+}
+
+fn adapter_package_and_binary(agent_id: &str) -> Option<(&'static str, &'static str, &'static [&'static str])> {
+    match agent_id {
+        "codex" => Some(("@zed-industries/codex-acp", "codex-acp", &[])),
+        "claude" => Some(("@zed-industries/claude-agent-acp", "claude-agent-acp", &[])),
+        "gemini" => Some(("@google/gemini-cli", "gemini", &["--experimental-acp"])),
+        _ => None,
+    }
+}
+
+/// Inspecte si l'adaptateur ACP de `agent_id` est présent dans le cache local `~/.kana/adapters`.
+pub fn inspect_adapter_cache(agent_id: &str, home: &Path) -> Option<AdapterCacheInfo> {
+    let (package, binary, _) = adapter_package_and_binary(agent_id)?;
+    let bin_dir = adapter_cache_dir(home).join("node_modules").join(".bin");
+    let candidate = if cfg!(target_os = "windows") {
+        let cmd = bin_dir.join(format!("{binary}.cmd"));
+        if cmd.is_file() { cmd } else { bin_dir.join(binary) }
+    } else {
+        bin_dir.join(binary)
+    };
+    let cached = candidate.is_file();
+    Some(AdapterCacheInfo {
+        agent_id: agent_id.to_string(),
+        package: package.to_string(),
+        binary: binary.to_string(),
+        cached,
+        local_path: cached.then(|| candidate.to_string_lossy().into_owned()),
+    })
+}
+
+/// Remplace `npx -y <package>` par le binaire local mis en cache dans `~/.kana/adapters` lorsqu'il est disponible.
+pub fn with_cached_adapter(mut spec: AgentSpec, home: &Path) -> AgentSpec {
+    if spec.command != "npx" {
+        return spec;
+    }
+    for agent_id in ["codex", "claude", "gemini"] {
+        let Some((pkg, _, extra_args)) = adapter_package_and_binary(agent_id) else {
+            continue;
+        };
+        if spec.args.iter().any(|a| a == pkg)
+            && let Some(info) = inspect_adapter_cache(agent_id, home)
+            && let Some(local_bin) = info.local_path
+        {
+            spec.command = local_bin;
+            spec.args = extra_args.iter().map(|s| (*s).to_string()).collect();
+            break;
+        }
+    }
+    spec
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,5 +441,39 @@ mod tests {
                 ]
             )
         );
+    }
+
+    #[test]
+    fn with_cached_adapter_replaces_npx_when_local_binary_is_present() {
+        let home = std::env::temp_dir().join(format!("kana-adapter-cache-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let bin_dir = adapter_cache_dir(&home).join("node_modules").join(".bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+
+        let before = inspect_adapter_cache("claude", &home).unwrap();
+        assert!(!before.cached);
+        assert!(before.local_path.is_none());
+
+        let unchanged = with_cached_adapter(preset("claude").unwrap(), &home);
+        assert_eq!(unchanged.command, "npx");
+
+        let claude_bin = bin_dir.join("claude-agent-acp");
+        std::fs::write(&claude_bin, "#!/bin/sh\n").unwrap();
+        let gemini_bin = bin_dir.join("gemini");
+        std::fs::write(&gemini_bin, "#!/bin/sh\n").unwrap();
+
+        let after = inspect_adapter_cache("claude", &home).unwrap();
+        assert!(after.cached);
+        assert_eq!(after.local_path.as_deref(), Some(claude_bin.to_string_lossy().as_ref()));
+
+        let cached_claude = with_cached_adapter(preset("claude").unwrap(), &home);
+        assert_eq!(cached_claude.command, claude_bin.to_string_lossy().as_ref());
+        assert!(cached_claude.args.is_empty());
+
+        let cached_gemini = with_cached_adapter(preset("gemini").unwrap(), &home);
+        assert_eq!(cached_gemini.command, gemini_bin.to_string_lossy().as_ref());
+        assert_eq!(cached_gemini.args, vec!["--experimental-acp".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
