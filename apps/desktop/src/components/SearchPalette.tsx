@@ -21,8 +21,9 @@ interface SearchPaletteProps {
   artifacts: ArtifactEntry[];
   onOpenArtifact: (item: ArtifactEntry) => void;
   onArtifactMenu: (item: ArtifactEntry, x: number, y: number) => void;
-  onCreate: () => void;
-  onOpenSettings: () => void;
+  onAction?: (actionId: string) => void;
+  onCreate?: () => void;
+  onOpenSettings?: () => void;
   onClose: () => void;
 }
 
@@ -33,6 +34,7 @@ export default function SearchPalette({
   onOpenArtifact,
   onArtifactMenu,
   onOpenConversation,
+  onAction,
   onCreate,
   onOpenSettings,
   onClose,
@@ -58,10 +60,10 @@ export default function SearchPalette({
         .filter((c) => c.project === name)
         .sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0))[0];
       if (latest) onOpenConversation(latest.id);
-    } else if (item.id === ACTION_NEW) {
-      onCreate();
-    } else {
-      onOpenSettings();
+    } else if (item.kind === "action") {
+      if (onAction) onAction(item.id);
+      else if (item.id === ACTION_NEW) onCreate?.();
+      else onOpenSettings?.();
     }
   };
 
