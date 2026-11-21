@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Blocks, ChevronRight, Folder, Paperclip, Plug, Plus, SquareSlash } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
+import { tr, useLocale } from "../lib/i18n";
 
 interface PlusMenuProps {
   onAddFiles: () => void;
@@ -39,6 +40,7 @@ function Item({
 
 /** Menu du bouton « + » : joindre des fichiers ou un dossier, commandes slash, connecteurs, plug-ins. */
 export default function PlusMenu({ onAddFiles, onAddFolder, onSlash, onOpenConnectors, onOpenPlugins }: PlusMenuProps) {
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useClickOutside(root, open, () => setOpen(false));
@@ -53,8 +55,8 @@ export default function PlusMenu({ onAddFiles, onAddFolder, onSlash, onOpenConne
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="Ajouter"
-        aria-label="Ajouter"
+        title={tr("Ajouter", "Add", locale)}
+        aria-label={tr("Ajouter", "Add", locale)}
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#a3a29a] transition hover:bg-[#2e2e2c] hover:text-[#ecebe4] ${
           open ? "bg-[#2e2e2c] text-[#ecebe4]" : ""
         }`}
@@ -65,21 +67,21 @@ export default function PlusMenu({ onAddFiles, onAddFolder, onSlash, onOpenConne
         <div className="absolute bottom-full left-0 z-30 mb-2 w-[320px] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl">
           <Item
             icon={<Paperclip className={icon} strokeWidth={1.6} />}
-            label="Ajouter des fichiers ou des photos"
+            label={tr("Ajouter des fichiers ou des photos", "Add files or images", locale)}
             hint="⌘U"
             onClick={run(onAddFiles)}
           />
-          <Item icon={<Folder className={icon} strokeWidth={1.6} />} label="Ajouter un dossier" onClick={run(onAddFolder)} />
-          <Item icon={<SquareSlash className={icon} strokeWidth={1.6} />} label="Commandes slash" onClick={run(onSlash)} />
+          <Item icon={<Folder className={icon} strokeWidth={1.6} />} label={tr("Ajouter un dossier", "Add folder", locale)} onClick={run(onAddFolder)} />
+          <Item icon={<SquareSlash className={icon} strokeWidth={1.6} />} label={tr("Commandes slash", "Slash commands", locale)} onClick={run(onSlash)} />
           <Item
             icon={<Blocks className={icon} strokeWidth={1.6} />}
-            label="Connecteurs"
+            label={tr("Connecteurs", "Connectors", locale)}
             hint={<ChevronRight className="h-4 w-4" />}
             onClick={run(() => onOpenConnectors?.())}
           />
           <Item
             icon={<Plug className={icon} strokeWidth={1.6} />}
-            label="Plug-ins"
+            label={tr("Plug-ins", "Plugins", locale)}
             hint={<ChevronRight className="h-4 w-4" />}
             onClick={run(() => onOpenPlugins?.())}
           />
