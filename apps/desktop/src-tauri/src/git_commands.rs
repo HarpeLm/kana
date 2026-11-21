@@ -123,3 +123,111 @@ pub async fn git_current_branches(paths: Vec<String>) -> Result<Vec<Option<Strin
     .await
     .map_err(|e| e.to_string())
 }
+
+/// Lit les fichiers de règles projet (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.kana/rules.md`).
+#[tauri::command]
+pub async fn git_read_rule_files(path: Option<String>) -> Result<Vec<kana_git::RuleFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::read_rule_files(&start_dir(path)?).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Écrit ou crée l'un des fichiers de règles projet autorisés.
+#[tauri::command]
+pub async fn git_write_rule_file(
+    path: Option<String>,
+    file: String,
+    content: String,
+) -> Result<kana_git::RuleFile, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::write_rule_file(&start_dir(path)?, &file, &content).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Synchronise le même contenu de règles vers plusieurs fichiers cibles autorisés.
+#[tauri::command]
+pub async fn git_sync_rule_files(
+    path: Option<String>,
+    content: String,
+    targets: Vec<String>,
+) -> Result<Vec<kana_git::RuleFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::sync_rule_files(&start_dir(path)?, &content, &targets).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Annule toutes les modifications d'un fichier du dépôt.
+#[tauri::command]
+pub async fn git_revert_file(path: Option<String>, file: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::revert_file(&start_dir(path)?, &file).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Annule un seul bloc (`hunk_header`) d'un fichier du dépôt.
+#[tauri::command]
+pub async fn git_revert_hunk(
+    path: Option<String>,
+    file: String,
+    hunk_header: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::revert_hunk(&start_dir(path)?, &file, &hunk_header).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Crée un checkpoint Git de l'état courant du dossier de travail sans polluer `HEAD`.
+#[tauri::command]
+pub async fn git_create_checkpoint(path: Option<String>, label: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::create_checkpoint(&start_dir(path)?, &label).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Restaure le dossier de travail à un checkpoint précédent.
+#[tauri::command]
+pub async fn git_restore_checkpoint(path: Option<String>, target: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::restore_checkpoint(&start_dir(path)?, &target).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Inspecte les conflits de fusion entre `branch` et la branche principale sans salir le dépôt.
+#[tauri::command]
+pub async fn git_inspect_conflicts(
+    path: Option<String>,
+    branch: String,
+) -> Result<Vec<kana_git::ConflictFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::inspect_merge_conflicts(&start_dir(path)?, &branch).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Importe les commentaires de review et les logs CI en échec d'une PR/MR (GitHub ou GitLab).
+#[tauri::command]
+pub async fn git_pr_feedback(
+    path: Option<String>,
+    pr_number: u64,
+) -> Result<kana_git::PrFeedback, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::fetch_pr_feedback(&start_dir(path)?, pr_number).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
