@@ -6,6 +6,8 @@ interface PlusMenuProps {
   onAddFiles: () => void;
   onAddFolder: () => void;
   onSlash: () => void;
+  onOpenConnectors?: () => void;
+  onOpenPlugins?: () => void;
 }
 
 function Item({
@@ -36,7 +38,7 @@ function Item({
 }
 
 /** Menu du bouton « + » : joindre des fichiers ou un dossier, commandes slash, connecteurs, plug-ins. */
-export default function PlusMenu({ onAddFiles, onAddFolder, onSlash }: PlusMenuProps) {
+export default function PlusMenu({ onAddFiles, onAddFolder, onSlash, onOpenConnectors, onOpenPlugins }: PlusMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useClickOutside(root, open, () => setOpen(false));
@@ -73,13 +75,13 @@ export default function PlusMenu({ onAddFiles, onAddFolder, onSlash }: PlusMenuP
             icon={<Blocks className={icon} strokeWidth={1.6} />}
             label="Connecteurs"
             hint={<ChevronRight className="h-4 w-4" />}
-            soon
+            onClick={run(() => onOpenConnectors?.())}
           />
           <Item
             icon={<Plug className={icon} strokeWidth={1.6} />}
             label="Plug-ins"
             hint={<ChevronRight className="h-4 w-4" />}
-            soon
+            onClick={run(() => onOpenPlugins?.())}
           />
         </div>
       )}
