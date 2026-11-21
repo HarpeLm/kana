@@ -29,13 +29,24 @@ import {
 import { imagePathsIn } from "../lib/attachments";
 import { expandSkillCommand, runMatchingHooks } from "../lib/extensibility";
 import { buildResumeContext } from "../lib/fork";
+import { translateRustError } from "../lib/i18n";
 import { createCheckpoint, restoreCheckpoint } from "../lib/gitDiff";
 import { loadStoredMessages, saveStoredMessages } from "../lib/store";
-import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
+import {
+  autoAnswer,
+  evaluatePermission,
+  promptFor,
+  recordPermissionAudit,
+  redactSecrets,
+  type PermissionMode,
+} from "../lib/permissionMode";
 
 /** Ce que l'appli veut savoir de ce qui se passe dans les fils (consommation, limites). */
 export interface ChatObserver {
-  onTurnUsage?: (threadId: string, usage: { input: number; output: number; total: number }) => void;
+  onTurnUsage?: (
+    threadId: string,
+    usage: { input: number; output: number; total: number; cacheRead?: number; cacheWrite?: number },
+  ) => void;
   onDone?: (threadId: string) => void;
   onError?: (threadId: string, message: string) => void;
   onSession?: (threadId: string, sessionId: string) => void;
@@ -161,17 +172,31 @@ export function useChat(
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     onAgentEvent((event) => {
-      // Selon le mode choisi, certaines autorisations sont accordées sans déranger l'utilisateur.
+      // Selon le mode et les règles granulaires, certaines autorisations sont traitées sans déranger l'utilisateur.
       if (event.kind === "permission") {
+        const evaluation = evaluatePermission(modeRef.current, event);
         const optionId = autoAnswer(modeRef.current, event);
         if (optionId) {
+          recordPermissionAudit({
+            title: event.title,
+            decision: evaluation.policy,
+            mode: modeRef.current,
+            ruleId: evaluation.ruleId,
+            source: evaluation.source,
+          });
           answerPermission(event.threadId, event.request_id, optionId).catch(() => {});
           return;
         }
       }
       const watch = observerRef.current;
       if (event.kind === "turn_usage") {
-        watch?.onTurnUsage?.(event.threadId, { input: event.input_tokens, output: event.output_tokens, total: event.total_tokens });
+        watch?.onTurnUsage?.(event.threadId, {
+          input: event.input_tokens,
+          output: event.output_tokens,
+          total: event.total_tokens,
+          cacheRead: event.cache_read_tokens ?? 0,
+          cacheWrite: event.cache_write_tokens ?? 0,
+        });
       } else if (event.kind === "tool_call") {
         const currentChat = chatsRef.current[event.threadId];
         let prevTool: ChatMessage["tools"][number] | undefined;
@@ -200,6 +225,10 @@ export function useChat(
         watch?.onDone?.(event.threadId);
       } else if (event.kind === "error") {
         watch?.onError?.(event.threadId, event.message);
+        update(event.threadId, (chat) =>
+          applyEvent(chat, { ...event, message: translateRustError(redactSecrets(event.message)) }),
+        );
+        return;
       } else if (event.kind === "permission") {
         watch?.onPermission?.(event.threadId, event.title);
       }
@@ -267,8 +296,9 @@ export function useChat(
         const expanded = expandSkillCommand(text, projectPath);
         await sendPrompt(targetThreadId, promptFor(activeMode, `${prefix}${expanded}`), imagePathsIn(expanded));
       } catch (error) {
-        update(targetThreadId, (chat) => addError(chat, String(error)));
-        observerRef.current?.onError?.(targetThreadId, String(error));
+        const raw = String(error);
+        update(targetThreadId, (chat) => addError(chat, translateRustError(redactSecrets(raw))));
+        observerRef.current?.onError?.(targetThreadId, raw);
       }
     },
     [threadId, update],
@@ -319,10 +349,27 @@ export function useChat(
 
   const answer = useCallback(
     (requestId: string, optionId: string | null) => {
+      const req = chatsRef.current[threadId]?.permissions.find((p) => p.requestId === requestId);
       update(threadId, (chat) => ({
         ...chat,
         permissions: chat.permissions.filter((p) => p.requestId !== requestId),
       }));
+      const chosen = optionId ? req?.options.find((o) => o.id === optionId) : undefined;
+      const evalAfter = req ? evaluatePermission(modeRef.current, req) : null;
+      const decision: "allow" | "deny" = chosen
+        ? chosen.kind.startsWith("allow")
+          ? "allow"
+          : "deny"
+        : evalAfter?.source === "rule" && evalAfter.policy === "allow"
+          ? "allow"
+          : "deny";
+      recordPermissionAudit({
+        title: req?.title ?? requestId,
+        decision,
+        mode: modeRef.current,
+        ruleId: evalAfter?.source === "rule" ? evalAfter.ruleId : undefined,
+        source: evalAfter?.source === "rule" ? "rule" : "user",
+      });
       answerPermission(threadId, requestId, optionId).catch(() => {});
     },
     [threadId, update],
