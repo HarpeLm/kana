@@ -1,5 +1,6 @@
-import type { PointerEvent } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { useState, type PointerEvent } from "react";
+import { ChevronsDownUp, ChevronsUpDown, RefreshCw, X } from "lucide-react";
+import { isArtifactPath } from "../lib/fileKinds";
 import { useGitDiff } from "../hooks/useGitDiff";
 import DiffFileBlock from "./DiffFileBlock";
 import SidePane from "./SidePane";
@@ -13,14 +14,20 @@ interface DiffDockProps {
   onClose: () => void;
   /** Dossier de travail de la conversation ; sans lui, le dépôt où l'app a été lancée. */
   path?: string;
+  /** Un fichier à montrer en premier (clic dans le panneau de la session) ; `id` change à chaque demande. */
+  focusRequest?: { id: number; path: string } | null;
 }
 
 const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
 /** Volet Diff : les changements du dépôt, fichier par fichier. */
-export default function DiffDock({ visible, width, dragging, onResizeStart, onClose, path }: DiffDockProps) {
+export default function DiffDock({ visible, width, dragging, onResizeStart, onClose, path, focusRequest }: DiffDockProps) {
+  const [signal, setSignal] = useState<{ id: number; collapsed: boolean } | undefined>();
   const { report, loading, error, refresh } = useGitDiff(visible, path);
-  const files = report?.files ?? [];
+  // Les artéfacts ont leur propre volet : on ne les mélange pas au code.
+  const files = (report?.files ?? []).filter(
+    (f) => !(isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path))),
+  );
   const additions = files.reduce((sum, f) => sum + f.additions, 0);
   const deletions = files.reduce((sum, f) => sum + f.deletions, 0);
 
@@ -44,6 +51,16 @@ export default function DiffDock({ visible, width, dragging, onResizeStart, onCl
             )}
           </div>
           <div className="flex items-center gap-1">
+            {files.length > 1 && (
+              <>
+                <ToolbarButton title="Tout replier" onClick={() => setSignal({ id: Date.now(), collapsed: true })}>
+                  <ChevronsDownUp className="h-[16px] w-[16px]" strokeWidth={1.6} />
+                </ToolbarButton>
+                <ToolbarButton title="Tout déplier" onClick={() => setSignal({ id: Date.now(), collapsed: false })}>
+                  <ChevronsUpDown className="h-[16px] w-[16px]" strokeWidth={1.6} />
+                </ToolbarButton>
+              </>
+            )}
             <ToolbarButton title="Actualiser" onClick={() => void refresh()}>
               <RefreshCw
                 className={`h-[16px] w-[16px] ${loading ? "animate-spin" : ""}`}
@@ -67,7 +84,12 @@ export default function DiffDock({ visible, width, dragging, onResizeStart, onCl
           <p className="px-2 pt-6 text-center text-[13px] text-[#7e7d76]">Aucun changement.</p>
         )}
         {files.map((file) => (
-          <DiffFileBlock key={file.path} file={file} />
+          <DiffFileBlock
+            key={file.path}
+            file={file}
+            signal={signal}
+            focusId={focusRequest?.path === file.path ? focusRequest.id : undefined}
+          />
         ))}
       </div>
     </SidePane>
