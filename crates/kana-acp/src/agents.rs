@@ -273,7 +273,8 @@ pub fn inspect_adapter_cache(agent_id: &str, home: &Path) -> Option<AdapterCache
     })
 }
 
-/// Remplace `npx -y <package>` par le binaire local mis en cache dans `~/.kana/adapters` lorsqu'il est disponible.
+/// Remplace `npx -y <package>` par le binaire local mis en cache dans `~/.kana/adapters` lorsqu'il est disponible,
+/// ou ajoute `--prefer-offline` à `npx` pour privilégier le cache npm local sans latence réseau au démarrage.
 pub fn with_cached_adapter(mut spec: AgentSpec, home: &Path) -> AgentSpec {
     if spec.command != "npx" {
         return spec;
@@ -282,12 +283,17 @@ pub fn with_cached_adapter(mut spec: AgentSpec, home: &Path) -> AgentSpec {
         let Some((pkg, _, extra_args)) = adapter_package_and_binary(agent_id) else {
             continue;
         };
-        if spec.args.iter().any(|a| a == pkg)
-            && let Some(info) = inspect_adapter_cache(agent_id, home)
-            && let Some(local_bin) = info.local_path
-        {
-            spec.command = local_bin;
-            spec.args = extra_args.iter().map(|s| (*s).to_string()).collect();
+        if spec.args.iter().any(|a| a == pkg) {
+            if let Some(info) = inspect_adapter_cache(agent_id, home)
+                && let Some(local_bin) = info.local_path
+            {
+                spec.command = local_bin;
+                spec.args = extra_args.iter().map(|s| (*s).to_string()).collect();
+                return spec;
+            }
+            if !spec.args.iter().any(|a| a == "--prefer-offline") {
+                spec.args.insert(0, "--prefer-offline".to_string());
+            }
             break;
         }
     }
@@ -456,6 +462,7 @@ mod tests {
 
         let unchanged = with_cached_adapter(preset("claude").unwrap(), &home);
         assert_eq!(unchanged.command, "npx");
+        assert!(unchanged.args.contains(&"--prefer-offline".to_string()));
 
         let claude_bin = bin_dir.join("claude-agent-acp");
         std::fs::write(&claude_bin, "#!/bin/sh\n").unwrap();
