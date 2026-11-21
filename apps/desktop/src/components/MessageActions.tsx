@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Check, Copy, GitFork, Pencil, RotateCcw } from "lucide-react";
+import { Check, Copy, GitFork, History, Pencil, RotateCcw } from "lucide-react";
 import { relativeTime } from "../lib/relativeTime";
 
 function Action({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
@@ -25,11 +25,13 @@ interface MessageActionsProps {
   onEdit?: () => void;
   /** Ouvrir une nouvelle conversation qui reprend l'échange jusqu'à ce message. */
   onFork?: () => void;
+  /** Revenir au checkpoint Git et à la conversation avant ce tour (`/rewind`). */
+  onRewind?: () => void;
   align?: "left" | "right";
 }
 
 /** La ligne sous un message, visible au survol : heure, réessayer, modifier, copier. */
-export default function MessageActions({ text, at, onRetry, onEdit, onFork, align = "left" }: MessageActionsProps) {
+export default function MessageActions({ text, at, onRetry, onEdit, onFork, onRewind, align = "left" }: MessageActionsProps) {
   const [copied, setCopied] = useState(false);
   const [, tick] = useState(0);
 
@@ -60,6 +62,11 @@ export default function MessageActions({ text, at, onRetry, onEdit, onFork, alig
       {onFork && (
         <Action label="Bifurquer" onClick={onFork}>
           <GitFork className={icon} strokeWidth={1.7} />
+        </Action>
+      )}
+      {onRewind && (
+        <Action label="Restaurer ce tour (/rewind)" onClick={onRewind}>
+          <History className={icon} strokeWidth={1.7} />
         </Action>
       )}
       {onRetry && (
