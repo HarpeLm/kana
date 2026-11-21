@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { Conversation } from "../lib/conversations";
+import type { ArtifactEntry } from "../lib/artifactIndex";
+import { relativeTime } from "../lib/relativeTime";
+import ArtifactThumb from "./ArtifactThumb";
 import {
   ACTION_NEW,
   SEARCH_TABS,
@@ -15,6 +18,8 @@ import SearchTabs from "./SearchTabs";
 interface SearchPaletteProps {
   conversations: Conversation[];
   onOpenConversation: (id: string) => void;
+  artifacts: ArtifactEntry[];
+  onOpenArtifact: (item: ArtifactEntry) => void;
   onCreate: () => void;
   onOpenSettings: () => void;
   onClose: () => void;
@@ -23,6 +28,8 @@ interface SearchPaletteProps {
 /** Fenêtre de recherche : conversations, projets et actions, avec navigation au clavier. */
 export default function SearchPalette({
   conversations,
+  artifacts,
+  onOpenArtifact,
   onOpenConversation,
   onCreate,
   onOpenSettings,
@@ -32,14 +39,16 @@ export default function SearchPalette({
   const [tab, setTab] = useState<SearchTab>("all");
   const [index, setIndex] = useState(0);
 
-  const sections = useMemo(() => buildSections(conversations, query, tab), [conversations, query, tab]);
+  const sections = useMemo(() => buildSections(conversations, query, tab, artifacts), [conversations, query, tab, artifacts]);
   const items = useMemo(() => sections.flatMap((s) => s.items), [sections]);
 
   useEffect(() => setIndex(0), [query, tab]);
 
   const choose = (item: SearchItem) => {
     onClose();
-    if (item.kind === "conversation") {
+    if (item.kind === "artifact" && item.artifact) {
+      onOpenArtifact(item.artifact);
+    } else if (item.kind === "conversation") {
       onOpenConversation(item.id.slice("conversation:".length));
     } else if (item.kind === "project") {
       const name = item.id.slice("project:".length);
@@ -90,17 +99,25 @@ export default function SearchPalette({
   });
 
   let position = -1;
+  const previewed = items[index]?.artifact;
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center bg-black/55 p-4 pt-[18vh]"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
+      <div className="relative w-full max-w-[670px]">
+      {previewed && (
+        <div className="pointer-events-none absolute left-full top-[130px] z-10 ml-3 hidden w-[330px] overflow-hidden rounded-2xl border border-[#3a3a37] bg-[#2b2b29] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.6)] xl:block">
+          <ArtifactThumb html={previewed.html} className="aspect-[4/3] w-full rounded-lg" />
+          <p className="px-2 pb-1 pt-2 text-[13px] text-[#9a9992]">Artéfact · {relativeTime(previewed.modified)}</p>
+        </div>
+      )}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Rechercher"
-        className="flex max-h-[70vh] w-full max-w-[670px] flex-col overflow-hidden rounded-2xl border border-[#3a3a37] bg-[#2b2b29] shadow-[0_20px_50px_rgba(0,0,0,0.6)]"
+        className="flex max-h-[70vh] w-full flex-col overflow-hidden rounded-2xl border border-[#3a3a37] bg-[#2b2b29] shadow-[0_20px_50px_rgba(0,0,0,0.6)]"
       >
         <div className="space-y-3 border-b border-[#343430] px-6 pb-3 pt-4">
           <div className="flex items-center gap-3">
@@ -152,6 +169,7 @@ export default function SearchPalette({
         </div>
 
         <SearchFooter />
+      </div>
       </div>
     </div>
   );
