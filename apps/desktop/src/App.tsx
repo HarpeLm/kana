@@ -971,6 +971,7 @@ export default function App({ startup }: { startup: Startup }) {
             onClose={() => setShowBrowser(false)}
             driving={browserAgent.driving}
             openRequest={openRequest}
+            onSendDiagnostics={(report) => void sendMessage(report)}
           />
         )}
 
