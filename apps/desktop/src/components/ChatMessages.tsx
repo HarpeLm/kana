@@ -22,7 +22,9 @@ function AgentMessage({
   message,
   onOpenLink,
   onFork,
+  live,
 }: {
+  live?: boolean;
   message: ChatMessage;
   onOpenLink: (url: string) => void;
   onFork?: () => void;
@@ -37,7 +39,7 @@ function AgentMessage({
           <p className="mt-1 whitespace-pre-wrap">{message.thought}</p>
         </details>
       )}
-      {message.tools.length > 0 && <ToolGroup tools={message.tools} startedAt={message.startedAt} endedAt={message.endedAt} />}
+      {message.tools.length > 0 && <ToolGroup tools={message.tools} startedAt={message.startedAt} endedAt={message.endedAt} live={live} />}
       {artifacts.map((path) => (
         <button
           key={path}
@@ -98,6 +100,7 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
             <AgentMessage
               key={message.id}
               message={message}
+              live={busy && message === messages[messages.length - 1]}
               onOpenLink={onOpenLink}
               onFork={busy ? undefined : () => onFork(message.id)}
             />
