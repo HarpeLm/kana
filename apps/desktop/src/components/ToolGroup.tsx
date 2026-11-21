@@ -16,20 +16,23 @@ interface ToolGroupProps {
   /** Début et fin du travail de l'agent (ms), pour la durée. */
   startedAt?: number;
   endedAt?: number;
+  /** L'agent travaille encore sur ce message : la durée continue d'avancer, même entre deux commandes. */
+  live?: boolean;
 }
 
 /** Les outils d'un message, repliés sous « Exécution durant 3m 33s » ; un clic les déplie. */
-export default function ToolGroup({ tools, startedAt, endedAt }: ToolGroupProps) {
+export default function ToolGroup({ tools, startedAt, endedAt, live }: ToolGroupProps) {
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const running = isRunning(tools) && !endedAt;
 
-  // La durée avance chaque seconde tant que l'agent travaille.
+  // La durée avance chaque seconde tant que l'agent travaille (y compris quand une commande est finie et qu'il réfléchit).
+  const ticking = (running || !!live) && !endedAt;
   useEffect(() => {
-    if (!running) return;
+    if (!ticking) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [running]);
+  }, [ticking]);
 
   const count = `${tools.length} commande${tools.length > 1 ? "s" : ""}`;
   const elapsed = startedAt ? formatDuration((endedAt ?? now) - startedAt) : null;
