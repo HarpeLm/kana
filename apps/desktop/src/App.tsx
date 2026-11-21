@@ -7,6 +7,9 @@ import { useProjects } from "./hooks/useProjects";
 import { setThreadEffort, setThreadModel } from "./lib/models";
 import { chosenEffort } from "./lib/effort";
 import { agentTitle, autoTitle } from "./lib/autoTitle";
+import { artifactTitle } from "./lib/artifactRefs";
+import ArtifactMenu from "./components/ArtifactMenu";
+import { trashFile } from "./lib/files";
 import ArtifactsView from "./components/ArtifactsView";
 import { useAllArtifacts, type ArtifactEntry } from "./lib/artifactIndex";
 import EffortPicker from "./components/EffortPicker";
@@ -218,6 +221,25 @@ export default function App({ startup }: { startup: Startup }) {
     conversations.select(entry.conversationId);
     setView("workspace");
     openFile(entry.path);
+  };
+
+  // Clic droit sur un artéfact : ouvrir, copier le chemin, supprimer (à la corbeille, après confirmation).
+  const [artifactMenu, setArtifactMenu] = useState<{ x: number; y: number; root?: string; path: string; entry?: ArtifactEntry } | null>(null);
+  const [artifactToDelete, setArtifactToDelete] = useState<{ root?: string; path: string } | null>(null);
+  const [artifactClosed, setArtifactClosed] = useState<{ id: number; path: string } | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteArtifact = async () => {
+    const target = artifactToDelete;
+    if (!target) return;
+    try {
+      await trashFile(target.path, target.root);
+      setArtifactClosed((c) => ({ id: (c?.id ?? 0) + 1, path: target.path }));
+      allArtifacts.refresh();
+      void sessionSummary.refresh();
+      setArtifactToDelete(null);
+    } catch (error) {
+      setDeleteError(String(error));
+    }
   };
 
   const relayBanner = useRelayFlow({
@@ -456,7 +478,7 @@ export default function App({ startup }: { startup: Startup }) {
         ) : view === "scheduled" ? (
           <ScheduledView />
         ) : view === "artifacts" ? (
-          <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} />
+          <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} onMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })} />
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <OpenArtifactContext.Provider value={openFile}>
@@ -513,6 +535,7 @@ export default function App({ startup }: { startup: Startup }) {
                 canCompact={!chat.busy && chat.messages.length > 0}
                 onOpenFile={openFile}
                 onOpenTerminal={() => setShowTerminal(true)}
+                onArtifactMenu={(path, x, y) => setArtifactMenu({ x, y, root: workPath, path })}
                 canAddFolder={!chat.busy}
                 onAddFolder={(path) =>
                   void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`)
@@ -551,6 +574,7 @@ export default function App({ startup }: { startup: Startup }) {
           key={"art-" + (workPath ?? "depot")}
           known={artifactPaths}
           root={workPath}
+          closeRequest={artifactClosed}
           onComment={(file, note) => {
             if (chat.busy) return;
             const where = note.heading ? ` (section « ${note.heading} »)` : "";
@@ -609,6 +633,32 @@ export default function App({ startup }: { startup: Startup }) {
           />
         )}
       </div>
+
+      {artifactMenu && (
+        <ArtifactMenu
+          x={artifactMenu.x}
+          y={artifactMenu.y}
+          onClose={() => setArtifactMenu(null)}
+          onOpen={() => (artifactMenu.entry ? openArtifactEntry(artifactMenu.entry) : openFile(artifactMenu.path))}
+          onCopyPath={() => void navigator.clipboard?.writeText(`${artifactMenu.root ?? ""}/${artifactMenu.path}`).catch(() => {})}
+          onDelete={() => {
+            setDeleteError("");
+            setArtifactToDelete({ root: artifactMenu.root, path: artifactMenu.path });
+          }}
+        />
+      )}
+
+      {artifactToDelete && (
+        <ConfirmDialog
+          title="Supprimer cet artéfact ?"
+          confirmLabel="Supprimer"
+          onCancel={() => setArtifactToDelete(null)}
+          onConfirm={() => void deleteArtifact()}
+        >
+          « {artifactTitle(artifactToDelete.path)} » sera mis à la corbeille.
+          {deleteError && <span className="mt-2 block text-red-300">{deleteError}</span>}
+        </ConfirmDialog>
+      )}
 
       {searchOpen && (
         <SearchPalette
