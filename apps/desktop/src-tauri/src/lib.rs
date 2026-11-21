@@ -44,6 +44,8 @@ pub fn run() {
             project_commands::describe_folder,
             worktree_commands::create_worktree,
             worktree_commands::remove_worktree,
+            worktree_commands::merge_worktree,
+            worktree_commands::discard_worktree,
             worktree_commands::scan_orphan_worktrees,
             worktree_commands::clean_orphan_worktree,
             agent_commands::start_agent,
