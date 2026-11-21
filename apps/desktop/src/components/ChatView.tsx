@@ -95,13 +95,13 @@ function StructuredQuestionCard({
                 onClick={() => toggleOption(option)}
                 className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] transition ${
                   active
-                    ? "border-[#d97757] bg-[#d97757]/15 text-[#f0efe9]"
+                    ? "border-[#3b82f6] bg-[#1e3a8a]/35 text-[#f0efe9]"
                     : "border-[#343431] bg-[#1a1a18] text-[#dcdbd3] hover:border-[#4a4a46] hover:bg-[#2a2a28]"
                 }`}
               >
                 {multi && (
                   <Check
-                    className={`h-3.5 w-3.5 ${active ? "text-[#d97757] opacity-100" : "opacity-30"}`}
+                    className={`h-3.5 w-3.5 ${active ? "text-[#60a5fa] opacity-100" : "opacity-30"}`}
                     strokeWidth={2}
                   />
                 )}
@@ -129,7 +129,7 @@ function StructuredQuestionCard({
             type="button"
             disabled={chosen.length === 0}
             onClick={submit}
-            className="shrink-0 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:cursor-not-allowed disabled:opacity-40"
+            className="shrink-0 rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Valider la réponse
           </button>
@@ -283,7 +283,7 @@ export default function ChatView({
             className="mx-auto flex max-w-[740px] flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#3a3a35] bg-[#222220] px-4 py-2.5 text-[13px]"
           >
             <div className="flex items-center gap-2 text-[#ecebe4]">
-              <ClipboardCheck className="h-4 w-4 shrink-0 text-[#d97757]" strokeWidth={1.8} />
+              <ClipboardCheck className="h-4 w-4 shrink-0 text-[#60a5fa]" strokeWidth={1.8} />
               <span className="font-medium">Plan prêt pour exécution</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -302,7 +302,7 @@ export default function ChatView({
               <button
                 type="button"
                 onClick={approvePlan}
-                className="rounded-lg bg-[#d97757] px-3 py-1 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768]"
+                className="rounded-lg bg-[#1e40af] px-3 py-1 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
               >
                 Approuver le plan et passer en exécution
               </button>
