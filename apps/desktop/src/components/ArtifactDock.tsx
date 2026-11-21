@@ -10,6 +10,8 @@ import SidePane from "./SidePane";
 import ToolbarButton from "./ToolbarButton";
 
 interface ArtifactDockProps {
+  /** Un commentaire sur un passage d'un artéfact : l'agent le corrige. */
+  onComment?: (path: string, note: { comment: string; html: string; text: string; heading: string }) => void;
   /** Un artéfact à ouvrir ; `id` change à chaque demande. */
   openRequest?: { id: number; path: string } | null;
   /** Les artéfacts connus de la conversation, pour passer de l'un à l'autre. */
@@ -38,7 +40,7 @@ function MenuItem({ icon, children, onClick, trailing }: { icon: ReactNode; chil
  * Volet Artéfacts : le titre de l'artéfact ouvert en haut, avec un menu (changer d'artéfact, afficher le code,
  * exporter…), et en dessous la page, modifiable à même le texte et enregistrée toute seule.
  */
-export default function ArtifactDock({ openRequest, known, root, visible, maximized, width, dragging, onResizeStart, onToggleMaximize, onClose }: ArtifactDockProps) {
+export default function ArtifactDock({ openRequest, known, root, visible, maximized, width, dragging, onResizeStart, onToggleMaximize, onClose, onComment }: ArtifactDockProps) {
   const files = useOpenFiles(root);
   const handled = useRef<number | null>(null);
   useEffect(() => {
@@ -196,6 +198,7 @@ export default function ArtifactDock({ openRequest, known, root, visible, maximi
         onSave={(target) => void files.save(target)}
         onOverwrite={(target) => void files.save(target, true)}
         onReload={(target) => void files.reload(target)}
+        onComment={onComment}
       />
     </SidePane>
   );
