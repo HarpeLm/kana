@@ -23,6 +23,7 @@ import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage
 import { isArtifactPath } from "./lib/fileKinds";
 import { ARTIFACT_GUIDE } from "./lib/agentGuide";
 import { OpenArtifactContext } from "./lib/artifactRefs";
+import { buildRelayContext } from "./lib/fork";
 import { OpenFileContext } from "./lib/fileRefs";
 import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
@@ -111,8 +112,11 @@ export default function App({ startup }: { startup: Startup }) {
       }
       const carried = conversation.forkContext;
       if (carried) clearForkContext(threadId);
-      const preface = carried ? `${ARTIFACT_GUIDE}${carried}` : ARTIFACT_GUIDE;
-      return { cwd, preface, model: conversation.modelId, effort: chosenEffort(conversation.agentId) };
+      const folders = conversation.extraFolders?.length
+        ? `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`
+        : "";
+      const preface = `${ARTIFACT_GUIDE}${folders}${carried ?? ""}`;
+      return { cwd, preface, carried: !!carried, model: conversation.modelId, effort: chosenEffort(conversation.agentId) };
     },
     [attachWorktree, clearForkContext],
   );
@@ -171,6 +175,13 @@ export default function App({ startup }: { startup: Startup }) {
   };
   // Fournisseur et modèle : le fournisseur ne change que tant que la conversation est vide.
   const chooseModel = (agentId: string, modelId: string | undefined) => {
+    if (agentId !== selected.agentId && chat.messages.length > 0) {
+      // Un autre fournisseur au milieu de la conversation : le nouvel agent repart avec un résumé de ce qui s'est dit.
+      const history = chat.messages.filter((m) => m.role !== "error");
+      const from = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
+      stopAgent(selected.id).catch(() => {});
+      conversations.relayTo(selected.id, agentId, history.length > 0 ? buildRelayContext(history, from) : "");
+    }
     setAgent(selected.id, agentId, modelId);
     // Un agent déjà lancé change de modèle sans redémarrer.
     if (modelId && agentId === selected.agentId && chat.messages.length > 0) {
@@ -514,7 +525,7 @@ export default function App({ startup }: { startup: Startup }) {
                   agents={AGENTS}
                   agentId={selected.agentId}
                   modelId={selected.modelId}
-                  canSwitchProvider={chat.messages.length === 0 && !chat.busy}
+                  canSwitchProvider={!chat.busy}
                   onSelect={chooseModel}
                 />
                 <EffortPicker
@@ -552,9 +563,10 @@ export default function App({ startup }: { startup: Startup }) {
                 onOpenTerminal={() => setShowTerminal(true)}
                 onArtifactMenu={(path, x, y) => setArtifactMenu({ x, y, root: workPath, path })}
                 canAddFolder={!chat.busy}
-                onAddFolder={(path) =>
-                  void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`)
-                }
+                onAddFolder={(path) => {
+                  conversations.addFolder(selected.id, path);
+                  void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`);
+                }}
                 onDiscarded={() => {
                   stopAgent(selected.id).catch(() => {});
                   conversations.clearWorktree(selected.id);
