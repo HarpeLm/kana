@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { ArtifactEntry } from "./artifactIndex";
 import type { Conversation } from "./conversations";
-import { buildSections } from "./searchItems";
+import {
+  ACTION_CYCLE_MODE,
+  ACTION_NEW,
+  ACTION_OPEN_RELAY,
+  ACTION_SETTINGS,
+  ACTION_TOGGLE_ARTIFACTS,
+  ACTION_TOGGLE_BROWSER,
+  ACTION_TOGGLE_DIFF,
+  ACTION_TOGGLE_FILES,
+  ACTION_TOGGLE_SESSION,
+  ACTION_TOGGLE_TERMINAL,
+  buildSections,
+} from "./searchItems";
 
 const conv = (id: string, title: string, project = "kana", extra: Partial<Conversation> = {}): Conversation => ({
   id,
@@ -46,5 +58,24 @@ describe("buildSections", () => {
   it("l'onglet Projets regroupe par projet", () => {
     const items = buildSections(conversations, "", "projects")[0].items;
     expect(items.map((i) => i.title)).toEqual(["kana", "aquapp"]);
+  });
+  it("expose les actions rapides avec leurs raccourcis et les filtre à la saisie", () => {
+    const actions = buildSections(conversations, "", "all").find((s) => s.name === "Actions")?.items ?? [];
+    expect(actions.map((a) => [a.id, a.hint])).toEqual([
+      [ACTION_NEW, "⌘N"],
+      [ACTION_SETTINGS, "⌘,"],
+      [ACTION_TOGGLE_TERMINAL, "⌘J"],
+      [ACTION_TOGGLE_DIFF, "⇧⌘D"],
+      [ACTION_TOGGLE_FILES, "⇧⌘E"],
+      [ACTION_TOGGLE_ARTIFACTS, "⇧⌘A"],
+      [ACTION_TOGGLE_BROWSER, "⇧⌘G"],
+      [ACTION_TOGGLE_SESSION, "⇧⌘P"],
+      [ACTION_CYCLE_MODE, "⇧⌘M"],
+      [ACTION_OPEN_RELAY, undefined],
+    ]);
+    const filtered = buildSections(conversations, "terminal", "all").find((s) => s.name === "Actions")?.items ?? [];
+    expect(filtered.map((a) => a.id)).toEqual([ACTION_TOGGLE_TERMINAL]);
+    const byHint = buildSections(conversations, "⇧⌘M", "all").find((s) => s.name === "Actions")?.items ?? [];
+    expect(byHint.map((a) => a.id)).toEqual([ACTION_CYCLE_MODE]);
   });
 });
