@@ -5,7 +5,9 @@ mod browser;
 mod browser_agent;
 mod browser_agent_tools;
 mod browser_commands;
+mod cloud_client;
 mod cloud_server;
+mod cloud_ui;
 mod db_commands;
 mod git_commands;
 mod project_commands;
@@ -85,9 +87,9 @@ pub fn run() {
             settings_commands::scheduled_daemon_status,
             settings_commands::scheduled_daemon_install,
             settings_commands::scheduled_daemon_uninstall,
-            cloud_server::cloud_health_check,
-            cloud_server::cloud_submit_job,
-            cloud_server::cloud_list_jobs,
+            cloud_client::cloud_health_check,
+            cloud_client::cloud_submit_job,
+            cloud_client::cloud_list_jobs,
             git_commands::git_diff,
             git_commands::git_branch_summary,
             git_commands::git_pull_requests,
