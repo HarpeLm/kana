@@ -184,6 +184,13 @@ export default function App({ startup }: { startup: Startup }) {
     clearContext(selected.id);
   };
 
+  // Un fichier cliqué dans le panneau s'ouvre dans le volet Fichiers (une page HTML y est modifiable à même la page).
+  const [fileRequest, setFileRequest] = useState<{ id: number; path: string } | null>(null);
+  const openFile = (path: string) => {
+    setFileRequest((r) => ({ id: (r?.id ?? 0) + 1, path }));
+    setShowFiles(true);
+  };
+
   const relayBanner = useRelayFlow({
     conversation: selected,
     chat,
@@ -448,6 +455,7 @@ export default function App({ startup }: { startup: Startup }) {
                 started={chat.messages.length > 0}
                 onCompact={compactSession}
                 canCompact={!chat.busy && chat.messages.length > 0}
+                onOpenFile={openFile}
                 onDiscarded={() => {
                   stopAgent(selected.id).catch(() => {});
                   conversations.clearWorktree(selected.id);
@@ -466,6 +474,7 @@ export default function App({ startup }: { startup: Startup }) {
           // Un autre dossier de travail repart d'un volet neuf : ses fichiers ouverts ne sont pas les mêmes.
           key={workPath ?? "depot"}
           root={workPath}
+          openRequest={fileRequest}
           visible={showFiles && !terminalFills}
           maximized={filesMaximized}
           width={filesPanel.width}
