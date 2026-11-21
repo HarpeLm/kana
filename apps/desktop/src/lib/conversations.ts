@@ -1,8 +1,9 @@
-export type EnvironmentKind = "local" | "ssh" | "docker" | "devcontainer";
+export type EnvironmentKind = "local" | "ssh" | "docker" | "devcontainer" | "cloud";
 
 export interface ConversationEnvironment {
   kind: EnvironmentKind;
   target?: string;
+  cloudUrl?: string;
   sandbox?: boolean;
   readOnly?: boolean;
 }
