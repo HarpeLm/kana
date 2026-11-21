@@ -883,7 +883,7 @@ export default function App({ startup }: { startup: Startup }) {
           La conversation « {deleting.title} » sera supprimée de cet environnement. Cette action
           est définitive.
           {keptWorktree === deleting.id && (
-            <span className="mt-2 block text-[#e69b80]">
+            <span className="mt-2 block text-[#93c5fd]">
               Son dossier de travail contient du travail non enregistré (
               <code>{deleting.worktree}</code>) : il ne sera pas supprimé. Clique encore sur
               Supprimer pour retirer seulement la conversation.
