@@ -199,6 +199,12 @@ export const EDITOR_SCRIPT = String.raw`
     current = el;
     place(el);
   });
+  var lastSel = '';
+  document.addEventListener('selectionchange', function () {
+    var sel = window.getSelection();
+    if (sel && !sel.isCollapsed) lastSel = sel.toString();
+  });
+  document.addEventListener('mousedown', function (e) { if (e.target !== note && !(note.contains && note.contains(e.target))) lastSel = ''; }, true);
   note.addEventListener('click', function () {
     if (!current) return;
     var path = pathOf(current);
@@ -214,7 +220,11 @@ export const EDITOR_SCRIPT = String.raw`
       h = h.parentElement && h.parentElement !== document.body ? h.parentElement : null;
     }
     var r = current.getBoundingClientRect();
-    send({ kind: 'comment', path: path, html: current.outerHTML.replace(/ (contenteditable|data-kana-[a-z]+)(="[^"]*")?/g, '').slice(0, 1500), text: current.textContent.trim().slice(0, 300), heading: heading.slice(0, 120), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } });
+    // La phrase surlignée si elle est dans cette ligne, sinon toute la ligne.
+    var whole = current.textContent.replace(/\s+/g, ' ').trim();
+    var picked = lastSel.replace(/\s+/g, ' ').trim();
+    var text = picked && whole.indexOf(picked) >= 0 ? picked : whole;
+    send({ kind: 'comment', path: path, html: '', text: text.slice(0, 400), heading: heading.slice(0, 120), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } });
     note.style.display = 'none'; trash.style.display = 'none'; grab.style.display = 'none';
   });
   trash.addEventListener('click', function () {
