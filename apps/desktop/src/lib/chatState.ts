@@ -38,7 +38,7 @@ export interface ChatState {
   /** Le plan en cours de l'agent (chaque annonce remplace la précédente). */
   plan: PlanItem[];
   /** L'occupation de la fenêtre de contexte de l'agent : `used` jetons sur `size`. */
-  context: { used: number; size: number } | null;
+  context: { used: number; size: number; /** Estimé d'après le dernier tour : l'agent ne donne pas la mesure. */ estimated?: boolean } | null;
   permissions: PermissionRequest[];
   busy: boolean;
 }
@@ -115,7 +115,9 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
     case "context":
       return { ...chat, context: { used: event.used, size: event.size } };
     case "turn_usage":
-      return chat;
+      // L'agent ne mesure pas son contexte : on estime avec les jetons d'entrée du dernier tour (une fenêtre de 200 k par défaut).
+      if (chat.context && !chat.context.estimated) return chat;
+      return event.input_tokens > 0 ? { ...chat, context: { used: event.input_tokens, size: 200_000, estimated: true } } : chat;
     case "plan":
       return { ...chat, plan: event.entries };
     case "permission":
