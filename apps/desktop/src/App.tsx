@@ -228,14 +228,14 @@ export default function App({ startup }: { startup: Startup }) {
   };
 
   // Un fichier local cité par l'agent s'ouvre dans le volet Fichiers (chemin relatif au dossier de travail).
-  const [filesRequest, setFilesRequest] = useState<{ id: number; path: string } | null>(null);
-  const openLocalFile = (raw: string) => {
+  const [filesRequest, setFilesRequest] = useState<{ id: number; path: string; line?: number } | null>(null);
+  const openLocalFile = (raw: string, line?: number) => {
     let path = raw;
     for (const base of [workPath, selected.projectPath]) {
       if (base && base !== "none" && path.startsWith(`${base}/`)) path = path.slice(base.length + 1);
     }
     path = path.replace(/^\.\//, "");
-    setFilesRequest((r) => ({ id: (r?.id ?? 0) + 1, path }));
+    setFilesRequest((r) => ({ id: (r?.id ?? 0) + 1, path, line }));
     setShowFiles(true);
   };
 
