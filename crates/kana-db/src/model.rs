@@ -35,6 +35,9 @@ pub struct StoredConversation {
     /// Modèle choisi pour cette conversation (sinon celui que l'agent propose par défaut).
     #[serde(default)]
     pub model_id: Option<String>,
+    /// Dossiers ajoutés à la session en plus du dossier de travail (liste JSON de chemins).
+    #[serde(default)]
+    pub extra_folders: Option<String>,
     /// La conversation travaille dans son propre dossier de travail git (par défaut oui).
     #[serde(default = "default_true")]
     pub use_worktree: bool,
