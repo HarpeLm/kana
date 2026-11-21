@@ -177,6 +177,13 @@ impl AcpClient {
         }
     }
 
+    /// Change le niveau d'effort de l'agent pour la suite de la session (sans effet s'il n'en propose pas).
+    pub async fn set_effort(&self, value: &str) -> Result<(), AcpError> {
+        let Some(effort) = &self.models.effort else { return Ok(()) };
+        let params = json!({ "sessionId": self.session_id, "configId": effort.config_id, "value": value });
+        self.request("session/set_config_option", params).await.map(|_| ())
+    }
+
     /// Envoie un message à l'agent et attend la fin de son tour.
     /// Les réponses partielles arrivent en `AcpEvent::Message` pendant l'attente ;
     /// le tour se termine par `AcpEvent::Done` ou `AcpEvent::Error`.
