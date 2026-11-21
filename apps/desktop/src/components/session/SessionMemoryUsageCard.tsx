@@ -216,7 +216,7 @@ export default function SessionMemoryUsageCard({
               }
               icon={<span className={`h-2 w-2 rounded-full ${problem ? "bg-[#f0883e]" : agent.id === agentId ? "bg-[#3fb950]" : "bg-[#55554f]"}`} />}
               trailing={
-                <span className={`shrink-0 text-[12.5px] ${problem ? "text-[#e69b80]" : "text-[#8c8b83]"}`}>
+                <span className={`shrink-0 text-[12.5px] ${problem ? "text-[#93c5fd]" : "text-[#8c8b83]"}`}>
                   {detail}
                 </span>
               }
@@ -329,10 +329,10 @@ export default function SessionMemoryUsageCard({
               <button
                 type="button"
                 onClick={onOpenAdvisor}
-                className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#3a3a35] bg-[#1c1c1a] px-3 py-2 text-left text-[12.5px] text-[#ecebe4] transition hover:border-[#d97757]/60 hover:bg-[#262623]"
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#3a3a35] bg-[#1c1c1a] px-3 py-2 text-left text-[12.5px] text-[#ecebe4] transition hover:border-[#3b82f6]/60 hover:bg-[#262623]"
               >
                 <span className="flex items-center gap-2 font-medium">
-                  <Compass className="h-4 w-4 text-[#d97757]" strokeWidth={1.8} />
+                  <Compass className="h-4 w-4 text-[#60a5fa]" strokeWidth={1.8} />
                   <span>/advisor · Conseiller & Cross-Review</span>
                 </span>
               </button>
