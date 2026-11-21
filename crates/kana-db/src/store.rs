@@ -1,6 +1,11 @@
-use std::{collections::HashSet, path::Path, sync::Mutex};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::{Path, PathBuf},
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{StoredConversation, StoredMessage, StoredMessageHit, StoredProject};
 
@@ -57,6 +62,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     role UNINDEXED,
     text,
     thought
+);
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL DEFAULT 0
 );
 ";
 
@@ -364,6 +374,82 @@ impl Store {
 
         Ok(hits)
     }
+
+    /// Lit un réglage persistant par sa clé.
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>, StoreError> {
+        let conn = self.lock()?;
+        let value = conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| row.get(0))
+            .optional()?;
+        Ok(value)
+    }
+
+    /// Enregistre ou met à jour un réglage persistant.
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), StoreError> {
+        let conn = self.lock()?;
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at",
+            params![key, value, now_ms],
+        )?;
+        Ok(())
+    }
+
+    /// Retourne l'ensemble des réglages persistants triés par clé.
+    pub fn all_settings(&self) -> Result<BTreeMap<String, String>, StoreError> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare("SELECT key, value FROM settings ORDER BY key")?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        let mut out = BTreeMap::new();
+        for row in rows {
+            let (k, v) = row?;
+            out.insert(k, v);
+        }
+        Ok(out)
+    }
+
+    /// Supprime un réglage persistant par sa clé.
+    pub fn delete_setting(&self, key: &str) -> Result<(), StoreError> {
+        let conn = self.lock()?;
+        conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+}
+
+/// Chemin du fichier miroir partagé entre l'App Desktop et la CLI (`~/.kana/config.json`).
+pub fn shared_config_path(home: &Path) -> PathBuf {
+    home.join(".kana").join("config.json")
+}
+
+/// Écrit de manière atomique (`tmp` + `rename`) les réglages partagés au format JSON.
+pub fn write_shared_config(path: &Path, settings: &BTreeMap<String, String>) -> Result<(), StoreError> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let payload = serde_json::to_string_pretty(settings)?;
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("config.json");
+    let tmp_path = path.with_file_name(format!(".{file_name}.{}.tmp", std::process::id()));
+    std::fs::write(&tmp_path, payload)?;
+    std::fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
+/// Lit le fichier miroir partagé (`~/.kana/config.json`). Retourne une map vide si absent ou illisible.
+pub fn read_shared_config(path: &Path) -> BTreeMap<String, String> {
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return BTreeMap::new();
+    };
+    serde_json::from_str::<BTreeMap<String, String>>(&raw).unwrap_or_default()
 }
 
 fn escape_like(raw: &str) -> String {
@@ -645,5 +731,43 @@ mod tests {
             elapsed < std::time::Duration::from_millis(750),
             "50 requêtes FTS5 sur 1 200 messages ont dépassé le budget : {elapsed:?}"
         );
+    }
+
+    #[test]
+    fn settings_crud_and_shared_config_round_trip() {
+        let store = Store::open_in_memory().unwrap();
+        assert_eq!(store.get_setting("kana-locale").unwrap(), None);
+        assert!(store.all_settings().unwrap().is_empty());
+
+        store.set_setting("kana-locale", "en").unwrap();
+        store.set_setting("kana-permission-mode", "auto").unwrap();
+        assert_eq!(store.get_setting("kana-locale").unwrap().as_deref(), Some("en"));
+
+        // Mise à jour d'une clé existante
+        store.set_setting("kana-locale", "fr").unwrap();
+        assert_eq!(store.get_setting("kana-locale").unwrap().as_deref(), Some("fr"));
+
+        let all = store.all_settings().unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all.get("kana-locale").map(String::as_str), Some("fr"));
+        assert_eq!(all.get("kana-permission-mode").map(String::as_str), Some("auto"));
+
+        // Miroir atomique `~/.kana/config.json`
+        let tmp_home = std::env::temp_dir().join(format!("kana-shared-cfg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp_home);
+        let cfg_path = shared_config_path(&tmp_home);
+        assert_eq!(cfg_path, tmp_home.join(".kana").join("config.json"));
+        assert!(read_shared_config(&cfg_path).is_empty());
+
+        write_shared_config(&cfg_path, &all).unwrap();
+        let reloaded = read_shared_config(&cfg_path);
+        assert_eq!(reloaded, all);
+
+        // Suppression d'une clé dans SQLite
+        store.delete_setting("kana-locale").unwrap();
+        assert_eq!(store.get_setting("kana-locale").unwrap(), None);
+        assert_eq!(store.all_settings().unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(&tmp_home);
     }
 }
