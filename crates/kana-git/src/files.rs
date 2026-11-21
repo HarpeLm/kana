@@ -1,6 +1,7 @@
 //! Les fichiers d'un dépôt : liste, aperçu, et écriture d'un fichier existant.
 
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::{Read, Write},
     path::{Component, Path, PathBuf},
@@ -16,12 +17,25 @@ use crate::{
 
 /// Au-delà, la liste est coupée (un dépôt énorme mettrait trop de temps à s'afficher).
 const MAX_FILES: usize = 20_000;
+/// Limites de scan pour extraire les symboles sans ralentir les gros dépôts.
+const MAX_SYMBOL_FILES: usize = 400;
+const MAX_SYMBOL_FILE_BYTES: u64 = 128 * 1024;
+const MAX_SYMBOLS: usize = 1_500;
 /// Taille maximale lue pour un aperçu.
 const MAX_PREVIEW_BYTES: u64 = 256 * 1024;
 /// Taille maximale d'un fichier qu'on accepte d'écrire.
 const MAX_WRITE_BYTES: usize = 2 * 1024 * 1024;
 /// Un fichier qui contient un octet nul dans ses premiers octets est considéré comme binaire.
 const BINARY_SNIFF_BYTES: usize = 8000;
+
+/// Un symbole (fonction, structure, composant…) repéré dans le dépôt pour l'autocomplétion `@`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RepoSymbol {
+    pub name: String,
+    pub kind: String,
+    pub path: String,
+    pub line: u32,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileList {
@@ -31,6 +45,8 @@ pub struct FileList {
     pub truncated: bool,
     /// Fichiers modifiés, ajoutés ou non suivis.
     pub changes: Vec<ChangedFile>,
+    /// Symboles détectés dans les fichiers de code du dépôt.
+    pub symbols: Vec<RepoSymbol>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -65,7 +81,108 @@ pub fn list_files(repo: &Path) -> Result<FileList, GitError> {
     files.truncate(MAX_FILES);
     // Les modifications sont un plus : un échec ne doit pas empêcher d'afficher les fichiers.
     let changes = changed_files(&root).unwrap_or_default();
-    Ok(FileList { root: root.display().to_string(), files, truncated, changes })
+    let symbols = extract_symbols(&root, &files);
+    Ok(FileList { root: root.display().to_string(), files, truncated, changes, symbols })
+}
+
+fn is_code_file(path: &str) -> bool {
+    matches!(
+        Path::new(path).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
+        Some("rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go")
+    )
+}
+
+fn symbol_on_line(raw: &str) -> Option<(&'static str, String)> {
+    let trimmed = raw.trim_start();
+    if trimmed.is_empty()
+        || trimmed.starts_with("//")
+        || trimmed.starts_with('#')
+        || trimmed.starts_with("/*")
+        || trimmed.starts_with('*')
+    {
+        return None;
+    }
+    let exported = trimmed.starts_with("export const ") || trimmed.starts_with("pub const ");
+    let mut rest = trimmed;
+    loop {
+        let stripped = ["pub(crate) ", "pub(super) ", "pub ", "export default ", "export ", "default ", "async ", "unsafe ", "declare "]
+            .iter()
+            .find_map(|prefix| rest.strip_prefix(prefix));
+        match stripped {
+            Some(next) => rest = next.trim_start(),
+            None => break,
+        }
+    }
+    let (kind, after) = if let Some(s) = rest.strip_prefix("fn ") {
+        ("fn", s)
+    } else if let Some(s) = rest.strip_prefix("function ") {
+        ("fn", s)
+    } else if let Some(s) = rest.strip_prefix("def ") {
+        ("fn", s)
+    } else if let Some(s) = rest.strip_prefix("func ") {
+        let s = s.trim_start();
+        if s.starts_with('(') {
+            let close = s.find(')')?;
+            ("fn", s[close + 1..].trim_start())
+        } else {
+            ("fn", s)
+        }
+    } else if let Some(s) = rest.strip_prefix("struct ") {
+        ("struct", s)
+    } else if let Some(s) = rest.strip_prefix("enum ") {
+        ("enum", s)
+    } else if let Some(s) = rest.strip_prefix("trait ") {
+        ("trait", s)
+    } else if let Some(s) = rest.strip_prefix("interface ") {
+        ("interface", s)
+    } else if let Some(s) = rest.strip_prefix("type ") {
+        ("type", s)
+    } else if let Some(s) = rest.strip_prefix("class ") {
+        ("class", s)
+    } else if exported && let Some(s) = rest.strip_prefix("const ") {
+        ("const", s)
+    } else {
+        return None;
+    };
+    let name: String = after
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    let first = name.chars().next()?;
+    if name.len() < 2 || (!first.is_ascii_alphabetic() && first != '_') {
+        return None;
+    }
+    Some((kind, name))
+}
+
+fn extract_symbols(root: &Path, files: &[String]) -> Vec<RepoSymbol> {
+    let mut symbols = Vec::new();
+    let mut seen = HashSet::new();
+    for path in files.iter().filter(|p| is_code_file(p)).take(MAX_SYMBOL_FILES) {
+        let full = root.join(path);
+        let Ok(meta) = fs::metadata(&full) else { continue };
+        if meta.len() > MAX_SYMBOL_FILE_BYTES {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&full) else { continue };
+        for (idx, line) in text.lines().enumerate() {
+            if let Some((kind, name)) = symbol_on_line(line) {
+                if seen.insert((name.clone(), path.clone())) {
+                    symbols.push(RepoSymbol {
+                        name,
+                        kind: kind.to_owned(),
+                        path: path.clone(),
+                        line: (idx + 1) as u32,
+                    });
+                    if symbols.len() >= MAX_SYMBOLS {
+                        return symbols;
+                    }
+                }
+            }
+        }
+    }
+    symbols
 }
 
 /// Chemin réel d'un fichier existant du dépôt. Refuse tout ce qui sortirait de la racine :
@@ -314,6 +431,36 @@ mod tests {
         let dir = scratch_repo("nocreate");
         assert!(write_text(&dir, "nouveau.txt", "x", None).is_err());
         assert!(!dir.join("nouveau.txt").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn extracts_symbols_from_source_files() {
+        let dir = scratch_repo("symbols");
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(
+            dir.join("src/app.rs"),
+            "// fn ignored_comment()\npub struct AppState {}\npub async fn start_engine() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("src/ui.ts"),
+            "export interface ComposerProps {}\nexport function sendMessage() {}\nexport const MAX_ITEMS = 10;\n",
+        )
+        .unwrap();
+
+        let list = list_files(&dir).unwrap();
+        let names: Vec<(&str, &str, &str)> = list
+            .symbols
+            .iter()
+            .map(|s| (s.name.as_str(), s.kind.as_str(), s.path.as_str()))
+            .collect();
+        assert!(names.contains(&("AppState", "struct", "src/app.rs")));
+        assert!(names.contains(&("start_engine", "fn", "src/app.rs")));
+        assert!(names.contains(&("ComposerProps", "interface", "src/ui.ts")));
+        assert!(names.contains(&("sendMessage", "fn", "src/ui.ts")));
+        assert!(names.contains(&("MAX_ITEMS", "const", "src/ui.ts")));
+        assert!(!names.iter().any(|(n, _, _)| *n == "ignored_comment"));
         let _ = fs::remove_dir_all(dir);
     }
 }
