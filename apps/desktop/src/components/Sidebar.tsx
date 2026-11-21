@@ -151,16 +151,51 @@ export default function Sidebar({
                 ) : null
               }
             >
-              {group.items.map((conversation) => (
-                <ConversationRow
-                  key={conversation.id}
-                  conversation={conversation}
-                  selected={view === "workspace" && conversation.id === selectedId}
-                  editing={conversation.id === editingId}
-                  sections={sections}
-                  actions={actions}
-                />
-              ))}
+              {(() => {
+                const itemIds = new Set(group.items.map((c) => c.id));
+                const childrenByParent = new Map<string, Conversation[]>();
+                const topLevel: Conversation[] = [];
+                for (const conv of group.items) {
+                  if (conv.parentId && itemIds.has(conv.parentId)) {
+                    const list = childrenByParent.get(conv.parentId) ?? [];
+                    list.push(conv);
+                    childrenByParent.set(conv.parentId, list);
+                  } else {
+                    topLevel.push(conv);
+                  }
+                }
+                return topLevel.map((conversation) => {
+                  const subThreads = childrenByParent.get(conversation.id) ?? [];
+                  return (
+                    <div key={conversation.id}>
+                      <ConversationRow
+                        conversation={conversation}
+                        selected={view === "workspace" && conversation.id === selectedId}
+                        editing={conversation.id === editingId}
+                        sections={sections}
+                        actions={actions}
+                      />
+                      {subThreads.length > 0 && (
+                        <div
+                          aria-label={`Sous-agents de ${conversation.title}`}
+                          className="ml-3.5 mt-0.5 space-y-0.5 border-l border-[#343430] pl-2"
+                        >
+                          {subThreads.map((sub) => (
+                            <ConversationRow
+                              key={sub.id}
+                              conversation={sub}
+                              selected={view === "workspace" && sub.id === selectedId}
+                              editing={sub.id === editingId}
+                              sections={sections}
+                              actions={actions}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </ConversationGroup>
           ))}
         </div>
