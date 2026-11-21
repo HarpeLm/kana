@@ -1,3 +1,5 @@
+import { persistSharedSetting } from "./store";
+
 export interface ScheduledTask {
   id: string;
   title: string;
@@ -55,11 +57,7 @@ function readStorage(key: string): string | null {
 
 function writeStorage(key: string, value: string): void {
   if (hasBrowserStorage()) {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // stockage plein ou indisponible
-    }
+    persistSharedSetting(key, value);
     return;
   }
   memoryStore.set(key, value);
