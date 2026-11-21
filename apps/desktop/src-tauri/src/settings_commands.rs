@@ -101,3 +101,83 @@ pub async fn suggest_title(agent: String, request: String) -> Result<String, Str
         .await
         .map_err(|_| "l'agent met trop de temps à répondre".to_string())?
 }
+
+#[tauri::command]
+pub fn set_keep_awake(
+    awake: tauri::State<'_, crate::state::KeepAwake>,
+    active: bool,
+) -> Result<bool, String> {
+    awake.set(active)
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+#[tauri::command]
+pub fn core_detect_problem(message: String, now_ms: Option<i64>) -> Option<kana_core::Problem> {
+    kana_core::detect_problem(&message, now_ms.unwrap_or_else(now_millis))
+}
+
+#[tauri::command]
+pub fn core_pick_relay_target(
+    current: String,
+    relay: kana_core::RelayConfig,
+    problems: Option<Vec<String>>,
+) -> Option<String> {
+    let unavailable = problems.unwrap_or_default();
+    kana_core::pick_target(&current, &relay, |id| unavailable.iter().any(|p| p == id))
+}
+
+#[tauri::command]
+pub fn core_auto_answer(
+    mode: kana_core::PermissionMode,
+    title: String,
+    options: Vec<kana_core::PermissionChoice>,
+) -> Option<String> {
+    kana_core::auto_answer(mode, &title, &options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exposes_core_logic_commands() {
+        let now = 1_700_000_000_000;
+        let problem = core_detect_problem("Rate limit exceeded in 2 minutes".into(), Some(now)).unwrap();
+        assert_eq!(problem.kind, kana_core::ProblemKind::Limit);
+        assert_eq!(problem.until, Some(now + 120_000));
+
+        let target = core_pick_relay_target(
+            "claude".into(),
+            kana_core::RelayConfig::default(),
+            Some(vec!["codex".into()]),
+        );
+        assert_eq!(target.as_deref(), Some("gemini"));
+
+        let opts = vec![
+            kana_core::PermissionChoice {
+                id: "allow".into(),
+                name: "Autoriser".into(),
+                kind: "allow_once".into(),
+            },
+            kana_core::PermissionChoice {
+                id: "deny".into(),
+                name: "Refuser".into(),
+                kind: "reject_once".into(),
+            },
+        ];
+        assert_eq!(
+            core_auto_answer(kana_core::PermissionMode::Auto, "ls -la".into(), opts.clone()).as_deref(),
+            Some("allow")
+        );
+        assert_eq!(
+            core_auto_answer(kana_core::PermissionMode::Auto, "rm -rf /tmp/x".into(), opts),
+            None
+        );
+    }
+}
