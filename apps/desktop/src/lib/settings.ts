@@ -47,3 +47,7 @@ export function deleteApiKey(agent: string): Promise<void> {
   demoKeys.delete(agent);
   return Promise.resolve();
 }
+
+export function setKeepAwake(active: boolean): Promise<boolean> {
+  return inTauri ? invoke<boolean>("set_keep_awake", { active }) : Promise.resolve(active);
+}
