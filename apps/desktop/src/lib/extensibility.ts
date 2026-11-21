@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AvailableCommand, UserMcpServerParam } from "./acp";
 import { inTauri } from "./env";
 import { NO_PROJECT } from "./projects";
+import { persistSharedSetting } from "./store";
 
 export type McpTransport = "stdio" | "http" | "sse";
 
@@ -103,9 +104,13 @@ function readRaw(key: string): string | null {
   }
 }
 
+const SHARED_EXT_KEYS = new Set<string>([MCP_KEY, RULES_KEY, SKILLS_KEY, HOOKS_KEY]);
+
 function writeRaw(key: string, value: string): void {
   if (!hasBrowserStorage()) {
     memoryFallback.set(key, value);
+  } else if (SHARED_EXT_KEYS.has(key)) {
+    persistSharedSetting(key, value);
   } else {
     try {
       localStorage.setItem(key, value);
