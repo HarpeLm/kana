@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { PermissionRequest } from "./chatState";
 import { getLocale, type Locale } from "./i18n";
+import { persistSharedSetting } from "./store";
 
 /** Comment les demandes d'autorisation des agents sont traitées. */
 export type PermissionMode = "ask" | "plan" | "auto" | "full";
@@ -114,11 +115,7 @@ function readJsonStorage<T>(key: string, fallback: T): T {
 
 function writeJsonStorage(key: string, value: unknown): void {
   if (!hasStorage()) return;
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // stockage indisponible : les données restent en mémoire
-  }
+  persistSharedSetting(key, JSON.stringify(value));
 }
 
 function parseRules(raw: unknown): PermissionRule[] {
@@ -150,11 +147,7 @@ export function loadMode(): PermissionMode {
 }
 
 export function saveMode(mode: PermissionMode): void {
-  try {
-    localStorage.setItem(KEY, mode);
-  } catch {
-    // stockage indisponible : le choix ne sera pas conservé
-  }
+  persistSharedSetting(KEY, mode);
 }
 
 export function loadPermissionRules(): PermissionRule[] {
