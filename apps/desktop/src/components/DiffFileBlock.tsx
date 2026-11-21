@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { DiffLine, FileDiff, FileStatus } from "../lib/gitDiff";
 
@@ -31,20 +31,39 @@ function Row({ line }: { line: DiffLine }) {
 }
 
 /** Un fichier modifié : son nom, ses compteurs et ses lignes. Se replie d'un clic. */
-export default function DiffFileBlock({ file }: { file: FileDiff }) {
+export default function DiffFileBlock({
+  file,
+  signal,
+  focusId,
+}: {
+  file: FileDiff;
+  /** Replier / déplier tous les fichiers d'un coup. */
+  signal?: { id: number; collapsed: boolean };
+  /** Change quand on demande ce fichier : on le déplie et on l'amène à l'écran. */
+  focusId?: number;
+}) {
+  const ref = useRef<HTMLElement>(null);
   const lineCount = file.hunks.reduce((sum, h) => sum + h.lines.length, 0);
   const [collapsed, setCollapsed] = useState(lineCount > COLLAPSE_ABOVE);
+  useEffect(() => {
+    if (signal) setCollapsed(signal.collapsed);
+  }, [signal?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (focusId === undefined) return;
+    setCollapsed(false);
+    requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  }, [focusId]);
   const status = STATUS[file.status];
   const slash = file.path.lastIndexOf("/");
   const dir = slash >= 0 ? file.path.slice(0, slash + 1) : "";
   const name = slash >= 0 ? file.path.slice(slash + 1) : file.path;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[#2e2e2b] bg-[#1c1c1a]">
+    <section ref={ref} className="rounded-xl border border-[#2e2e2b] bg-[#1c1c1a]">
       <button
         onClick={() => setCollapsed((v) => !v)}
         aria-expanded={!collapsed}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-[#232321]"
+        className="sticky top-0 z-10 flex w-full items-center gap-2 rounded-t-xl bg-[#1f1f1d] px-3 py-2 text-left transition hover:bg-[#242422]"
       >
         <ChevronDown
           className={`h-[14px] w-[14px] shrink-0 text-[#9a9992] transition-transform ${
