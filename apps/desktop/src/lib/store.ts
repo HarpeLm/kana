@@ -22,6 +22,7 @@ export const SHARED_SETTING_KEYS = [
   "kana-project-memory",
   "kana-scheduled-tasks",
   "kana-scheduled-runs",
+  "kana-cloud-config",
   "kana-usage",
   "kana-locale",
 ] as const;
@@ -95,11 +96,12 @@ function parseEnvironment(raw: string | null | undefined): Conversation["environ
     if (
       parsed &&
       typeof parsed === "object" &&
-      ["local", "ssh", "docker", "devcontainer"].includes(parsed.kind)
+      ["local", "ssh", "docker", "devcontainer", "cloud"].includes(parsed.kind)
     ) {
       return {
         kind: parsed.kind,
         target: typeof parsed.target === "string" ? parsed.target : undefined,
+        cloudUrl: typeof parsed.cloudUrl === "string" ? parsed.cloudUrl : undefined,
         sandbox: typeof parsed.sandbox === "boolean" ? parsed.sandbox : undefined,
         readOnly: typeof parsed.readOnly === "boolean" ? parsed.readOnly : undefined,
       };
