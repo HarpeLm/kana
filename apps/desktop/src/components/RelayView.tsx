@@ -39,14 +39,14 @@ export default function RelayView() {
               return (
                 <div
                   key={id}
-                  className={`rounded-xl border p-4 ${problem ? "border-[#d97757]/40 bg-[#d97757]/5" : "border-[#2e2e2b] bg-[#21211f]"} ${off ? "opacity-60" : ""}`}
+                  className={`rounded-xl border p-4 ${problem ? "border-[#3b82f6]/40 bg-[#1e3a8a]/20" : "border-[#2e2e2b] bg-[#21211f]"} ${off ? "opacity-60" : ""}`}
                 >
                   <div className="flex items-center gap-3 text-[13px]">
                     <span className="w-5 text-[#8c8b83]">{index + 1}.</span>
                     <span className="flex-1 font-medium text-[#ecebe4]">{nameOf(id)}</span>
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-                        problem ? "bg-[#d97757]/15 text-[#e69b80]" : "bg-emerald-500/15 text-emerald-400"
+                        problem ? "bg-[#1e3a8a]/35 text-[#93c5fd]" : "bg-emerald-500/15 text-emerald-400"
                       }`}
                     >
                       {problem
@@ -84,7 +84,7 @@ export default function RelayView() {
                       </button>
                     )}
                     <label className="flex cursor-pointer items-center gap-1.5">
-                      <input type="checkbox" checked={!off} onChange={() => toggle(id)} className="accent-[#d97757]" />
+                      <input type="checkbox" checked={!off} onChange={() => toggle(id)} className="accent-[#2563eb]" />
                       Dans le relais
                     </label>
                   </div>
@@ -102,7 +102,7 @@ export default function RelayView() {
           className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#2e2e2b] bg-[#242422] px-3.5 py-3 text-left"
         >
           <span className="text-[13px] text-[#dcdbd3]">Basculer automatiquement</span>
-          <span className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition ${relay.auto ? "justify-end bg-[#d97757]" : "justify-start bg-[#444440]"}`}>
+          <span className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition ${relay.auto ? "justify-end bg-[#2563eb]" : "justify-start bg-[#444440]"}`}>
             <span className="h-4 w-4 rounded-full bg-[#ecebe4]" />
           </span>
         </button>
