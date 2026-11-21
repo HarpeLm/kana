@@ -23,7 +23,7 @@ import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import { isArtifactPath } from "../lib/fileKinds";
 import { artifactTitle } from "../lib/artifactRefs";
-import { contextWindowFor } from "../lib/contextWindow";
+import { contextWindowFor, useModelWindowsVersion } from "../lib/contextWindow";
 import ConfirmDialog from "./ConfirmDialog";
 import SiteIcon from "./SiteIcon";
 import { AGENTS } from "../data";
@@ -158,6 +158,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   const noProject = conversation.projectPath === NO_PROJECT;
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
   const running = tools.filter((t) => t.status === "pending" || t.status === "in_progress").length;
+  useModelWindowsVersion();
   // Sans mesure de l'agent, la jauge utilise la vraie taille de fenêtre du modèle choisi.
   const context =
     reportedContext?.estimated ? { ...reportedContext, size: contextWindowFor(conversation.modelId, agentId) } : reportedContext;
