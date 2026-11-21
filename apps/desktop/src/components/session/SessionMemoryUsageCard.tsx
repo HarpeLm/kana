@@ -100,14 +100,12 @@ export default function SessionMemoryUsageCard({
   onCompact,
   canCompact,
   subagents,
-  onSpawnSubagent,
   onOpenSubagent,
   onOpenAdvisor,
   crossReview,
 }: SessionMemoryUsageCardProps) {
   const [compacted, setCompacted] = useState(false);
   const [memoryDraft, setMemoryDraft] = useState("");
-  const [subagentDraft, setSubagentDraft] = useState("");
   useUsageVersion();
   useProjectMemoryVersion();
   useModelWindowsVersion();
@@ -286,113 +284,43 @@ export default function SessionMemoryUsageCard({
         )}
       </Section>
 
-      <Section title="Sous-agents parallèles" count={subagents.length} compact>
-        <div className="space-y-2 px-1">
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() =>
-                onSpawnSubagent(
-                  "Recherche",
-                  `Explore en lecture seule les fichiers liés à « ${conversation.title} » et résume les points importants.`,
-                  true,
-                )
-              }
-              className="rounded-lg bg-[#2e2e2b] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36]"
-            >
-              Recherche (lecture seule)
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onSpawnSubagent(
-                  "Tests",
-                  `Exécute les tests du projet en arrière-plan pour « ${conversation.title} » et signale les éventuels échecs.`,
-                  false,
-                )
-              }
-              className="rounded-lg bg-[#2e2e2b] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36]"
-            >
-              Tests en arrière-plan
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onSpawnSubagent(
-                  "Worker",
-                  `Travaille dans un worktree isolé sur une sous-tâche parallèle de « ${conversation.title} ».`,
-                  false,
-                )
-              }
-              className="rounded-lg bg-[#2e2e2b] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36]"
-            >
-              Worker (worktree isolé)
-            </button>
+      {subagents.length > 0 && (
+        <Section title="Sous-agents" count={subagents.length} compact>
+          <div className="space-y-1 px-1">
+            {subagents.map(({ conversation: sub, status }) => {
+              const statusLabel =
+                status === "running"
+                  ? "En cours…"
+                  : status === "error"
+                    ? "Erreur"
+                    : status === "done"
+                      ? "Terminé"
+                      : "En attente";
+              const statusTone =
+                status === "running"
+                  ? "text-[#4a9bff]"
+                  : status === "error"
+                    ? "text-[#f87171]"
+                    : status === "done"
+                      ? "text-[#3fb950]"
+                      : "text-[#8c8b83]";
+              return (
+                <Row
+                  key={sub.id}
+                  onClick={() => onOpenSubagent(sub.id)}
+                  icon={<Bot className="h-4 w-4" strokeWidth={1.7} />}
+                  trailing={<span className={`shrink-0 text-[11.5px] ${statusTone}`}>{statusLabel}</span>}
+                >
+                  <span className="mr-1.5 rounded bg-[#2e2e2b] px-1.5 py-0.5 text-[11px] text-[#b8b7ae]">
+                    {sub.roleLabel ?? "Sous-agent"}
+                  </span>
+                  {sub.title}
+                </Row>
+              );
+            })}
           </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!subagentDraft.trim()) return;
-              onSpawnSubagent("Sous-agent", subagentDraft, false);
-              setSubagentDraft("");
-            }}
-            className="flex items-center gap-1.5"
-          >
-            <input
-              type="text"
-              value={subagentDraft}
-              onChange={(e) => setSubagentDraft(e.target.value)}
-              placeholder="Consigne du sous-agent…"
-              aria-label="Tâche du sous-agent"
-              className="min-w-0 flex-1 rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#55554f] select-text"
-            />
-            <button
-              type="submit"
-              disabled={!subagentDraft.trim()}
-              className="shrink-0 rounded-lg bg-[#333331] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40"
-            >
-              Lancer
-            </button>
-          </form>
-
-          {subagents.length > 0 && (
-            <div className="space-y-1">
-              {subagents.map(({ conversation: sub, status }) => {
-                const statusLabel =
-                  status === "running"
-                    ? "En cours…"
-                    : status === "error"
-                      ? "Erreur"
-                      : status === "done"
-                        ? "Terminé"
-                        : "En attente";
-                const statusTone =
-                  status === "running"
-                    ? "text-[#4a9bff]"
-                    : status === "error"
-                      ? "text-[#f87171]"
-                      : status === "done"
-                        ? "text-[#3fb950]"
-                        : "text-[#8c8b83]";
-                return (
-                  <Row
-                    key={sub.id}
-                    onClick={() => onOpenSubagent(sub.id)}
-                    icon={<Bot className="h-4 w-4" strokeWidth={1.7} />}
-                    trailing={<span className={`shrink-0 text-[11.5px] ${statusTone}`}>{statusLabel}</span>}
-                  >
-                    <span className="mr-1.5 rounded bg-[#2e2e2b] px-1.5 py-0.5 text-[11px] text-[#b8b7ae]">
-                      {sub.roleLabel ?? "Sous-agent"}
-                    </span>
-                    {sub.title}
-                  </Row>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </Section>
+        </Section>
+      )}
 
       <Section title="Cross-Review & /advisor" count={crossReview?.stages.length} compact>
         <div className="space-y-2 px-1">
