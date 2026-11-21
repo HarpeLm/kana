@@ -232,7 +232,7 @@ export default function SideChatDock({ conversation, mainMessages, workPath, onC
               <button
                 type="submit"
                 disabled={!draft.trim()}
-                className="flex items-center gap-1 rounded-lg bg-[#d97757] px-2.5 py-1 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center gap-1 rounded-lg bg-[#1e40af] px-2.5 py-1 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Send className="h-3 w-3" strokeWidth={2} />
                 <span>Envoyer</span>
