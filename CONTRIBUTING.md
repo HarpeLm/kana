@@ -1,17 +1,17 @@
-# Contribuer à Kana
+# Contributing to Kana
 
-Merci de vouloir aider ! Ce guide explique comment proposer un changement.
+Thank you for wanting to help! This guide explains how to propose a change.
 
-## Avant de commencer
+## Before you start
 
-- Cherchez dans les [issues](https://github.com/HarpeLm/kana/issues) : le sujet existe peut-être déjà.
-- Pour un changement important, ouvrez d'abord une issue pour en discuter : cela évite du travail perdu.
-- En contribuant, vous acceptez que votre travail soit publié sous la double licence MIT / Apache-2.0 du projet.
-- Soyez bienveillant : voir le [code de conduite](CODE_OF_CONDUCT.md).
+- Search the [issues](https://github.com/HarpeLm/kana/issues): the topic may already exist.
+- For a big change, open an issue first to discuss it: it saves wasted work.
+- By contributing, you agree that your work is published under the project's dual MIT / Apache-2.0 license.
+- Be kind: see the [code of conduct](CODE_OF_CONDUCT.md).
 
-## Mettre en place l'environnement
+## Setting up
 
-Il faut [Rust](https://rustup.rs) (stable), [Node.js](https://nodejs.org) 22, git et les [prérequis de Tauri](https://tauri.app/start/prerequisites/).
+You need [Rust](https://rustup.rs) (stable), [Node.js](https://nodejs.org) 22, git and the [Tauri prerequisites](https://tauri.app/start/prerequisites/).
 
 ```bash
 git clone https://github.com/HarpeLm/kana.git
@@ -20,39 +20,39 @@ npm install
 npm run tauri dev
 ```
 
-Pour travailler sur l'interface seule, sans Tauri (agent simulé) : `npm run dev`, puis http://localhost:1420.
+To work on the interface alone, without Tauri (simulated agent): `npm run dev`, then open http://localhost:1420.
 
-## Où se trouve quoi
+## What lives where
 
-- `apps/desktop/src` : l'interface (React, Tailwind). La logique pure est dans `src/lib`.
-- `apps/desktop/src-tauri` : les commandes Tauri, qui font le lien avec les crates.
-- `crates/` : le cœur en Rust (`kana-acp`, `kana-git`, `kana-db`, `kana-mcp`, `kana-pty`, `kana-core`).
+- `apps/desktop/src`: the interface (React, Tailwind). Pure logic lives in `src/lib`.
+- `apps/desktop/src-tauri`: the Tauri commands, which connect the interface to the crates.
+- `crates/`: the Rust core (`kana-acp`, `kana-git`, `kana-db`, `kana-mcp`, `kana-pty`, `kana-core`).
 
-## Les tests
+## Tests
 
-Tout doit passer avant d'ouvrir une pull request ; ils tournent aussi à chaque push avec GitHub Actions.
+Everything must pass before you open a pull request; the tests also run on every push with GitHub Actions.
 
 ```bash
 cargo test --workspace         # Rust
 cd apps/desktop
 npx tsc --noEmit               # types
-npm test                       # logique de l'interface (Vitest)
-npm run test:e2e               # écran dans le navigateur (Playwright)
+npm test                       # interface logic (Vitest)
+npm run test:e2e               # screens in the browser (Playwright)
 ```
 
-- Un bug corrigé : ajoutez un test qui échouait avant la correction.
-- Une fonction nouvelle : ajoutez au moins un test de sa logique (`*.test.ts` à côté du code, ou un test Rust).
-- Un changement visible à l'écran : si possible, un test dans `apps/desktop/e2e`.
+- Fixed a bug: add a test that failed before the fix.
+- New feature: add at least one test of its logic (a `*.test.ts` next to the code, or a Rust test).
+- A change you can see on screen: if possible, a test in `apps/desktop/e2e`.
 
-## Proposer un changement
+## Proposing a change
 
-1. Créez une branche à partir de `main`.
-2. Faites de petits commits, un par fichier ou par idée, avec un message clair, par exemple `fix(desktop): stop long lines from scrolling the chat sideways`.
-3. Vérifiez que les tests passent.
-4. Ouvrez une pull request en remplissant le modèle : ce que le changement fait, pourquoi, et comment vous l'avez vérifié.
+1. Create a branch from `main`.
+2. Make small commits, one per file or per idea, with a clear message, for example `fix(desktop): stop long lines from scrolling the chat sideways`.
+3. Check that the tests pass.
+4. Open a pull request and fill in the template: what the change does, why, and how you checked it.
 
 ## Style
 
-- Rust : `cargo fmt` et pas d'avertissement nouveau de `cargo clippy`.
-- Interface : textes en français, composants courts, la logique dans `src/lib` plutôt que dans les composants.
-- Pas de dépendance ajoutée sans raison : expliquez-la dans la pull request.
+- Rust: `cargo fmt`, and no new `cargo clippy` warnings.
+- Interface: user-facing text is in French for now, components stay short, and logic goes in `src/lib` rather than in components.
+- No new dependency without a reason: explain it in the pull request.
