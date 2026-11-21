@@ -89,17 +89,41 @@ pub async fn start_agent(
     Ok(())
 }
 
+/// Au-delà, une image n'est pas envoyée (elle reste citée par son chemin) ; et on n'en envoie pas plus de 6.
+const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
+const MAX_IMAGES: usize = 6;
+
+/// Lit les images : `(type MIME, contenu en base64)`. Celles qui sont illisibles ou trop lourdes sont ignorées.
+fn read_images(paths: Vec<String>) -> Vec<(String, String)> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    paths
+        .iter()
+        .filter_map(|p| {
+            let path = std::path::Path::new(p);
+            let mime = crate::attachment_commands::image_mime(path)?;
+            if std::fs::metadata(path).ok()?.len() > MAX_IMAGE_BYTES {
+                return None;
+            }
+            Some((mime.to_owned(), STANDARD.encode(std::fs::read(path).ok()?)))
+        })
+        .take(MAX_IMAGES)
+        .collect()
+}
+
 /// Envoie un message à l'agent. La réponse arrive par les événements `acp-event`.
 #[tauri::command]
 pub async fn send_prompt(
     sessions: State<'_, AgentSessions>,
     thread_id: String,
     text: String,
+    images: Option<Vec<String>>,
 ) -> Result<(), String> {
     let client = client_of(&sessions, &thread_id).await?;
+    // Les images jointes partent comme de vraies images si l'agent sait les lire ; sinon il n'a que leur chemin dans le texte.
+    let pictures = if client.supports_images() { read_images(images.unwrap_or_default()) } else { Vec::new() };
     tauri::async_runtime::spawn(async move {
         // Les erreurs sont déjà remontées à l'interface sous forme d'événement.
-        let _ = client.prompt(&text).await;
+        let _ = client.prompt_with_images(&text, &pictures).await;
     });
     Ok(())
 }
