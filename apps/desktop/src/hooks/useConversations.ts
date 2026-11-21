@@ -146,6 +146,12 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Le résumé à donner à l'agent au prochain message (session compactée). */
+  const setForkContext = useCallback(
+    (id: string, forkContext: string) => patch(id, (c) => ({ ...c, forkContext })),
+    [patch],
+  );
+
   const setUseWorktree = useCallback(
     (id: string, useWorktree: boolean) => patch(id, (c) => ({ ...c, useWorktree })),
     [patch],
@@ -218,6 +224,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     setUseWorktree,
     setAgent,
     relayTo,
+    setForkContext,
     createIn,
     moveSection,
     touch,
