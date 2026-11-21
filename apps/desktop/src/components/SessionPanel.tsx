@@ -121,7 +121,7 @@ interface SessionPanelProps {
   pulls: PullRequest[];
   /** Dossier où se trouve le travail (worktree, sinon projet). */
   workPath: string | undefined;
-  onOpenDiff: () => void;
+  onOpenDiff: (path?: string) => void;
   onOpenLink: (url: string) => void;
   onRefresh: () => void;
   /** Occupation de la fenêtre de contexte de l'agent, si l'agent la donne. */
@@ -422,7 +422,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           <Row
             icon={<FileDiff className="h-4 w-4" strokeWidth={1.7} />}
             trailing={
-              <span className="shrink-0 rounded-md px-2 py-0.5 text-[12.5px] text-[#8c8b83] hover:bg-[#333331] hover:text-[#ecebe4]" onClick={onOpenDiff} role="button">
+              <span className="shrink-0 rounded-md px-2 py-0.5 text-[12.5px] text-[#8c8b83] hover:bg-[#333331] hover:text-[#ecebe4]" onClick={() => onOpenDiff()} role="button">
                 Voir le diff
               </span>
             }
@@ -433,7 +433,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           {(allFiles ? changed : changed.slice(0, SHOWN)).map((file) => (
             <Row
               key={file.path}
-              onClick={onOpenDiff}
+              onClick={() => onOpenDiff(file.path)}
               title={file.path}
               icon={<FileText className={`h-4 w-4 ${statusColor[file.status] ?? ""}`} strokeWidth={1.6} />}
               trailing={
