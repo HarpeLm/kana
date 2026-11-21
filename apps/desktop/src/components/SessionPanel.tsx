@@ -23,6 +23,7 @@ import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import { isArtifactPath } from "../lib/fileKinds";
 import { artifactTitle } from "../lib/artifactRefs";
+import { contextWindowFor } from "../lib/contextWindow";
 import ConfirmDialog from "./ConfirmDialog";
 import SiteIcon from "./SiteIcon";
 import { AGENTS } from "../data";
@@ -140,7 +141,7 @@ interface SessionPanelProps {
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile }: SessionPanelProps) {
   const [action, setAction] = useState<"merge" | "discard" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -157,6 +158,9 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   const noProject = conversation.projectPath === NO_PROJECT;
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
   const running = tools.filter((t) => t.status === "pending" || t.status === "in_progress").length;
+  // Sans mesure de l'agent, la jauge utilise la vraie taille de fenêtre du modèle choisi.
+  const context =
+    reportedContext?.estimated ? { ...reportedContext, size: contextWindowFor(conversation.modelId, agentId) } : reportedContext;
   const recent = tools.slice(-6).reverse();
   // Un artéfact : un fichier du dossier `artefacts/`, ou une page, un SVG, une image ou un PDF que la session a créés.
   const created = (summary?.changed ?? []).filter(
