@@ -5,6 +5,7 @@ import {
   addUserMessage,
   applyEvent,
   applyTrigger,
+  attachCheckpointToMessage,
   detectTrigger,
   enqueueMessage,
   extractStructuredQuestion,
@@ -12,6 +13,7 @@ import {
   mergeCommands,
   prioritizeQueuedMessage,
   removeQueuedMessage,
+  rewindChatToMessage,
   type ChatState,
 } from "./chatState";
 import { buildMentionItems, type FileList } from "./files";
@@ -231,5 +233,27 @@ describe("chatState", () => {
       makeMessage("user", "A"),
     ];
     expect(extractStructuredQuestion(answered, false)).toBeNull();
+  });
+
+  it("propose /rewind dans les commandes de base et ramène le fil au tour ciblé", () => {
+    expect(mergeCommands([], "rew").map((c) => c.name)).toEqual(["rewind"]);
+
+    let chat = addUserMessage(EMPTY_CHAT, "Tour 1");
+    const m1 = chat.messages[0].id;
+    chat = attachCheckpointToMessage(chat, m1, "refs/kana/checkpoints/cp1");
+    chat = run(chat, { kind: "message", text: "Réponse 1" }, { kind: "done", stop_reason: "end_turn" });
+
+    chat = addUserMessage(chat, "Tour 2");
+    const m2 = chat.messages[2].id;
+    chat = attachCheckpointToMessage(chat, m2, "refs/kana/checkpoints/cp2");
+    chat = run(chat, { kind: "message", text: "Réponse 2" }, { kind: "done", stop_reason: "end_turn" });
+
+    const lastRewind = rewindChatToMessage(chat);
+    expect(lastRewind.checkpoint).toBe("refs/kana/checkpoints/cp2");
+    expect(lastRewind.chat.messages.map((m) => m.text)).toEqual(["Tour 1", "Réponse 1"]);
+
+    const firstRewind = rewindChatToMessage(chat, m1);
+    expect(firstRewind.checkpoint).toBe("refs/kana/checkpoints/cp1");
+    expect(firstRewind.chat.messages).toEqual([]);
   });
 });
