@@ -231,3 +231,15 @@ pub async fn git_pr_feedback(
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Collecte les diagnostics compilateur et LSP (`rustc`, `cargo`, `tsc`) du dépôt.
+#[tauri::command]
+pub async fn git_diagnostics(
+    path: Option<String>,
+) -> Result<Vec<kana_git::CodeDiagnostic>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::collect_repo_diagnostics(&start_dir(path)?).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
