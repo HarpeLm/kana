@@ -53,6 +53,15 @@ export default function FilesDock({
     void refresh();
   }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const isArt = variant === "artifacts";
+  // Le volet Artéfacts n'a que ses onglets : le dernier fermé, il se referme aussi au lieu de laisser un espace vide.
+  const hadTabs = useRef(false);
+  useEffect(() => {
+    if (files.tabs.length > 0) hadTabs.current = true;
+    else if (variant === "artifacts" && hadTabs.current) {
+      hadTabs.current = false;
+      onClose();
+    }
+  }, [files.tabs.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showTree, setShowTree] = useState(!isArt);
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [sourcePaths, setSourcePaths] = useState<Set<string>>(new Set());
