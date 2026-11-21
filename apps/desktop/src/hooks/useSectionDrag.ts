@@ -45,6 +45,14 @@ export function useSectionDrag(
     latest.current = { names, onMove };
   });
 
+  // Pendant le glissement, le curseur reste une main fermée partout et le texte ne se sélectionne pas.
+  const active = drag !== null;
+  useEffect(() => {
+    if (!active) return;
+    document.body.classList.add("kana-grabbing");
+    return () => document.body.classList.remove("kana-grabbing");
+  }, [active]);
+
   const register = useCallback(
     (name: string) => (element: HTMLElement | null) => {
       if (element) elements.current.set(name, element);
