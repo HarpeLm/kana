@@ -13,6 +13,14 @@ export const SEARCH_TABS: { id: SearchTab; label: string }[] = [
 
 export const ACTION_NEW = "action:new";
 export const ACTION_SETTINGS = "action:settings";
+export const ACTION_TOGGLE_TERMINAL = "action:toggle-terminal";
+export const ACTION_TOGGLE_DIFF = "action:toggle-diff";
+export const ACTION_TOGGLE_FILES = "action:toggle-files";
+export const ACTION_TOGGLE_ARTIFACTS = "action:toggle-artifacts";
+export const ACTION_TOGGLE_BROWSER = "action:toggle-browser";
+export const ACTION_TOGGLE_SESSION = "action:toggle-session";
+export const ACTION_CYCLE_MODE = "action:cycle-mode";
+export const ACTION_OPEN_RELAY = "action:open-relay";
 
 export interface SearchItem {
   /** `conversation:<id>`, `project:<nom>` ou `action:<nom>`. */
@@ -31,8 +39,16 @@ export interface SearchSection {
 }
 
 const ACTIONS: SearchItem[] = [
-  { id: ACTION_NEW, kind: "action", title: "Nouvelle conversation" },
-  { id: ACTION_SETTINGS, kind: "action", title: "Ouvrir les réglages" },
+  { id: ACTION_NEW, kind: "action", title: "Nouvelle conversation", hint: "⌘N" },
+  { id: ACTION_SETTINGS, kind: "action", title: "Ouvrir les réglages", hint: "⌘," },
+  { id: ACTION_TOGGLE_TERMINAL, kind: "action", title: "Afficher / masquer le terminal", hint: "⌘J" },
+  { id: ACTION_TOGGLE_DIFF, kind: "action", title: "Afficher / masquer le diff", hint: "⇧⌘D" },
+  { id: ACTION_TOGGLE_FILES, kind: "action", title: "Afficher / masquer les fichiers", hint: "⇧⌘E" },
+  { id: ACTION_TOGGLE_ARTIFACTS, kind: "action", title: "Afficher / masquer les artéfacts", hint: "⇧⌘A" },
+  { id: ACTION_TOGGLE_BROWSER, kind: "action", title: "Afficher / masquer le Globe", hint: "⇧⌘G" },
+  { id: ACTION_TOGGLE_SESSION, kind: "action", title: "Afficher / masquer le panneau de session", hint: "⇧⌘P" },
+  { id: ACTION_CYCLE_MODE, kind: "action", title: "Changer le mode d'autorisation", hint: "⇧⌘M" },
+  { id: ACTION_OPEN_RELAY, kind: "action", title: "Ouvrir le relais de quota" },
 ];
 
 const RECENT_COUNT = 6;
@@ -111,6 +127,6 @@ export function buildSections(
     add("Projets", projectItems(projects.filter(matches), conversations));
   }
   if (tab === "all") add("Artéfacts", artifacts.filter((a) => matches(a.title)).map(artifactItem));
-  if (tab === "all") add("Actions", ACTIONS.filter((a) => matches(a.title)));
+  if (tab === "all") add("Actions", ACTIONS.filter((a) => matches(a.title) || (a.hint ? matches(a.hint) : false)));
   return sections;
 }
