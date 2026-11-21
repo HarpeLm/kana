@@ -58,7 +58,7 @@ function Section({ title, count, compact, children }: { title: string; count?: n
   );
 }
 
-function Row({ icon, children, trailing, onClick, title }: { icon: ReactNode; children: ReactNode; trailing?: ReactNode; onClick?: () => void; title?: string }) {
+function Row({ icon, children, trailing, onClick, title, onContextMenu }: { icon: ReactNode; children: ReactNode; trailing?: ReactNode; onClick?: () => void; title?: string; onContextMenu?: (event: React.MouseEvent) => void }) {
   const content = (
     <>
       <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[#9a9992]">{icon}</span>
@@ -68,7 +68,7 @@ function Row({ icon, children, trailing, onClick, title }: { icon: ReactNode; ch
   );
   const cls = "flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left text-[14px] text-[#ecebe4]";
   return onClick ? (
-    <button onClick={onClick} title={title} className={`${cls} transition hover:bg-[#2a2a28]`}>
+    <button onClick={onClick} onContextMenu={onContextMenu} title={title} className={`${cls} transition hover:bg-[#2a2a28]`}>
       {content}
     </button>
   ) : (
@@ -144,13 +144,15 @@ interface SessionPanelProps {
   onOpenFile: (path: string) => void;
   /** Ouvre le terminal du dossier de travail. */
   onOpenTerminal: () => void;
+  /** Clic droit sur un artéfact : le menu (ouvrir, copier le chemin, supprimer). */
+  onArtifactMenu: (path: string, x: number, y: number) => void;
   /** Donne un dossier de plus à l'agent (il le lit à partir de son chemin). */
   onAddFolder: (path: string) => void;
   canAddFolder: boolean;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile, onOpenTerminal, onAddFolder, canAddFolder }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile, onOpenTerminal, onArtifactMenu, onAddFolder, canAddFolder }: SessionPanelProps) {
   const [folderMenu, setFolderMenu] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
   useClickOutside(folderRef, folderMenu, () => setFolderMenu(false));
@@ -406,7 +408,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
         <Section title="Artéfacts" count={created.length + links.length} compact={created.length + links.length === 0}>
           {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
           {created.slice(0, 5).map((file) => (
-            <Row key={file.path} onClick={() => onOpenFile(file.path)} title={`Ouvrir ${file.path}`} icon={<Copy className="h-4 w-4 text-[#8ab4f8]" strokeWidth={1.6} />}>
+            <Row key={file.path} onClick={() => onOpenFile(file.path)} onContextMenu={(e) => { e.preventDefault(); onArtifactMenu(file.path, e.clientX, e.clientY); }} title={`Ouvrir ${file.path}`} icon={<Copy className="h-4 w-4 text-[#8ab4f8]" strokeWidth={1.6} />}>
               {artifactTitle(file.path)}
             </Row>
           ))}
