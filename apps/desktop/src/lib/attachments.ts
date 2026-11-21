@@ -30,3 +30,15 @@ export async function imagePreview(path: string): Promise<string | null> {
     return null;
   }
 }
+
+/** Les images citées dans la liste « Fichiers joints » d'un message : elles partent comme de vraies images. */
+export function imagePathsIn(text: string): string[] {
+  const at = text.lastIndexOf("\n\nFichiers joints :\n");
+  if (at < 0) return [];
+  return text
+    .slice(at)
+    .split("\n")
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter(isImage);
+}
