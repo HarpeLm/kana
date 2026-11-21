@@ -4,7 +4,7 @@ use std::{
     process::Stdio,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -58,6 +58,10 @@ pub struct AcpClient {
     models: AgentModels,
     /// L'agent accepte de vraies images dans un message.
     images: bool,
+    /// Le mode « plan » de l'agent est actif.
+    plan_on: AtomicBool,
+    /// Le mode de travail du début de session, auquel on revient en quittant le plan.
+    default_mode: Option<String>,
     _child: Child,
 }
 
@@ -127,6 +131,8 @@ impl AcpClient {
             session_id: String::new(),
             models: AgentModels::default(),
             images: false,
+            plan_on: AtomicBool::new(false),
+            default_mode: None,
             _child: child,
         };
         let init = client.request("initialize", protocol::initialize_params()).await?;
@@ -151,6 +157,7 @@ impl AcpClient {
             other => other?,
         };
         client.models = AgentModels::from_session(&session);
+        client.default_mode = client.models.modes.as_ref().and_then(|m| m.current.clone());
         client.session_id = session["sessionId"]
             .as_str()
             .ok_or_else(|| AcpError::Protocol("session/new sans sessionId".into()))?
@@ -191,6 +198,26 @@ impl AcpClient {
         let Some(effort) = &self.models.effort else { return Ok(()) };
         let params = json!({ "sessionId": self.session_id, "configId": effort.config_id, "value": value });
         self.request("session/set_config_option", params).await.map(|_| ())
+    }
+
+    /// Met l'agent en mode « plan » (lecture seule, c'est lui qui l'impose) ou le remet dans son mode habituel.
+    /// Renvoie `false` si l'agent n'a pas de mode « plan » : Kana doit alors refuser lui-même les modifications.
+    pub async fn set_plan_mode(&self, on: bool) -> Result<bool, AcpError> {
+        let Some(modes) = &self.models.modes else { return Ok(false) };
+        let Some(plan) = modes.plan() else { return Ok(false) };
+        if self.plan_on.load(Ordering::SeqCst) == on {
+            return Ok(true);
+        }
+        let target = if on { Some(plan.id.clone()) } else { self.default_mode.clone().filter(|m| *m != plan.id) };
+        if let Some(mode) = target {
+            let (method, params) = match &modes.config_id {
+                Some(config_id) => ("session/set_config_option", json!({ "sessionId": self.session_id, "configId": config_id, "value": mode })),
+                None => ("session/set_mode", json!({ "sessionId": self.session_id, "modeId": mode })),
+            };
+            self.request(method, params).await?;
+        }
+        self.plan_on.store(on, Ordering::SeqCst);
+        Ok(true)
     }
 
     /// Envoie un message à l'agent et attend la fin de son tour.
