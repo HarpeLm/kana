@@ -15,6 +15,7 @@ interface DocPaneProps {
   onSave: () => void;
   onOverwrite: () => void;
   onReload: () => void;
+  onComment?: (note: { comment: string; html: string; text: string; heading: string }) => void;
 }
 
 const BANNER = "flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-[13px]";
@@ -26,7 +27,7 @@ function formatSize(bytes: number): string {
 }
 
 /** Contenu d'un onglet : éditeur, rendu markdown ou page HTML modifiable à même la page, ou le message qui explique pourquoi il n'y en a pas. */
-export default function DocPane({ path, doc, active, source, onChange, onSave, onOverwrite, onReload }: DocPaneProps) {
+export default function DocPane({ path, doc, active, source, onChange, onSave, onOverwrite, onReload, onComment }: DocPaneProps) {
   if (doc.status === "loading") return <p className="p-4 text-[13px] text-[#8c8b83]">Chargement…</p>;
   if (doc.status === "error") {
     return (
@@ -75,7 +76,7 @@ export default function DocPane({ path, doc, active, source, onChange, onSave, o
           </div>
         )}
         {isHtml(path) && rendered && (
-          <HtmlVisualEditor text={doc.text} readOnly={doc.truncated} onChange={onChange} onSave={onSave} />
+          <HtmlVisualEditor text={doc.text} readOnly={doc.truncated} onChange={onChange} onSave={onSave} onComment={onComment} />
         )}
         <div className={rendered ? "hidden" : "h-full"}>
           <CodeEditor
