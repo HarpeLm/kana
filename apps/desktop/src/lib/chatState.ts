@@ -1,4 +1,4 @@
-import type { AcpEvent, PermissionOption } from "./acp";
+import type { AcpEvent, AvailableCommand, PermissionOption } from "./acp";
 
 export interface ToolCall {
   id: string;
@@ -41,13 +41,17 @@ export interface ChatState {
   messages: ChatMessage[];
   /** Le plan en cours de l'agent (chaque annonce remplace la précédente). */
   plan: PlanItem[];
+  /** Commandes slash dynamiques annoncées par l'agent via `available_commands_update`. */
+  commands: AvailableCommand[];
+  /** Messages en file d'attente pendant que l'agent travaille. */
+  queued: string[];
   /** L'occupation de la fenêtre de contexte de l'agent : `used` jetons sur `size`. */
   context: { used: number; size: number; /** Estimé d'après le dernier tour : l'agent ne donne pas la mesure. */ estimated?: boolean } | null;
   permissions: PermissionRequest[];
   busy: boolean;
 }
 
-export const EMPTY_CHAT: ChatState = { messages: [], plan: [], context: null, permissions: [], busy: false };
+export const EMPTY_CHAT: ChatState = { messages: [], plan: [], commands: [], queued: [], context: null, permissions: [], busy: false };
 
 let counter = 0;
 // L'heure rend l'identifiant unique d'un lancement à l'autre : les messages rechargés gardent le leur.
@@ -128,6 +132,8 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
       return event.input_tokens > 0 ? { ...chat, context: { used: event.input_tokens, size: 200_000, estimated: true } } : chat;
     case "plan":
       return { ...chat, plan: event.entries };
+    case "available_commands":
+      return { ...chat, commands: event.commands };
     case "permission":
       return {
         ...chat,
@@ -153,4 +159,83 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
     case "closed":
       return { ...chat, busy: false, permissions: [] };
   }
+}
+
+export function enqueueMessage(chat: ChatState, text: string): ChatState {
+  if (!text.trim()) return chat;
+  return { ...chat, queued: [...chat.queued, text] };
+}
+
+export function removeQueuedMessage(chat: ChatState, index: number): ChatState {
+  if (index < 0 || index >= chat.queued.length) return chat;
+  return { ...chat, queued: chat.queued.filter((_, i) => i !== index) };
+}
+
+export function prioritizeQueuedMessage(chat: ChatState, index: number): ChatState {
+  if (index <= 0 || index >= chat.queued.length) return chat;
+  const target = chat.queued[index];
+  return { ...chat, queued: [target, ...chat.queued.filter((_, i) => i !== index)] };
+}
+
+export const DEFAULT_COMMANDS: AvailableCommand[] = [
+  { name: "compact", description: "Compacter la session et économiser le contexte" },
+  { name: "plan", description: "Planifier sans modifier les fichiers" },
+  { name: "review", description: "Relire les changements en cours et signaler les problèmes" },
+  { name: "init", description: "Analyser le dépôt et préparer les instructions du projet" },
+  { name: "clear", description: "Réinitialiser la session de l'agent" },
+];
+
+/** Fusionne les commandes annoncées par l'agent (`available_commands_update`) avec celles de base. */
+export function mergeCommands(dynamic: AvailableCommand[], query = ""): AvailableCommand[] {
+  const byName = new Map<string, AvailableCommand>();
+  for (const cmd of dynamic) byName.set(cmd.name.toLowerCase(), cmd);
+  for (const cmd of DEFAULT_COMMANDS) {
+    const key = cmd.name.toLowerCase();
+    if (!byName.has(key)) byName.set(key, cmd);
+  }
+  const all = [...byName.values()];
+  const needle = query.trim().toLowerCase();
+  if (!needle) return all;
+  return all
+    .filter((c) => c.name.toLowerCase().includes(needle) || c.description.toLowerCase().includes(needle))
+    .sort((a, b) => {
+      const aPrefix = a.name.toLowerCase().startsWith(needle) ? 0 : 1;
+      const bPrefix = b.name.toLowerCase().startsWith(needle) ? 0 : 1;
+      return aPrefix - bPrefix;
+    });
+}
+
+export interface ComposerTrigger {
+  kind: "slash" | "mention";
+  query: string;
+  start: number;
+  end: number;
+}
+
+/** Repère `/commande` au début du message ou `@mention` avant le curseur. */
+export function detectTrigger(text: string, cursor: number): ComposerTrigger | null {
+  const safeCursor = Math.max(0, Math.min(cursor, text.length));
+  const before = text.slice(0, safeCursor);
+  const slash = before.match(/^\s*\/([^\s]*)$/);
+  if (slash) {
+    return { kind: "slash", query: slash[1], start: before.lastIndexOf("/"), end: safeCursor };
+  }
+  const mention = before.match(/(?:^|[\s([{"'])@([^\s]*)$/);
+  if (mention) {
+    return { kind: "mention", query: mention[1], start: before.lastIndexOf("@"), end: safeCursor };
+  }
+  return null;
+}
+
+/** Remplace le déclencheur actif par `replacement` et renvoie la nouvelle position du curseur. */
+export function applyTrigger(
+  text: string,
+  trigger: ComposerTrigger,
+  replacement: string,
+): { text: string; cursor: number } {
+  const head = text.slice(0, trigger.start);
+  const tail = text.slice(trigger.end);
+  const needsSpace = !tail || !/^\s/.test(tail);
+  const inserted = replacement + (needsSpace ? " " : "");
+  return { text: head + inserted + tail, cursor: head.length + inserted.length };
 }
