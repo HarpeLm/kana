@@ -1,20 +1,23 @@
 import { useAgentAccount, type AccountPhase } from "../hooks/useAgentAccount";
+import { tr, translateRustError, useLocale } from "../lib/i18n";
 import type { AgentInfo } from "../data";
 import ApiKeyField from "./ApiKeyField";
 
-const pill: Record<AccountPhase, { label: string; style: string }> = {
-  idle: { label: "Non vérifié", style: "bg-[#2e2e2b] text-[#a3a29a]" },
-  checking: { label: "Vérification…", style: "bg-[#2e2e2b] text-[#a3a29a]" },
-  ready: { label: "Connecté", style: "bg-emerald-500/15 text-emerald-400" },
-  needs_login: { label: "Connexion requise", style: "bg-[#d97757]/15 text-[#e69b80]" },
-  logging_in: { label: "Connexion en cours…", style: "bg-[#2e2e2b] text-[#a3a29a]" },
-  error: { label: "Erreur", style: "bg-red-500/15 text-red-300" },
+const pillMeta: Record<AccountPhase, { fr: string; en: string; style: string }> = {
+  idle: { fr: "Non vérifié", en: "Not checked", style: "bg-[#2e2e2b] text-[#a3a29a]" },
+  checking: { fr: "Vérification…", en: "Checking…", style: "bg-[#2e2e2b] text-[#a3a29a]" },
+  ready: { fr: "Connecté", en: "Connected", style: "bg-emerald-500/15 text-emerald-400" },
+  needs_login: { fr: "Connexion requise", en: "Sign-in required", style: "bg-[#d97757]/15 text-[#e69b80]" },
+  logging_in: { fr: "Connexion en cours…", en: "Signing in…", style: "bg-[#2e2e2b] text-[#a3a29a]" },
+  error: { fr: "Erreur", en: "Error", style: "bg-red-500/15 text-red-300" },
 };
 
 export default function AccountCard({ agent }: { agent: AgentInfo }) {
+  const locale = useLocale();
   const { state, check, login, saveKey, removeKey } = useAgentAccount(agent.id);
   const busy = state.phase === "checking" || state.phase === "logging_in";
-  const { label, style } = pill[state.phase];
+  const { fr, en, style } = pillMeta[state.phase];
+  const label = tr(fr, en, locale);
 
   return (
     <section className="space-y-3 rounded-xl border border-[#2e2e2b] bg-[#21211f] p-4">
@@ -24,7 +27,15 @@ export default function AccountCard({ agent }: { agent: AgentInfo }) {
           <p className="mt-0.5 text-[12px] text-[#8c8b83]">{agent.hint}</p>
         </div>
         <span
-          title={state.checkedAt ? `Vérifié le ${new Date(state.checkedAt).toLocaleString("fr-FR")}` : undefined}
+          title={
+            state.checkedAt
+              ? tr(
+                  `Vérifié le ${new Date(state.checkedAt).toLocaleString("fr-FR")}`,
+                  `Checked on ${new Date(state.checkedAt).toLocaleString("en-US")}`,
+                  locale,
+                )
+              : undefined
+          }
           className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${style}`}
         >
           {label}
@@ -53,13 +64,18 @@ export default function AccountCard({ agent }: { agent: AgentInfo }) {
 
       {state.phase === "needs_login" && state.methods.length === 0 && (
         <p className="text-[12px] text-[#e69b80]">
-          Cet agent demande une connexion mais n'annonce aucune méthode : connecte-le depuis son
-          propre terminal, puis vérifie à nouveau.
+          {tr(
+            "Cet agent demande une connexion mais n'annonce aucune méthode : connecte-le depuis son propre terminal, puis vérifie à nouveau.",
+            "This agent requires authentication but exposes no sign-in method: sign in from its own terminal, then check again.",
+            locale,
+          )}
         </p>
       )}
 
       {state.phase === "error" && (
-        <p className="whitespace-pre-wrap text-[12px] text-red-300">{state.message}</p>
+        <p className="whitespace-pre-wrap text-[12px] text-red-300">
+          {translateRustError(state.message, locale)}
+        </p>
       )}
 
       <button
@@ -67,7 +83,7 @@ export default function AccountCard({ agent }: { agent: AgentInfo }) {
         disabled={busy}
         className="rounded-lg bg-[#2e2e2b] px-3 py-1.5 text-[12px] font-medium text-[#e6e5df] transition hover:bg-[#383835] disabled:opacity-50"
       >
-        Vérifier la connexion
+        {tr("Vérifier la connexion", "Check connection", locale)}
       </button>
 
       {agent.keyVariable && (
