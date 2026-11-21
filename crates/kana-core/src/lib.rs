@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Logique métier de Kana partagée entre les interfaces et le backend Tauri.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod limits;
+pub mod permission;
+pub mod relay;
+pub mod thread;
+pub mod usage;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use limits::{Problem, ProblemKind, detect_problem, reset_time};
+pub use permission::{PermissionChoice, PermissionMode, auto_answer, is_dangerous_title, prompt_for};
+pub use relay::{DEFAULT_RELAY_ORDER, RelayConfig, pick_target};
+pub use thread::{ThreadPhase, ThreadState};
+pub use usage::{DEFAULT_COOLDOWN_MS, DayUsage, KEEP_DAYS, ProviderProblem, UsageStore, day_key, format_tokens};
