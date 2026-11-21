@@ -79,7 +79,7 @@ const RECOMMENDED_PROVIDERS = new Set(["claude", "codex"]);
 function ProviderIcon({ agentId }: { agentId: string }) {
   if (agentId === "claude") {
     return (
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#d97757]/30 bg-[#d97757]/12 text-[#d97757]">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#3b82f6]/40 bg-[#1e3a8a]/35 text-[#93c5fd]">
         <Sparkles className="h-4 w-4" strokeWidth={1.8} />
       </span>
     );
@@ -232,7 +232,7 @@ function ProvidersTab({ onOpenRelay }: { onOpenRelay: () => void }) {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[13.5px] font-medium text-[#ecebe4]">{agent.name}</span>
                         {recommended && (
-                          <span className="rounded-full bg-[#d97757]/15 px-2 py-0.5 text-[10.5px] font-medium text-[#e69b80]">
+                          <span className="rounded-full bg-[#1e3a8a]/35 px-2 py-0.5 text-[10.5px] font-medium text-[#93c5fd]">
                             {tr("Recommandé", "Recommended", locale)}
                           </span>
                         )}
@@ -269,7 +269,7 @@ function ProvidersTab({ onOpenRelay }: { onOpenRelay: () => void }) {
                       <span>{tr("Gérer", "Manage", locale)}</span>
                     ) : (
                       <>
-                        <Plus className="h-3.5 w-3.5 text-[#d97757]" />
+                        <Plus className="h-3.5 w-3.5 text-[#60a5fa]" />
                         <span>{tr("Connecter", "Connect", locale)}</span>
                       </>
                     )}
@@ -306,7 +306,7 @@ function ProvidersTab({ onOpenRelay }: { onOpenRelay: () => void }) {
                             key={method.id}
                             type="button"
                             onClick={() => login(method.id)}
-                            className="w-full rounded-xl bg-[#d97757] px-3.5 py-2 text-left text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e38768]"
+                            className="w-full rounded-xl bg-[#1e40af] px-3.5 py-2 text-left text-[12.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
                           >
                             {method.name}
                             {method.description && (
@@ -320,7 +320,7 @@ function ProvidersTab({ onOpenRelay }: { onOpenRelay: () => void }) {
                     )}
 
                     {state.phase === "needs_login" && state.methods.length === 0 && (
-                      <p className="text-[12px] text-[#e69b80]">
+                      <p className="text-[12px] text-[#93c5fd]">
                         {tr(
                           "Connectez cet agent depuis son propre terminal, puis cliquez sur Vérifier.",
                           "Sign in to this agent from its own terminal, then click Check.",
@@ -338,7 +338,7 @@ function ProvidersTab({ onOpenRelay }: { onOpenRelay: () => void }) {
                     {agent.keyVariable && (
                       <div className="border-t border-[#2b2b28] pt-3">
                         <div className="mb-1.5 flex items-center gap-1.5 text-[11.5px] text-[#8c8b83]">
-                          <KeyRound className="h-3.5 w-3.5 text-[#d97757]" />
+                          <KeyRound className="h-3.5 w-3.5 text-[#60a5fa]" />
                           <span>{tr("Trousseau macOS", "macOS Keychain", locale)}</span>
                         </div>
                         <ApiKeyField
@@ -360,7 +360,7 @@ function ProvidersTab({ onOpenRelay }: { onOpenRelay: () => void }) {
       {/* Carte compacte Relais automatique de quota */}
       <section className="flex items-center justify-between gap-4 rounded-xl border border-[#2f2f2c] bg-[#181817] px-4 py-3.5">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#383834] bg-[#252523] text-[#d97757]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#383834] bg-[#252523] text-[#60a5fa]">
             <Repeat2 className="h-4 w-4" strokeWidth={1.8} />
           </span>
           <div className="min-w-0">
@@ -427,7 +427,7 @@ function AccountTab() {
 
       <form onSubmit={handleSave} className="space-y-4 rounded-xl border border-[#2f2f2c] bg-[#181817] p-4">
         <div className="flex items-center gap-3.5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#3e3e39] bg-[#d97757]/20 text-[15px] font-semibold text-[#e69b80]">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#3e3e39] bg-[#1e3a8a]/35 text-[15px] font-semibold text-[#93c5fd]">
             {initials ? initials : <User className="h-5 w-5 text-[#8c8b83]" />}
           </div>
           <div>
@@ -453,7 +453,7 @@ function AccountTab() {
             value={nameInput}
             onChange={(event) => setNameInput(event.target.value)}
             placeholder={tr("Prénom ou pseudo", "First name or handle", locale)}
-            className="w-full rounded-xl border border-[#343430] bg-[#1f1f1d] px-3.5 py-2 text-[13px] text-[#ecebe4] placeholder-[#6e6d66] outline-none focus:border-[#d97757] select-text"
+            className="w-full rounded-xl border border-[#343430] bg-[#1f1f1d] px-3.5 py-2 text-[13px] text-[#ecebe4] placeholder-[#6e6d66] outline-none focus:border-[#3b82f6] select-text"
           />
         </div>
 
@@ -462,7 +462,7 @@ function AccountTab() {
             <button
               type="button"
               onClick={() => clearUserProfile()}
-              className="rounded-lg border border-[#383834] bg-[#252523] px-3 py-1.5 text-[12px] text-[#e69b80] transition hover:bg-[#2f2f2c]"
+              className="rounded-lg border border-[#383834] bg-[#252523] px-3 py-1.5 text-[12px] text-[#93c5fd] transition hover:bg-[#2f2f2c]"
             >
               {tr("Se déconnecter", "Sign out", locale)}
             </button>
@@ -480,7 +480,7 @@ function AccountTab() {
             <button
               type="submit"
               disabled={!nameInput.trim()}
-              className="rounded-lg bg-[#d97757] px-3.5 py-1.5 text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-40"
+              className="rounded-lg bg-[#1e40af] px-3.5 py-1.5 text-[12.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-40"
             >
               {tr("Enregistrer", "Save", locale)}
             </button>
@@ -522,7 +522,7 @@ function AppearanceTab() {
             aria-label={tr("Langue de l'interface", "Interface language", locale)}
             value={locale}
             onChange={(event) => setLocale(event.target.value as Locale)}
-            className="rounded-lg border border-[#343431] bg-[#252523] px-3 py-1.5 text-[13px] text-[#ecebe4] outline-none focus:border-[#d97757]"
+            className="rounded-lg border border-[#343431] bg-[#252523] px-3 py-1.5 text-[13px] text-[#ecebe4] outline-none focus:border-[#3b82f6]"
           >
             <option value="fr">Français</option>
             <option value="en">English</option>
@@ -537,12 +537,12 @@ function AppearanceTab() {
               {tr("Thème visuel", "Visual theme", locale)}
             </h3>
             <p className="mt-0.5 text-[12px] text-[#8c8b83]">
-              {tr("Palette sombre Kana haute lisibilité (#181817 · accent #d97757).", "Kana high-clarity dark palette (#181817 · accent #d97757).", locale)}
+              {tr("Palette sombre Kana Bleu Marine (#181817 · accent #1e40af / #3b82f6).", "Kana Navy Blue dark palette (#181817 · accent #1e40af / #3b82f6).", locale)}
             </p>
           </div>
           <div className="flex items-center gap-1.5 rounded-lg border border-[#343431] bg-[#252523] px-2.5 py-1.5 text-[12px] text-[#ecebe4]">
             <span className="h-3 w-3 rounded-full border border-[#4a4a44] bg-[#181817]" />
-            <span className="h-3 w-3 rounded-full bg-[#d97757]" />
+            <span className="h-3 w-3 rounded-full bg-[#2563eb]" />
             <span>{tr("Sombre", "Dark", locale)}</span>
           </div>
         </div>
@@ -590,7 +590,7 @@ function NotificationsTab({
             type="checkbox"
             checked={notifications.enabled}
             onChange={(event) => setNotificationPrefs({ ...notifications, enabled: event.target.checked })}
-            className="h-4 w-4 accent-[#d97757]"
+            className="h-4 w-4 accent-[#2563eb]"
           />
         </label>
 
@@ -612,13 +612,13 @@ function NotificationsTab({
             checked={notifications.sound}
             disabled={!notifications.enabled}
             onChange={(event) => setNotificationPrefs({ ...notifications, sound: event.target.checked })}
-            className="h-4 w-4 accent-[#d97757] disabled:cursor-not-allowed"
+            className="h-4 w-4 accent-[#2563eb] disabled:cursor-not-allowed"
           />
         </label>
 
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg bg-[#222220] px-3.5 py-2.5">
           <div className="flex items-start gap-2.5">
-            <Coffee className="mt-0.5 h-4 w-4 shrink-0 text-[#d97757]" />
+            <Coffee className="mt-0.5 h-4 w-4 shrink-0 text-[#60a5fa]" />
             <div>
               <span className="block font-medium">
                 {tr("Maintenir l'ordinateur actif", "Keep computer awake", locale)}
@@ -636,7 +636,7 @@ function NotificationsTab({
             type="checkbox"
             checked={keepAwake}
             onChange={onToggleKeepAwake}
-            className="h-4 w-4 accent-[#d97757]"
+            className="h-4 w-4 accent-[#2563eb]"
           />
         </label>
       </section>
@@ -705,13 +705,13 @@ function SecurityTab() {
             value={rulePattern}
             onChange={(event) => setRulePattern(event.target.value)}
             placeholder={tr("ex. npm test, *.pem, git push", "e.g. npm test, *.pem, git push", locale)}
-            className="min-w-[150px] flex-1 rounded-lg border border-[#343431] bg-[#1f1f1d] px-2.5 py-1.5 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#d97757] select-text"
+            className="min-w-[150px] flex-1 rounded-lg border border-[#343431] bg-[#1f1f1d] px-2.5 py-1.5 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#3b82f6] select-text"
           />
 
           <button
             type="submit"
             disabled={!rulePattern.trim()}
-            className="rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-40"
+            className="rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-40"
           >
             {tr("Ajouter la règle", "Add rule", locale)}
           </button>
@@ -733,7 +733,7 @@ function SecurityTab() {
                   aria-label={tr(`Activer ${rule.pattern}`, `Enable ${rule.pattern}`, locale)}
                   checked={rule.enabled}
                   onChange={() => togglePermissionRule(rule.id)}
-                  className="h-3.5 w-3.5 accent-[#d97757]"
+                  className="h-3.5 w-3.5 accent-[#2563eb]"
                 />
                 <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] uppercase ${POLICY_STYLE[rule.policy]}`}>
                   {rule.policy}
@@ -891,7 +891,7 @@ function ApplicationTab({
             type="button"
             onClick={() => void handleInstallAllAdapters()}
             disabled={installingAdapter !== null || adapterCaches.length === 0}
-            className="flex items-center gap-1.5 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5" />
             <span>{tr("Tout mettre en cache", "Cache all adapters", locale)}</span>
@@ -1111,7 +1111,7 @@ export default function SettingsModal({
                   }`}
                 >
                   <Icon
-                    className={`h-4 w-4 shrink-0 ${selected ? "text-[#d97757]" : "text-[#8c8b83]"}`}
+                    className={`h-4 w-4 shrink-0 ${selected ? "text-[#60a5fa]" : "text-[#8c8b83]"}`}
                     strokeWidth={1.7}
                   />
                   <span className="truncate">{tab.label}</span>
