@@ -8,10 +8,11 @@ interface UserMessageProps {
   /** Renvoie un texte à l'agent (le même, ou le texte modifié). */
   onSend: (text: string) => void;
   onFork: () => void;
+  onRewind?: () => void;
 }
 
 /** Message de l'utilisateur : la bulle se modifie sur place, puis le texte est renvoyé. */
-export default function UserMessage({ message, busy, onSend, onFork }: UserMessageProps) {
+export default function UserMessage({ message, busy, onSend, onFork, onRewind }: UserMessageProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(message.text);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -92,6 +93,7 @@ export default function UserMessage({ message, busy, onSend, onFork }: UserMessa
         onRetry={busy ? undefined : () => onSend(message.text)}
         onEdit={startEditing}
         onFork={busy ? undefined : onFork}
+        onRewind={busy ? undefined : onRewind}
       />
     </div>
   );
