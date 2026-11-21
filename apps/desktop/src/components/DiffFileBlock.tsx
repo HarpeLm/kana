@@ -133,7 +133,7 @@ function CommentForm({
           type="button"
           disabled={!draft.trim()}
           onClick={onSubmit}
-          className="rounded-lg bg-[#d97757] px-3 py-1 text-[12px] font-medium text-[#181817] hover:bg-[#e38768] disabled:opacity-40"
+          className="rounded-lg bg-[#1e40af] px-3 py-1 text-[12px] font-medium text-[#f8fafc] hover:bg-[#2563eb] disabled:opacity-40"
         >
           Envoyer à l'agent
         </button>
