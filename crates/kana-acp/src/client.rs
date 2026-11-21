@@ -20,7 +20,7 @@ use crate::{
     auth::AuthMethod,
     error::AcpError,
     event::AcpEvent,
-    mcp::{McpServerConfig, supports_http},
+    mcp::{McpServerConfig, McpTransport, supports_http, supports_sse},
     models::AgentModels,
     protocol, reader,
 };
@@ -162,11 +162,17 @@ impl AcpClient {
                 .request("authenticate", json!({ "methodId": method_id }))
                 .await?;
         }
-        let servers: Vec<Value> = if supports_http(&init) {
-            mcp.iter().map(McpServerConfig::to_acp).collect()
-        } else {
-            Vec::new()
-        };
+        let allow_http = supports_http(&init);
+        let allow_sse = supports_sse(&init) || allow_http;
+        let servers: Vec<Value> = mcp
+            .iter()
+            .filter(|server| match server.transport {
+                McpTransport::Stdio => true,
+                McpTransport::Http => allow_http,
+                McpTransport::Sse => allow_sse,
+            })
+            .map(McpServerConfig::to_acp)
+            .collect();
         let can_load = init["agentCapabilities"]["loadSession"] == true;
         if can_load && let Some(sid) = resume_session_id.filter(|s| !s.is_empty()) {
             client.shared.suppress_updates.store(true, Ordering::SeqCst);
