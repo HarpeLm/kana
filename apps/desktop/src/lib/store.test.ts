@@ -62,6 +62,7 @@ describe("store shared settings", () => {
       "kana-cloud-config",
       "kana-usage",
       "kana-locale",
+      "kana-user-profile",
     ]);
   });
 
