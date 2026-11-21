@@ -107,3 +107,9 @@ export function writeFile(
   sampleTexts.set(file, { text: content, modified });
   return Promise.resolve(modified);
 }
+
+/** Met un fichier à la corbeille. */
+export async function trashFile(file: string, root?: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("delete_repo_file", { path: root ?? null, file });
+}
