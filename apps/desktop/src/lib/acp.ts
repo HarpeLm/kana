@@ -44,6 +44,13 @@ export interface StartedSession {
   resumed: boolean;
 }
 
+export interface AgentEnvironment {
+  kind: "local" | "ssh" | "docker" | "devcontainer";
+  target?: string;
+  sandbox?: boolean;
+  readOnly?: boolean;
+}
+
 // Dans un navigateur simple (sans Tauri), on bascule sur un agent simulé.
 const mockSessions = new Set<string>();
 
@@ -55,6 +62,7 @@ export function startAgent(
   model?: string,
   effort?: string,
   resumeSessionId?: string,
+  environment?: AgentEnvironment,
 ): Promise<StartedSession> {
   if (inTauri) {
     return invoke<StartedSession>("start_agent", {
@@ -64,6 +72,7 @@ export function startAgent(
       model: model ?? null,
       effort: effort ?? null,
       resumeSessionId: resumeSessionId ?? null,
+      environment: environment ?? null,
     });
   }
   const resumed = mockSessions.has(threadId) || !!resumeSessionId;
