@@ -15,7 +15,7 @@ import { useAllArtifacts, type ArtifactEntry } from "./lib/artifactIndex";
 import EffortPicker from "./components/EffortPicker";
 import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
-import { NO_PROJECT, NO_PROJECT_NAME, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
+import { NO_PROJECT, NO_PROJECT_NAME, buildProjectMemoryPreface, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
 import { useChat, type PreparedThread } from "./hooks/useChat";
 import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
@@ -65,6 +65,7 @@ import SessionPanel from "./components/SessionPanel";
 import { useSessionSummary } from "./hooks/useSessionSummary";
 import ScheduledView from "./components/ScheduledView";
 import SearchPalette from "./components/SearchPalette";
+import SideChatDock from "./components/SideChatDock";
 import TerminalDock from "./components/TerminalDock";
 import SettingsView from "./components/SettingsView";
 import Sidebar from "./components/Sidebar";
@@ -96,10 +97,10 @@ export default function App({ startup }: { startup: Startup }) {
   useEffect(() => {
     itemsRef.current = conversations.items;
   });
-  const { attachWorktree, clearForkContext } = conversations;
+  const { attachWorktree, clearForkContext, findById } = conversations;
   const prepareThread = useCallback(
     async (threadId: string): Promise<PreparedThread> => {
-      const conversation = itemsRef.current.find((c) => c.id === threadId);
+      const conversation = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
       if (!conversation) return {};
       let cwd = conversation.worktree;
       const projectPath = conversation.projectPath;
@@ -108,8 +109,9 @@ export default function App({ startup }: { startup: Startup }) {
         cwd = await scratchDir();
       } else if (!cwd) {
         if (conversation.useWorktree !== false) {
-          const base = conversation.forkedFrom
-            ? itemsRef.current.find((c) => c.id === conversation.forkedFrom)?.branch
+          const parentId = conversation.forkedFrom ?? conversation.parentId;
+          const base = parentId
+            ? (findById(parentId)?.branch ?? itemsRef.current.find((c) => c.id === parentId)?.branch)
             : undefined;
           const info = await createWorktree(threadId, base, projectPath).catch(() => null);
           if (info) {
@@ -122,10 +124,11 @@ export default function App({ startup }: { startup: Startup }) {
       }
       const carried = conversation.forkContext;
       if (carried) clearForkContext(threadId);
+      const memory = buildProjectMemoryPreface(projectPath);
       const folders = conversation.extraFolders?.length
         ? `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`
         : "";
-      const preface = `${ARTIFACT_GUIDE}${folders}${carried ?? ""}`;
+      const preface = `${ARTIFACT_GUIDE}${memory}${folders}${carried ?? ""}`;
       return {
         cwd,
         preface,
@@ -133,12 +136,14 @@ export default function App({ startup }: { startup: Startup }) {
         model: conversation.modelId,
         effort: chosenEffort(conversation.agentId),
         acpSessionId: conversation.acpSessionId,
+        environment: conversation.environment,
       };
     },
-    [attachWorktree, clearForkContext],
+    [attachWorktree, clearForkContext, findById],
   );
   // Ce que les agents consomment, et les limites qu'ils atteignent (voir « Relais »).
-  const agentOf = (threadId: string) => itemsRef.current.find((c) => c.id === threadId)?.agentId;
+  const agentOf = (threadId: string) =>
+    (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.agentId;
   const selectedIdRef = useRef(selected.id);
   useEffect(() => {
     selectedIdRef.current = selected.id;
@@ -146,13 +151,16 @@ export default function App({ startup }: { startup: Startup }) {
   const pendingTitles = useRef(new Map<string, { request: string; provisional: string }>());
   const observer = {
     onSession: (threadId: string, sessionId: string) => {
+      if (threadId.startsWith("side:")) return;
       conversations.setAcpSessionId(threadId, sessionId);
     },
     onTurnUsage: (threadId: string, usage: { input: number; output: number; total: number }) => {
+      if (threadId.startsWith("side:")) return;
       const agent = agentOf(threadId);
       if (agent) recordTokens(agent, usage.input, usage.output, usage.total);
     },
     onDone: (threadId: string) => {
+      if (threadId.startsWith("side:")) return;
       const agent = agentOf(threadId);
       if (!agent) return;
       // Au premier tour fini, l'agent écrit un vrai titre (sauf si la conversation a été renommée entre-temps).
@@ -160,14 +168,14 @@ export default function App({ startup }: { startup: Startup }) {
       if (pending) {
         pendingTitles.current.delete(threadId);
         void agentTitle(agent, pending.request).then((title) => {
-          const now = itemsRef.current.find((c) => c.id === threadId);
+          const now = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
           if (title && now && now.title === pending.provisional) conversations.rename(threadId, title);
         });
       }
       recordTurn(agent);
       clearProblem(agent);
 
-      const convTitle = itemsRef.current.find((c) => c.id === threadId)?.title || "Kana";
+      const convTitle = (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.title || "Kana";
       const inBackground = threadId !== selectedIdRef.current;
       if (inBackground || (typeof document !== "undefined" && document.hidden)) {
         notifyOs(convTitle, "L'agent a terminé sa réponse.");
@@ -177,7 +185,8 @@ export default function App({ startup }: { startup: Startup }) {
       }
     },
     onPermission: (threadId: string, title: string) => {
-      const convTitle = itemsRef.current.find((c) => c.id === threadId)?.title || "Kana";
+      if (threadId.startsWith("side:")) return;
+      const convTitle = (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.title || "Kana";
       const inBackground = threadId !== selectedIdRef.current;
       if (inBackground || (typeof document !== "undefined" && document.hidden)) {
         notifyOs(convTitle, `Autorisation demandée : ${title}`);
@@ -187,12 +196,19 @@ export default function App({ startup }: { startup: Startup }) {
       }
     },
     onError: (threadId: string, message: string) => {
+      if (threadId.startsWith("side:")) return;
       const agent = agentOf(threadId);
       const problem = detectProblem(message);
       if (agent && problem) markProblem(agent, problem, message);
     },
   };
-  const { chat, send, stop, answer, seed, removeQueued, steerQueued } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
+  const { chat, chats, send, sendToThread, stop, answer, seed, removeQueued, steerQueued } = useChat(
+    selected.id,
+    selected.agentId,
+    permissionMode,
+    prepareThread,
+    observer,
+  );
   const changeMode = (mode: PermissionMode) => {
     setPermissionMode(mode);
     saveMode(mode);
@@ -349,6 +365,7 @@ export default function App({ startup }: { startup: Startup }) {
   const [showBrowser, setShowBrowser] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [showArtDock, setShowArtDock] = useState(false);
+  const [showSideChat, setShowSideChat] = useState(false);
   const [artMaximized, setArtMaximized] = useState(false);
 
   // Entrées du menu "..."
@@ -559,6 +576,12 @@ export default function App({ startup }: { startup: Startup }) {
       } else if (event.key === ",") {
         event.preventDefault();
         setView("settings");
+      } else if (event.key === ";") {
+        event.preventDefault();
+        setShowSideChat((v) => {
+          if (!v && view !== "workspace") setView("workspace");
+          return !v;
+        });
       }
       return;
     }
@@ -655,6 +678,11 @@ export default function App({ startup }: { startup: Startup }) {
             showFiles,
             onFiles: toggle(setShowFiles),
             more: {
+              showSideChat,
+              onSideChat: () => {
+                if (!showSideChat && view !== "workspace") setView("workspace");
+                setShowSideChat((v) => !v);
+              },
               showArtifacts: showArtDock,
               onArtifacts: toggle(setShowArtDock),
               keepAwake,
@@ -682,7 +710,7 @@ export default function App({ startup }: { startup: Startup }) {
             projectPaths={projectList.projects.map((p) => p.path)}
           />
         ) : view === "scheduled" ? (
-          <ScheduledView />
+          <ScheduledView projects={projectList.projects} defaultProjectPath={workPath ?? selected.projectPath} />
         ) : view === "artifacts" ? (
           <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} onMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })} currentRoot={workPath ?? selected.projectPath} />
         ) : view === "workspace" ? (
@@ -725,6 +753,14 @@ export default function App({ startup }: { startup: Startup }) {
             />
             </OpenFileContext.Provider>
             </OpenArtifactContext.Provider>
+            {showSideChat && (
+              <SideChatDock
+                conversation={selected}
+                mainMessages={chat.messages}
+                workPath={workPath}
+                onClose={() => setShowSideChat(false)}
+              />
+            )}
             {showPlan && (
               <SessionPanel
                 conversation={selected}
@@ -753,6 +789,31 @@ export default function App({ startup }: { startup: Startup }) {
                   conversations.addFolder(selected.id, path);
                   void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`);
                 }}
+                onChangeEnvironment={(env) => {
+                  stopAgent(selected.id).catch(() => {});
+                  conversations.setEnvironment(selected.id, env);
+                }}
+                subagents={conversations.items
+                  .filter((c) => c.parentId === selected.id)
+                  .map((sub) => {
+                    const subChat = chats[sub.id];
+                    const lastRole = subChat?.messages[subChat.messages.length - 1]?.role;
+                    const status: "running" | "done" | "error" | "idle" = subChat?.busy
+                      ? "running"
+                      : lastRole === "error"
+                        ? "error"
+                        : subChat?.messages.some((m) => m.role === "agent")
+                          ? "done"
+                          : "idle";
+                    return { conversation: sub, status };
+                  })}
+                onSpawnSubagent={(roleLabel, prompt, readOnly) => {
+                  const subId = conversations.spawnSubagent(selected.id, roleLabel, prompt, readOnly);
+                  if (!subId) return;
+                  const modeOverride: PermissionMode | undefined = readOnly ? "plan" : undefined;
+                  void sendToThread(subId, selected.agentId, prompt, modeOverride);
+                }}
+                onOpenSubagent={(id) => openConversation(id)}
                 onDiscarded={() => {
                   stopAgent(selected.id).catch(() => {});
                   conversations.clearWorktree(selected.id);
@@ -885,6 +946,7 @@ export default function App({ startup }: { startup: Startup }) {
           onOpenArtifact={openArtifactEntry}
           onArtifactMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })}
           onOpenConversation={openConversation}
+          onOpenScheduled={() => setView("scheduled")}
           onAction={runPaletteAction}
           onClose={() => setSearchOpen(false)}
         />
