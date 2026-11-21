@@ -62,7 +62,7 @@ export default function WelcomeProfileModal({
         <div className="flex items-start justify-between gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#3a3a36] bg-[#252523] text-[14px] font-semibold text-[#ecebe4]">
             {initials ? (
-              <span className="text-[#d97757]">{initials}</span>
+              <span className="text-[#60a5fa]">{initials}</span>
             ) : (
               <User className="h-5 w-5 text-[#8c8b83]" strokeWidth={1.7} />
             )}
@@ -103,7 +103,7 @@ export default function WelcomeProfileModal({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={tr("Prénom ou pseudo (ex. HarpeLm)", "First name or handle (e.g. HarpeLm)", locale)}
-              className="w-full rounded-xl border border-[#383834] bg-[#181817] px-3.5 py-2.5 text-[13.5px] text-[#ecebe4] placeholder-[#6e6d66] outline-none transition focus:border-[#d97757] select-text"
+              className="w-full rounded-xl border border-[#383834] bg-[#181817] px-3.5 py-2.5 text-[13.5px] text-[#ecebe4] placeholder-[#6e6d66] outline-none transition focus:border-[#3b82f6] select-text"
             />
           </div>
 
@@ -118,7 +118,7 @@ export default function WelcomeProfileModal({
             <button
               type="submit"
               disabled={!trimmed}
-              className="rounded-xl bg-[#d97757] px-4 py-2 text-[13px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl bg-[#1e40af] px-4 py-2 text-[13px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {tr("Continuer", "Continue", locale)}
             </button>
