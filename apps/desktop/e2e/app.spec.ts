@@ -80,12 +80,14 @@ test("Échap ferme la recherche", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Rechercher" })).toHaveCount(0);
 });
 
-test("les réglages et les tâches planifiées s'ouvrent", async ({ page }) => {
+test("les réglages, la personnalisation et les tâches planifiées s'ouvrent", async ({ page }) => {
   const errors = watchErrors(page);
   await nav(page).getByRole("button", { name: "Tâches planifiées" }).click();
-  await expect(page.getByText("Aucune tâche planifiée pour l'instant.")).toBeVisible();
+  await expect(page.getByText("Aucune tâche planifiée", { exact: true })).toBeVisible();
   await nav(page).getByRole("button", { name: "Personnalisation" }).click();
-  await expect(page.getByText("Réglages").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Personnalisation" })).toBeVisible();
+  await page.getByRole("button", { name: "Réglages" }).click();
+  await expect(page.getByRole("heading", { name: "Comptes et connexions" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -406,6 +408,7 @@ test("réglages : options de Notifications système et son", async ({ page }) =>
 test("tâches planifiées : création, exécution immédiate, historique, budget et launchd .plist", async ({ page }) => {
   const errors = watchErrors(page);
   await nav(page).getByRole("button", { name: "Tâches planifiées" }).click();
+  await page.getByRole("button", { name: "Nouvelle tâche" }).click();
 
   await page.getByLabel("Titre de la tâche").fill("Veille sécurité");
   await page.getByLabel("Prompt de la tâche").fill("Analyse les dépendances et signale les CVE.");
@@ -421,7 +424,7 @@ test("tâches planifiées : création, exécution immédiate, historique, budget
   await expect(page.getByText(/25[\s\u202f]000 jetons/).last()).toBeVisible();
   await expect(page.getByText(/Exécution terminée pour « Veille sécurité »/)).toBeVisible();
 
-  await page.getByRole("button", { name: "launchd .plist" }).click();
+  await page.getByRole("button", { name: ".plist", exact: true }).click();
   await expect(page.getByText(/<integer>900<\/integer>/)).toBeVisible();
 
   const storedTasks = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-scheduled-tasks") ?? "[]"));
@@ -488,12 +491,14 @@ test("sessionPanel : mémoire projet, environnement distant/sandbox et sous-agen
   await sandboxCheckbox.check();
   await expect(sandboxCheckbox).toBeChecked();
 
-  await panel.getByLabel("Environnement d'exécution").selectOption("ssh");
+  await panel.getByRole("button", { name: /Environnement d'exécution/ }).click();
+  await panel.getByRole("menuitem", { name: "SSH distant" }).click();
   const sshInput = panel.getByLabel("Cible SSH");
   await sshInput.fill("dev@box:/srv/kana");
   await expect(sshInput).toHaveValue("dev@box:/srv/kana");
 
-  await panel.getByLabel("Environnement d'exécution").selectOption("local");
+  await panel.getByRole("button", { name: /Environnement d'exécution/ }).click();
+  await panel.getByRole("menuitem", { name: "Cet ordinateur" }).click();
 
   // Aucun sous-agent n'est affiché par défaut tant qu'aucun n'a été lancé
   await expect(panel.getByText("Sous-agents parallèles")).toHaveCount(0);
@@ -732,7 +737,7 @@ test("règles de permissions, journal d'audit et changement de langue FR/EN", as
     );
   });
   await page.reload();
-  await nav(page).getByRole("button", { name: "Personnalisation" }).click();
+  await page.getByRole("button", { name: "Réglages" }).click();
   await expect(page.getByRole("heading", { name: "Sécurité, règles de permissions & journal d'audit" })).toBeVisible();
 
   // Vérifie le journal d'audit et le vidage
@@ -922,7 +927,7 @@ test("/advisor & Cross-Review, Diagnostics LSP dans FilesDock et Cache local des
   await expect(page.locator("main").getByText(/Diagnostics LSP \/ Compilateur détectés dans le dépôt/).first()).toBeVisible();
 
   // 3. Section Mises à jour Tauri & Cache local des adaptateurs ACP dans SettingsView
-  await nav(page).getByRole("button", { name: "Personnalisation" }).click();
+  await page.getByRole("button", { name: "Réglages" }).click();
   await expect(page.getByRole("heading", { name: "Mises à jour Tauri & Cache local des adaptateurs ACP" })).toBeVisible();
 
   await page.getByRole("button", { name: "Vérifier les mises à jour" }).click();
@@ -1028,6 +1033,7 @@ test("daemon macOS launchctl en 1 clic et cible Kana Cloud (Managé / Mobile)", 
 
   // 1. Daemon launchctl dans « Tâches planifiées »
   await nav(page).getByRole("button", { name: "Tâches planifiées" }).click();
+  await page.getByRole("button", { name: /Daemon \(launchd\)/ }).click();
   const daemonCard = page.getByRole("region", { name: "Daemon système macOS (launchd)" });
   await expect(daemonCard).toBeVisible();
   await expect(daemonCard.getByText("Non installé")).toBeVisible();
@@ -1046,7 +1052,8 @@ test("daemon macOS launchctl en 1 clic et cible Kana Cloud (Managé / Mobile)", 
   await page.getByRole("button", { name: "Plan et tâches" }).click();
   const panel = page.locator("aside").last();
 
-  await panel.getByLabel("Environnement d'exécution").selectOption("cloud");
+  await panel.getByRole("button", { name: /Environnement d'exécution/ }).click();
+  await panel.getByRole("menuitem", { name: "Kana Cloud (Managé / Mobile)" }).click();
   await panel.getByLabel("URL du serveur Kana Cloud").fill("https://kana.example.com");
   await panel.getByLabel("Token Bearer Kana Cloud").fill("cloud-secret-token");
   await panel.getByRole("button", { name: "Tester la connexion" }).click();
@@ -1150,6 +1157,46 @@ test("écran d'accueil nouvelle session : mise en page épurée centrée (style 
   // Cliquer sur « Corriger & tester » lance immédiatement la conversation
   await page.getByRole("button", { name: "Corriger & tester", exact: true }).click();
   await expect(page.getByText(/Analyse les erreurs récentes du dépôt/).first()).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("vue Personnalisation (Catalogue MCP, Installés, Skills) et clic sur « Aucun dossier » dans SessionPanel", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+
+  // 1. Vue dédiée Personnalisation : ajout d'un connecteur MCP depuis le Catalogue
+  await nav(page).getByRole("button", { name: "Personnalisation" }).click();
+  await expect(page.getByRole("heading", { name: "Personnalisation" })).toBeVisible();
+
+  await page.getByPlaceholder("Rechercher un connecteur MCP, un skill, une règle…").fill("GitHub");
+  await page.getByRole("button", { name: "Ajouter GitHub MCP" }).click();
+  await expect(page.getByText("Installé", { exact: true }).first()).toBeVisible();
+
+  await page.getByPlaceholder("Rechercher un connecteur MCP, un skill, une règle…").fill("");
+  await page.getByRole("tab", { name: /Installés/ }).click();
+  await expect(page.getByText("github", { exact: true })).toBeVisible();
+
+  const storedMcps = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-mcp-servers") ?? "[]"));
+  expect(storedMcps.some((s: { name: string }) => s.name === "github")).toBe(true);
+
+  // 2. Ligne « Aucun dossier » cliquable dans SessionPanel quand aucun projet n'est associé
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "kana-conversations",
+      JSON.stringify([{ id: "c-no-dir", title: "Fil sans projet", project: "Sans dossier", agentId: "opencode", pinned: false, projectPath: "none" }]),
+    );
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Fil sans projet", exact: true }).click();
+  await page.getByRole("button", { name: "Plan et tâches" }).click();
+  const panel = page.locator("aside").last();
+
+  const noFolderBtn = panel.getByRole("button", { name: "Aucun dossier" });
+  await expect(noFolderBtn).toBeVisible();
+  await expect(noFolderBtn).toHaveAttribute("title", "Choisir un dossier de projet");
+  await noFolderBtn.click();
 
   expect(errors).toEqual([]);
 });
