@@ -3,6 +3,7 @@ import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { useClickOutside } from "../hooks/useClickOutside";
 import ConversationMenuItem, { MenuDivider } from "./ConversationMenuItem";
 import {
+  ArrowLeftRight,
   Bot,
   Box,
   Check,
@@ -32,6 +33,7 @@ import {
 import type { CrossReviewPipelineState } from "./AdvisorModal";
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation, EnvironmentKind } from "../lib/conversations";
+import type { HandoffReport } from "../lib/worktree";
 import {
   createPullRequest,
   discardWork,
@@ -207,6 +209,10 @@ interface SessionPanelProps {
   onOpenAdvisor?: () => void;
   /** État courant du pipeline Cross-Review multi-fournisseurs. */
   crossReview?: CrossReviewPipelineState | null;
+  /** Bascule le travail local en cours vers un worktree isolé (Handoff). */
+  onHandoffToWorktree?: () => Promise<HandoffReport | void> | void;
+  /** Rapatrie le travail du worktree vers le dossier local sans fusion définitive (Handoff). */
+  onHandoffToLocal?: () => Promise<HandoffReport | void> | void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
@@ -240,6 +246,8 @@ export default function SessionPanel({
   onImportPrFeedback,
   onOpenAdvisor,
   crossReview,
+  onHandoffToWorktree,
+  onHandoffToLocal,
 }: SessionPanelProps) {
   const [folderMenu, setFolderMenu] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
@@ -250,6 +258,9 @@ export default function SessionPanel({
   const [conflictDetected, setConflictDetected] = useState(false);
   const [resolvingConflicts, setResolvingConflicts] = useState(false);
   const [importingPr, setImportingPr] = useState<number | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffNotice, setHandoffNotice] = useState("");
+  const [handoffError, setHandoffError] = useState("");
   const [notice, setNotice] = useState("");
   const [compacted, setCompacted] = useState(false);
   useUsageVersion();
@@ -391,6 +402,34 @@ export default function SessionPanel({
       setTimeout(() => setNotice(""), 8000);
     } finally {
       setImportingPr(null);
+    }
+  };
+
+  const runHandoff = async (direction: "to_worktree" | "to_local") => {
+    const fn = direction === "to_worktree" ? onHandoffToWorktree : onHandoffToLocal;
+    if (!fn || handoffBusy) return;
+    setHandoffBusy(true);
+    setHandoffError("");
+    try {
+      const report = await fn();
+      const filesCount =
+        report && typeof report === "object" && "transferred_files" in report ? report.transferred_files : null;
+      const filesLabel =
+        filesCount !== null
+          ? `${filesCount} fichier${filesCount > 1 ? "s" : ""} transféré${filesCount > 1 ? "s" : ""}`
+          : "changements transférés";
+      const msg =
+        direction === "to_worktree"
+          ? `Handoff vers le worktree effectué : ${filesLabel}.`
+          : `Rapatrié en local (Handoff) : ${filesLabel}.`;
+      setHandoffNotice(msg);
+      setTimeout(() => {
+        setHandoffNotice((curr) => (curr === msg ? "" : curr));
+      }, 8000);
+    } catch (e) {
+      setHandoffError(translateRustError(String(e), locale));
+    } finally {
+      setHandoffBusy(false);
     }
   };
 
@@ -563,6 +602,42 @@ export default function SessionPanel({
             >
               {summary?.base ?? summary?.branch}
             </Row>
+          )}
+          {projectPath && (
+            <div className="mt-1.5 space-y-1.5 px-1">
+              {!worktree && onHandoffToWorktree && (
+                <button
+                  type="button"
+                  disabled={handoffBusy}
+                  onClick={() => void runHandoff("to_worktree")}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#3a3a35] bg-[#1c1c1a] px-2.5 py-1.5 text-[12.5px] text-[#ecebe4] transition hover:border-[#55554f] hover:bg-[#2a2a28] disabled:opacity-50"
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-[#8ab4f8]" strokeWidth={1.8} />
+                  <span className="truncate">
+                    {handoffBusy ? "Transfert en cours…" : "Basculer vers un worktree isolé (Handoff)"}
+                  </span>
+                </button>
+              )}
+              {worktree && (summary?.branch ?? conversation.branch) && onHandoffToLocal && (
+                <button
+                  type="button"
+                  disabled={handoffBusy}
+                  onClick={() => void runHandoff("to_local")}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#3a3a35] bg-[#1c1c1a] px-2.5 py-1.5 text-[12.5px] text-[#ecebe4] transition hover:border-[#55554f] hover:bg-[#2a2a28] disabled:opacity-50"
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-[#8ce09b]" strokeWidth={1.8} />
+                  <span className="truncate">
+                    {handoffBusy ? "Rapatriement en cours…" : "Rapatrier en local (Handoff)"}
+                  </span>
+                </button>
+              )}
+              {handoffNotice && (
+                <p className="rounded-lg bg-[#2a3a2c] px-2.5 py-1.5 text-[12px] text-[#9be0a8]">{handoffNotice}</p>
+              )}
+              {handoffError && (
+                <p className="rounded-lg bg-[#3a2525] px-2.5 py-1.5 text-[12px] text-red-300">{handoffError}</p>
+              )}
+            </div>
           )}
         </Section>
 
