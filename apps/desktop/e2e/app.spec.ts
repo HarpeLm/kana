@@ -103,7 +103,8 @@ test("le chat : un message, la réponse de l'agent, puis /compact remplacé par 
   await box.fill("Bonjour Kana");
   await box.press("Enter");
   await expect(page.getByText("Bonjour Kana").first()).toBeVisible();
-  await expect(page.getByText(/agent simulé/)).toBeVisible();
+  // On attend la fin de la réponse (l'agent simulé l'écrit mot à mot) : pendant qu'il répond, un nouveau message n'est pas envoyé.
+  await expect(page.getByText(/Tu as écrit « Bonjour Kana »\./)).toBeVisible();
 
   // La réponse à /compact n'est pas montrée : une seule ligne grise la remplace.
   await box.fill("/compact");
