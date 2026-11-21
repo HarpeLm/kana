@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { AGENTS } from "../data";
 import { setRelay, useRelay } from "../lib/relay";
-import { clearProblem, formatTokens, problemOf, usageToday, useUsageVersion } from "../lib/usage";
+import { clearProblem, formatCostUsd, formatTokens, problemOf, usageToday, useUsageVersion } from "../lib/usage";
 
 const nameOf = (id: string) => AGENTS.find((a) => a.id === id)?.name ?? id;
 const clock = (at: number) => new Date(at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -75,7 +75,7 @@ export default function RelayView() {
                   <div className="mt-2 flex items-center gap-3 pl-8 text-[12px] text-[#8c8b83]">
                     <span>
                       Aujourd'hui : {usage.turns} réponse{usage.turns > 1 ? "s" : ""}
-                      {usage.totalTokens > 0 ? ` · ${formatTokens(usage.totalTokens)} jetons` : ""}
+                      {usage.totalTokens > 0 ? ` · ${formatTokens(usage.totalTokens)} jetons · ${formatCostUsd(usage.costUsd)}` : ""}
                     </span>
                     <span className="flex-1" />
                     {problem && (
