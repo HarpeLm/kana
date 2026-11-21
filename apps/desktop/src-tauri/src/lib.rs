@@ -72,6 +72,9 @@ pub fn run() {
             settings_commands::core_pick_relay_target,
             settings_commands::core_auto_answer,
             settings_commands::run_hook_command,
+            settings_commands::list_adapter_caches,
+            settings_commands::install_adapter_cache,
+            settings_commands::check_app_update,
             git_commands::git_diff,
             git_commands::git_branch_summary,
             git_commands::git_pull_requests,
@@ -87,6 +90,7 @@ pub fn run() {
             git_commands::git_restore_checkpoint,
             git_commands::git_inspect_conflicts,
             git_commands::git_pr_feedback,
+            git_commands::git_diagnostics,
             git_commands::repo_files,
             git_commands::read_repo_file,
             git_commands::write_repo_file,
@@ -132,4 +136,135 @@ fn start_browser_mcp(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::E
     app.state::<browser_agent::AgentState>()
         .set_mcp(browser_agent::McpInfo { url: server.url(), token });
     Ok(())
+}
+
+/// Exécute une commande CLI Headless (`kana run`, `kana advisor`, `--help`, `--version`) et renvoie le code de sortie.
+pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
+    match cmd {
+        kana_core::CliCommand::Gui => {
+            run();
+            0
+        }
+        kana_core::CliCommand::Help => {
+            println!("{}", kana_core::format_cli_help());
+            0
+        }
+        kana_core::CliCommand::Version => {
+            println!("kana {}", env!("CARGO_PKG_VERSION"));
+            0
+        }
+        kana_core::CliCommand::Advisor { task } => {
+            let subject = task.as_deref().unwrap_or("Tâche générale sur le dépôt");
+            println!("{}", kana_core::advisor_recommendation(subject));
+            0
+        }
+        kana_core::CliCommand::Run {
+            prompt,
+            agent,
+            cwd,
+            model,
+            sandbox,
+            read_only,
+            json,
+            cross_review,
+        } => {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    eprintln!("impossible d'initialiser le runtime Tokio : {e}");
+                    return 1;
+                }
+            };
+            rt.block_on(async move {
+                let workdir = cwd
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(agent_spec::project_dir);
+                let agents_chain = cross_review.unwrap_or_else(|| vec![agent.clone()]);
+                let mut steps_output = Vec::new();
+                for (idx, step_agent) in agents_chain.iter().enumerate() {
+                    let mut spec = match agent_spec::spec_for(step_agent) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("erreur agent '{step_agent}' : {e}");
+                            return 1;
+                        }
+                    };
+                    if sandbox {
+                        spec = spec.with_sandbox(if read_only {
+                            kana_acp::SandboxPolicy::ReadOnly
+                        } else {
+                            kana_acp::SandboxPolicy::WorkspaceWrite
+                        });
+                    }
+                    let step_prompt = if agents_chain.len() == 1 {
+                        prompt.clone()
+                    } else if idx == 0 {
+                        format!("[Cross-Review Étape 1/3 · Implémentation]\n{prompt}")
+                    } else if idx == 1 {
+                        format!(
+                            "[Cross-Review Étape 2/3 · Revue critique du Diff]\nRelis le diff produit à l'étape précédente pour « {prompt} » et signale/corrige toute régression."
+                        )
+                    } else {
+                        format!(
+                            "[Cross-Review Étape 3/3 · Vérification finale]\nVérifie la compilation, les tests et la conformité finale pour « {prompt} »."
+                        )
+                    };
+
+                    let (client, mut events) = match kana_acp::AcpClient::spawn(&spec, &workdir).await {
+                        Ok(pair) => pair,
+                        Err(e) => {
+                            eprintln!("impossible de démarrer '{step_agent}' : {e}");
+                            return 1;
+                        }
+                    };
+                    if let Some(m) = model.as_deref() {
+                        let _ = client.set_model(m).await;
+                    }
+                    if read_only {
+                        let _ = client.set_plan_mode(true).await;
+                    }
+                    if let Err(e) = client.prompt(&step_prompt).await {
+                        eprintln!("erreur lors de l'envoi du prompt à '{step_agent}' : {e}");
+                        return 1;
+                    }
+                    let mut collected = String::new();
+                    while let Some(ev) = events.recv().await {
+                        match ev {
+                            kana_acp::AcpEvent::Message { text } => {
+                                if !json {
+                                    print!("{text}");
+                                }
+                                collected.push_str(&text);
+                            }
+                            kana_acp::AcpEvent::Done { .. } | kana_acp::AcpEvent::Closed => break,
+                            kana_acp::AcpEvent::Error { message } => {
+                                eprintln!("erreur de '{step_agent}' : {message}");
+                                return 1;
+                            }
+                            _ => {}
+                        }
+                    }
+                    if !json && !collected.ends_with('\n') {
+                        println!();
+                    }
+                    steps_output.push(serde_json::json!({
+                        "step": idx + 1,
+                        "agent": step_agent,
+                        "response": collected,
+                    }));
+                }
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "ok": true,
+                            "cwd": workdir.to_string_lossy(),
+                            "steps": steps_output,
+                        })
+                    );
+                }
+                0
+            })
+        }
+    }
 }
