@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./env";
+import { persistSharedSetting } from "./store";
 
 /** Un projet : un dossier de l'ordinateur où les agents travaillent. */
 export interface Project {
@@ -109,11 +110,7 @@ function writeMemoryMap(next: Record<string, string[]>): void {
   if (!hasBrowserStorage()) {
     memoryMapFallback = next;
   } else {
-    try {
-      localStorage.setItem(PROJECT_MEMORY_KEY, JSON.stringify(next));
-    } catch {
-      // stockage indisponible : la mémoire ne sera pas conservée
-    }
+    persistSharedSetting(PROJECT_MEMORY_KEY, JSON.stringify(next));
   }
   memoryVersion += 1;
   memoryListeners.forEach((notify) => notify());
