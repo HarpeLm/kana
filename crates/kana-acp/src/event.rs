@@ -18,6 +18,14 @@ pub struct PlanEntry {
     pub status: String,
 }
 
+/// Une commande slash annoncée par l'agent (`available_commands_update`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AvailableCommand {
+    pub name: String,
+    pub description: String,
+    pub hint: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AcpEvent {
@@ -41,6 +49,8 @@ pub enum AcpEvent {
     Context { used: u64, size: u64 },
     /// Le plan complet de l'agent : chaque mise à jour remplace la précédente.
     Plan { entries: Vec<PlanEntry> },
+    /// Les commandes slash proposées par l'agent (`available_commands_update`).
+    AvailableCommands { commands: Vec<AvailableCommand> },
     /// L'agent demande l'autorisation d'agir ; répondre avec `resolve_permission`.
     Permission {
         request_id: String,
@@ -104,6 +114,23 @@ impl AcpEvent {
                         Some(PlanEntry {
                             content: string_of(&e["content"])?,
                             status: string_of(&e["status"]).unwrap_or_else(|| "pending".into()),
+                        })
+                    })
+                    .collect(),
+            }),
+            "available_commands_update" => Some(Self::AvailableCommands {
+                commands: update["availableCommands"]
+                    .as_array()?
+                    .iter()
+                    .filter_map(|c| {
+                        let name = string_of(&c["name"])?.trim_start_matches('/').trim().to_owned();
+                        if name.is_empty() {
+                            return None;
+                        }
+                        Some(AvailableCommand {
+                            name,
+                            description: string_of(&c["description"]).unwrap_or_default(),
+                            hint: string_of(&c["input"]["hint"]),
                         })
                     })
                     .collect(),
@@ -232,8 +259,37 @@ mod tests {
 
     #[test]
     fn unknown_updates_are_ignored() {
+        assert_eq!(AcpEvent::from_update(&json!({ "sessionUpdate": "future_update" })), None);
         assert_eq!(AcpEvent::from_update(&json!({ "sessionUpdate": "available_commands_update" })), None);
         assert_eq!(AcpEvent::from_update(&json!({})), None);
+    }
+
+    #[test]
+    fn available_commands_update_lists_slash_commands() {
+        let update = json!({
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+                { "name": "web", "description": "Chercher sur le web", "input": { "hint": "requête" } },
+                { "name": "/test", "description": "Lancer les tests" }
+            ]
+        });
+        assert_eq!(
+            AcpEvent::from_update(&update),
+            Some(AcpEvent::AvailableCommands {
+                commands: vec![
+                    AvailableCommand {
+                        name: "web".into(),
+                        description: "Chercher sur le web".into(),
+                        hint: Some("requête".into()),
+                    },
+                    AvailableCommand {
+                        name: "test".into(),
+                        description: "Lancer les tests".into(),
+                        hint: None,
+                    },
+                ]
+            })
+        );
     }
 
     #[test]
