@@ -506,3 +506,155 @@ test("sessionPanel : mémoire projet, environnement distant/sandbox et sous-agen
   await expect(page.locator("header").getByText(/Recherche · /)).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("extensibilité : Connecteurs MCP, Règles, Skills, Hooks et Packs via PlusMenu", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  // Ouvrir Connecteurs depuis le menu « + »
+  await page.getByRole("button", { name: "Ajouter" }).click();
+  await page.getByRole("button", { name: "Connecteurs" }).click();
+  const modal = page.getByRole("dialog", { name: "Extensibilité et connecteurs" });
+  await expect(modal).toBeVisible();
+
+  // 1. Connecteur MCP HTTP avec jeton OAuth Bearer
+  await modal.getByLabel("Nom du serveur MCP").fill("linear-mcp");
+  await modal.getByLabel("Transport MCP").selectOption("sse");
+  await modal.getByLabel("URL MCP").fill("https://mcp.linear.app/sse");
+  await modal.getByLabel("Jeton OAuth MCP").fill("oauth-secret");
+  await modal.getByRole("button", { name: "Ajouter le serveur MCP" }).click();
+  await expect(modal.getByText("linear-mcp", { exact: true })).toBeVisible();
+  await expect(modal.getByText("OAuth Bearer")).toBeVisible();
+
+  // 2. Règles projet + synchronisation
+  await modal.getByRole("tab", { name: "Règles" }).click();
+  await modal.getByLabel("Contenu de la règle").fill("Toujours vérifier cargo test.");
+  await modal.getByRole("button", { name: "Synchroniser les règles" }).click();
+  await expect(modal.getByText(/Règles synchronisées vers/)).toBeVisible();
+
+  // 3. Skills : import SKILL.md
+  await modal.getByRole("tab", { name: "Skills" }).click();
+  await modal
+    .getByLabel("Contenu SKILL.md à importer")
+    .fill("---\nname: Audit E2E\nslash: audit-e2e\ndescription: Audit rapide\n---\nVérifie le module : $ARGUMENTS");
+  await modal.getByRole("button", { name: "Importer SKILL.md" }).click();
+  await expect(modal.getByText("/audit-e2e", { exact: true })).toBeVisible();
+
+  // 4. Hooks : règle Stop
+  await modal.getByRole("tab", { name: "Hooks" }).click();
+  await modal.getByLabel("Événement du hook").selectOption("Stop");
+  await modal.getByLabel("Motif du hook").fill("*");
+  await modal.getByLabel("Commande du hook").fill("echo hook-done");
+  await modal.getByRole("button", { name: "Ajouter le hook" }).click();
+  await expect(modal.getByText("echo hook-done")).toBeVisible();
+
+  // Fermer le modal puis vérifier l'autocomplétion /audit-e2e et son expansion + exécution du hook Stop
+  await modal.getByRole("button", { name: "Fermer" }).click();
+  await expect(modal).toHaveCount(0);
+
+  const composer = page.getByRole("textbox").last();
+  await composer.fill("/audit");
+  const slashMenu = page.getByRole("listbox", { name: "Commandes slash" });
+  await expect(slashMenu.getByRole("option", { name: /audit-e2e/ })).toBeVisible();
+  await composer.press("Tab");
+  await expect(composer).toHaveValue("/audit-e2e ");
+  await composer.type("paiement");
+  await composer.press("Enter");
+  await expect(page.getByText(/Vérifie le module : paiement/)).toBeVisible();
+
+  // Ouvrir Plug-ins depuis « + », vérifier le journal du hook et installer un pack en 1 clic
+  await page.getByRole("button", { name: "Ajouter" }).click();
+  await page.getByRole("button", { name: "Plug-ins" }).click();
+  await expect(modal).toBeVisible();
+  await modal.getByRole("button", { name: "Installer en 1 clic" }).first().click();
+  await expect(modal.getByText(/Pack « Qualité & Garde-fous Rust\/TS » installé/)).toBeVisible();
+  await modal.getByRole("button", { name: "Exporter en JSON" }).click();
+  await expect(modal.getByLabel("JSON du pack à importer")).toHaveValue(/kana-plugin-pack/);
+
+  await modal.getByRole("tab", { name: "Hooks" }).click();
+  await expect(modal.getByText("$ echo hook-done")).toBeVisible();
+  await modal.getByRole("button", { name: "Fermer" }).click();
+
+  expect(errors).toEqual([]);
+});
+
+test("diff interactif : vue côte-à-côte, commentaire inline, accepter et rejeter bloc/fichier", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  await page.getByRole("button", { name: "Git Diff" }).click();
+  const diffPane = page.getByRole("region", { name: "Diff" });
+  await expect(diffPane).toHaveCSS("opacity", "1");
+  await expect(diffPane.getByText("main.rs")).toBeVisible();
+  await expect(diffPane.getByText("notes.md")).toBeVisible();
+
+  // Bascule côte-à-côte / unifié
+  await diffPane.getByRole("button", { name: "Côte-à-côte" }).click();
+  await expect(diffPane.getByRole("button", { name: "Unifié" })).toBeVisible();
+  await diffPane.getByRole("button", { name: "Unifié" }).click();
+
+  // Accepter un fichier
+  await diffPane.getByRole("button", { name: "Accepter src/main.rs" }).click();
+  await expect(diffPane.getByText("Accepté", { exact: true })).toBeVisible();
+
+  // Commentaire inline sur un bloc envoyé à l'agent
+  await diffPane.getByRole("button", { name: "Commenter ce bloc" }).first().click();
+  await diffPane.getByLabel("Commentaire sur le diff").fill("Garde aussi l'ancien log.");
+  await diffPane.getByRole("button", { name: "Envoyer à l'agent" }).click();
+  await expect(page.getByText(/Commentaire de review sur `src\/main\.rs`/).first()).toBeVisible();
+  await expect(page.getByText(/Garde aussi l'ancien log\./).last()).toBeVisible();
+
+  // Rejeter un bloc puis rejeter le second fichier
+  await diffPane.getByRole("button", { name: "Rejeter ce bloc" }).first().click();
+  await expect(diffPane.getByText("main.rs")).toHaveCount(0);
+  await diffPane.getByRole("button", { name: "Rejeter notes.md" }).click();
+  await expect(diffPane.getByText("Aucun changement.")).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("/rewind et SessionPanel : restauration d'un tour, menu forge et import review & logs CI", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+  const main = page.locator("main");
+  const composer = page.getByRole("textbox").last();
+
+  await composer.fill("Premier tour");
+  await composer.press("Enter");
+  await expect(main.getByText(/Tu as écrit « Premier tour »\./)).toBeVisible();
+
+  await composer.fill("Deuxième tour");
+  await composer.press("Enter");
+  await expect(main.getByText(/Tu as écrit « Deuxième tour »\./)).toBeVisible();
+
+  // Bouton Restaurer ce tour (/rewind) sur le deuxième message utilisateur
+  await main.getByText("Deuxième tour", { exact: true }).hover();
+  await main.getByRole("button", { name: "Restaurer ce tour (/rewind)" }).last().click();
+  await expect(main.getByText("Deuxième tour")).toHaveCount(0);
+  await expect(main.getByText("Premier tour").first()).toBeVisible();
+
+  // Commande slash /rewind ramène aussi avant le dernier tour
+  await composer.fill("/rewind");
+  await composer.press("Enter");
+  await expect(main.getByText("Premier tour")).toHaveCount(0);
+
+  // Relance un message pour afficher les sections actives de SessionPanel
+  await composer.fill("Tour final");
+  await composer.press("Enter");
+  await expect(main.getByText(/Tu as écrit « Tour final »\./)).toBeVisible();
+
+  // SessionPanel : menu forge multi-plateformes et import review & logs CI d'une PR
+  await page.getByRole("button", { name: "Plan et tâches" }).click();
+  const panel = page.locator("aside").last();
+  await expect(panel.getByText("Pull / Merge requests")).toBeVisible();
+
+  await panel.getByRole("button", { name: /kana/ }).first().click();
+  await expect(panel.getByRole("button", { name: "Ouvrir sur GitHub / GitLab / Forge" })).toBeVisible();
+  await panel.getByText("Pull / Merge requests").click();
+
+  await panel.getByRole("button", { name: "Importer review & logs CI" }).first().click();
+  await expect(main.getByText(/Feedback importé depuis la PR #215/).first()).toBeVisible();
+  await expect(main.getByText(/cargo test \(ubuntu-latest\)/).first()).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
