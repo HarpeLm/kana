@@ -7,6 +7,7 @@ import {
   Circle,
   CircleDot,
   FileDiff,
+  FolderPlus,
   Copy,
   FileText,
   FolderClosed,
@@ -327,6 +328,12 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
               </div>
             )}
           </div>
+          {conversation.extraFolders?.map((folder) => (
+            <Row key={folder} icon={<FolderPlus className="h-4 w-4" strokeWidth={1.7} />} title={folder}>
+              {folder.split("/").filter(Boolean).pop() ?? folder}
+              <span className="text-[#8c8b83]"> · ajouté</span>
+            </Row>
+          ))}
           {(summary?.base ?? summary?.branch) && (
             <Row
               icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}
