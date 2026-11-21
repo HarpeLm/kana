@@ -491,7 +491,7 @@ export default function App({ startup }: { startup: Startup }) {
         ) : view === "scheduled" ? (
           <ScheduledView />
         ) : view === "artifacts" ? (
-          <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} onMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })} />
+          <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} onMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })} currentRoot={workPath ?? selected.projectPath} />
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <OpenArtifactContext.Provider value={openFile}>
@@ -655,7 +655,11 @@ export default function App({ startup }: { startup: Startup }) {
           x={artifactMenu.x}
           y={artifactMenu.y}
           onClose={() => setArtifactMenu(null)}
-          onOpen={() => (artifactMenu.entry ? openArtifactEntry(artifactMenu.entry) : openFile(artifactMenu.path))}
+          onOpen={() => {
+            setSearchOpen(false);
+            if (artifactMenu.entry) openArtifactEntry(artifactMenu.entry);
+            else openFile(artifactMenu.path);
+          }}
           onCopyPath={() => void navigator.clipboard?.writeText(`${artifactMenu.root ?? ""}/${artifactMenu.path}`).catch(() => {})}
           onDelete={() => {
             setDeleteError("");
@@ -681,6 +685,7 @@ export default function App({ startup }: { startup: Startup }) {
           conversations={conversations.items}
           artifacts={allArtifacts.items}
           onOpenArtifact={openArtifactEntry}
+          onArtifactMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })}
           onOpenConversation={openConversation}
           onCreate={createConversation}
           onOpenSettings={() => setView("settings")}
