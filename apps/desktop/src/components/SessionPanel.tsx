@@ -4,6 +4,7 @@ import {
   Circle,
   CircleDot,
   FileDiff,
+  Copy,
   FileText,
   FolderClosed,
   GitBranch,
@@ -21,6 +22,7 @@ import { createPullRequest, discardWork, mergeWork, type BranchSummary, type Pul
 import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import { isArtifactPath } from "../lib/fileKinds";
+import { artifactTitle } from "../lib/artifactRefs";
 import ConfirmDialog from "./ConfirmDialog";
 import SiteIcon from "./SiteIcon";
 import { AGENTS } from "../data";
@@ -334,8 +336,8 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
         <Section title="Artéfacts" count={created.length + links.length} compact={created.length + links.length === 0}>
           {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
           {created.slice(0, 5).map((file) => (
-            <Row key={file.path} onClick={() => onOpenFile(file.path)} title={`Ouvrir ${file.path}`} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
-              {baseName(file.path)}
+            <Row key={file.path} onClick={() => onOpenFile(file.path)} title={`Ouvrir ${file.path}`} icon={<Copy className="h-4 w-4 text-[#8ab4f8]" strokeWidth={1.6} />}>
+              {artifactTitle(file.path)}
             </Row>
           ))}
           {links.map((url) => (
