@@ -1,4 +1,5 @@
 import { sectionsOf, type Conversation } from "./conversations";
+import type { ArtifactEntry } from "./artifactIndex";
 
 export type SearchTab = "all" | "sessions" | "projects" | "artifacts" | "scheduled";
 
@@ -16,10 +17,12 @@ export const ACTION_SETTINGS = "action:settings";
 export interface SearchItem {
   /** `conversation:<id>`, `project:<nom>` ou `action:<nom>`. */
   id: string;
-  kind: "conversation" | "project" | "action";
+  kind: "conversation" | "project" | "action" | "artifact";
   title: string;
   /** Texte discret à côté du titre (le projet, le nombre de conversations). */
   hint?: string;
+  /** Pour un artéfact : la page à ouvrir et à prévisualiser. */
+  artifact?: ArtifactEntry;
 }
 
 export interface SearchSection {
@@ -43,6 +46,14 @@ function conversationItem(c: Conversation): SearchItem {
   };
 }
 
+const artifactItem = (a: ArtifactEntry): SearchItem => ({
+  id: `artifact:${a.key}`,
+  kind: "artifact",
+  title: a.title,
+  hint: a.project,
+  artifact: a,
+});
+
 function projectItems(names: string[], conversations: Conversation[]): SearchItem[] {
   return names.map((name) => {
     const count = conversations.filter((c) => c.project === name).length;
@@ -60,12 +71,17 @@ export function buildSections(
   conversations: Conversation[],
   query: string,
   tab: SearchTab,
+  artifacts: ArtifactEntry[] = [],
 ): SearchSection[] {
-  // Les artéfacts et les tâches planifiées n'existent pas encore.
-  if (tab === "artifacts" || tab === "scheduled") return [];
+  // Les tâches planifiées n'existent pas encore.
+  if (tab === "scheduled") return [];
 
   const needle = query.trim().toLowerCase();
   const matches = (text: string) => text.toLowerCase().includes(needle);
+  if (tab === "artifacts") {
+    const list = artifacts.filter((a) => !needle || matches(a.title) || matches(a.project));
+    return list.length > 0 ? [{ name: needle ? "Artéfacts" : "Récents", items: list.map(artifactItem) }] : [];
+  }
   const sections: SearchSection[] = [];
   const add = (name: string, items: SearchItem[]) => {
     if (items.length > 0) sections.push({ name, items });
@@ -83,6 +99,7 @@ export function buildSections(
     if (tab === "all") add("Nécessite votre attention", live.filter((c) => c.unread).map(conversationItem));
     const list = tab === "all" ? recent.filter((c) => !c.unread).slice(0, RECENT_COUNT) : recent;
     add("Récents", list.map(conversationItem));
+    if (tab === "all") add("Artéfacts", artifacts.slice(0, 4).map(artifactItem));
     if (tab === "all") add("Actions", ACTIONS);
     return sections;
   }
@@ -93,6 +110,7 @@ export function buildSections(
   if (tab === "all" || tab === "projects") {
     add("Projets", projectItems(projects.filter(matches), conversations));
   }
+  if (tab === "all") add("Artéfacts", artifacts.filter((a) => matches(a.title)).map(artifactItem));
   if (tab === "all") add("Actions", ACTIONS.filter((a) => matches(a.title)));
   return sections;
 }
