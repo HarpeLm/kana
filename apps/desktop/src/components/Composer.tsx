@@ -27,6 +27,7 @@ interface ComposerProps {
   /** Choix du fournisseur et du modèle, à droite sous la ligne ; sinon le nom de l'agent. */
   modelPicker?: ReactNode;
   placeholder?: string;
+  onOpenExtensibility?: (tab: "mcp" | "plugins") => void;
 }
 
 const MENTION_FILTERS: Array<{ id: MentionKind | "all"; label: string }> = [
@@ -67,6 +68,7 @@ export default function Composer({
   footerLeft,
   modelPicker,
   placeholder,
+  onOpenExtensibility,
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -362,7 +364,13 @@ export default function Composer({
             dragging ? "border-dashed border-[#2f6bd8] bg-[#232a38]" : "border-[#2f2f2d]"
           }`}
         >
-          <PlusMenu onAddFiles={() => attach()} onAddFolder={() => attach(true)} onSlash={openSlashMenu} />
+          <PlusMenu
+            onAddFiles={() => attach()}
+            onAddFolder={() => attach(true)}
+            onSlash={openSlashMenu}
+            onOpenConnectors={() => onOpenExtensibility?.("mcp")}
+            onOpenPlugins={() => onOpenExtensibility?.("plugins")}
+          />
           <textarea
             ref={textareaRef}
             aria-label="Message"
