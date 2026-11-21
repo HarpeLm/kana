@@ -6,21 +6,30 @@ import {
   sendPrompt,
   setPlanMode,
   startAgent,
+  stopAgent,
   type AgentEnvironment,
+  type UserMcpServerParam,
 } from "../lib/acp";
 import {
   EMPTY_CHAT,
   addError,
   addUserMessage,
   applyEvent,
+  attachCheckpointToMessage,
   enqueueMessage,
+  loadThreadCheckpoints,
+  makeMessage,
   prioritizeQueuedMessage,
   removeQueuedMessage,
+  rewindChatToMessage,
+  saveThreadCheckpoint,
   type ChatMessage,
   type ChatState,
 } from "../lib/chatState";
 import { imagePathsIn } from "../lib/attachments";
+import { expandSkillCommand, runMatchingHooks } from "../lib/extensibility";
 import { buildResumeContext } from "../lib/fork";
+import { createCheckpoint, restoreCheckpoint } from "../lib/gitDiff";
 import { loadStoredMessages, saveStoredMessages } from "../lib/store";
 import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
 
@@ -49,6 +58,10 @@ export interface PreparedThread {
   acpSessionId?: string;
   /** Environnement d'exécution (local, sandbox OS, SSH, Docker, DevContainer). */
   environment?: AgentEnvironment;
+  /** Chemin du projet associé (pour la portée des skills, hooks et MCP). */
+  projectPath?: string;
+  /** Serveurs MCP utilisateur actifs (globaux + par projet). */
+  mcpServers?: UserMcpServerParam[];
 }
 
 /** Un outil resté « en cours » quand l'app s'est arrêtée n'a jamais fini : on le montre comme interrompu. */
@@ -84,6 +97,7 @@ export function useChat(
   const loading = useRef(new Map<string, Promise<ChatMessage[]>>());
   const saved = useRef(new Map<string, ChatMessage[]>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const threadPathsRef = useRef(new Map<string, { cwd?: string; projectPath?: string }>());
   const prepareRef = useRef(prepare);
   useEffect(() => {
     prepareRef.current = prepare;
@@ -96,7 +110,10 @@ export function useChat(
     const pending = loadStoredMessages(threadId)
       .then((messages) => {
         if (messages.length === 0) return messages;
-        const restored = settled(messages);
+        const checkpoints = loadThreadCheckpoints(threadId);
+        const restored = settled(messages).map((m) =>
+          m.role === "user" && !m.checkpoint && checkpoints[m.id] ? { ...m, checkpoint: checkpoints[m.id] } : m,
+        );
         saved.current.set(threadId, restored);
         setChats((all) => {
           const current = all[threadId];
@@ -155,7 +172,31 @@ export function useChat(
       const watch = observerRef.current;
       if (event.kind === "turn_usage") {
         watch?.onTurnUsage?.(event.threadId, { input: event.input_tokens, output: event.output_tokens, total: event.total_tokens });
+      } else if (event.kind === "tool_call") {
+        const currentChat = chatsRef.current[event.threadId];
+        let prevTool: ChatMessage["tools"][number] | undefined;
+        if (currentChat) {
+          for (let i = currentChat.messages.length - 1; i >= 0; i--) {
+            const found = currentChat.messages[i].tools.find((t) => t.id === event.id);
+            if (found) {
+              prevTool = found;
+              break;
+            }
+          }
+        }
+        const prevStatus = prevTool?.status;
+        const nextStatus = event.status ?? prevStatus ?? "pending";
+        const target = event.title ?? prevTool?.title ?? "Outil";
+        const paths = threadPathsRef.current.get(event.threadId);
+        if (!prevTool && (nextStatus === "pending" || nextStatus === "in_progress")) {
+          void runMatchingHooks("PreToolUse", target, paths?.cwd, paths?.projectPath);
+        }
+        if (nextStatus === "completed" && prevStatus !== "completed") {
+          void runMatchingHooks("PostToolUse", target, paths?.cwd, paths?.projectPath);
+        }
       } else if (event.kind === "done") {
+        const paths = threadPathsRef.current.get(event.threadId);
+        void runMatchingHooks("Stop", event.stop_reason || "done", paths?.cwd, paths?.projectPath);
         watch?.onDone?.(event.threadId);
       } else if (event.kind === "error") {
         watch?.onError?.(event.threadId, event.message);
@@ -191,10 +232,22 @@ export function useChat(
         const pending = loading.current.get(targetThreadId);
         if (pending) priorMessages = await pending;
       }
-      update(targetThreadId, (chat) => addUserMessage(chat, text));
+      const userMessage = makeMessage("user", text);
+      if (text.trim() === "/compact" && chatsRef.current[targetThreadId]?.context) {
+        userMessage.contextBefore = chatsRef.current[targetThreadId].context!.used;
+      }
+      update(targetThreadId, (chat) => addUserMessage(chat, text, userMessage));
       try {
-        const { cwd, preface, carried, model, effort, acpSessionId, environment } =
+        const { cwd, projectPath, preface, carried, model, effort, acpSessionId, environment, mcpServers } =
           await prepareRef.current(targetThreadId);
+        threadPathsRef.current.set(targetThreadId, { cwd, projectPath });
+        if (!targetThreadId.startsWith("side:")) {
+          const checkpoint = await createCheckpoint(userMessage.id, cwd ?? projectPath).catch(() => null);
+          if (checkpoint) {
+            saveThreadCheckpoint(targetThreadId, userMessage.id, checkpoint);
+            update(targetThreadId, (chat) => attachCheckpointToMessage(chat, userMessage.id, checkpoint));
+          }
+        }
         const started = await startAgent(
           targetThreadId,
           targetAgentId,
@@ -203,6 +256,7 @@ export function useChat(
           effort,
           acpSessionId,
           environment,
+          mcpServers,
         );
         observerRef.current?.onSession?.(targetThreadId, started.sessionId);
         const activeMode = modeOverride ?? modeRef.current;
@@ -210,7 +264,8 @@ export function useChat(
         await setPlanMode(targetThreadId, activeMode === "plan").catch(() => false);
         const resume = !started.resumed && !carried ? buildResumeContext(priorMessages) : "";
         const prefix = !started.resumed ? `${preface ?? ""}${resume}` : carried ? (preface ?? "") : "";
-        await sendPrompt(targetThreadId, promptFor(activeMode, `${prefix}${text}`), imagePathsIn(text));
+        const expanded = expandSkillCommand(text, projectPath);
+        await sendPrompt(targetThreadId, promptFor(activeMode, `${prefix}${expanded}`), imagePathsIn(expanded));
       } catch (error) {
         update(targetThreadId, (chat) => addError(chat, String(error)));
         observerRef.current?.onError?.(targetThreadId, String(error));
@@ -293,5 +348,34 @@ export function useChat(
     });
   }, []);
 
-  return { chat: chats[threadId] ?? EMPTY_CHAT, chats, send, sendToThread, stop, answer, seed, clearContext, removeQueued, steerQueued };
+  /** Restaure le checkpoint Git et ramène l'historique avant le tour utilisateur ciblé (ou le dernier). */
+  const rewind = useCallback(
+    async (messageId?: string): Promise<boolean> => {
+      const current = chatsRef.current[threadId];
+      if (!current || current.busy) return false;
+      const checkpoints = loadThreadCheckpoints(threadId);
+      const hydrated: ChatState = {
+        ...current,
+        messages: current.messages.map((m) =>
+          m.role === "user" && !m.checkpoint && checkpoints[m.id] ? { ...m, checkpoint: checkpoints[m.id] } : m,
+        ),
+      };
+      const result = rewindChatToMessage(hydrated, messageId);
+      if (!result.target) return false;
+      if (result.checkpoint) {
+        let paths = threadPathsRef.current.get(threadId);
+        if (!paths) {
+          const prepared = await prepareRef.current(threadId).catch(() => ({} as PreparedThread));
+          paths = { cwd: prepared.cwd, projectPath: prepared.projectPath };
+        }
+        await restoreCheckpoint(result.checkpoint, paths.cwd ?? paths.projectPath).catch(() => {});
+      }
+      await stopAgent(threadId).catch(() => {});
+      update(threadId, () => result.chat);
+      return true;
+    },
+    [threadId, update],
+  );
+
+  return { chat: chats[threadId] ?? EMPTY_CHAT, chats, send, sendToThread, stop, answer, seed, clearContext, removeQueued, steerQueued, rewind };
 }
