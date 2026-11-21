@@ -17,8 +17,58 @@ pub struct EffortInfo {
     pub options: Vec<ModelInfo>,
 }
 
+/// Les modes de travail de l'agent (par exemple « build » et « plan »), annoncés comme option de configuration
+/// de catégorie `mode` ou, à l'ancienne, dans `modes`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ModesInfo {
+    /// L'option de configuration qui porte le mode ; `None` : ancien protocole (`session/set_mode`).
+    pub config_id: Option<String>,
+    pub current: Option<String>,
+    pub options: Vec<ModelInfo>,
+}
+
+impl ModesInfo {
+    fn from_session(result: &Value) -> Option<Self> {
+        if let Some(option) = result["configOptions"].as_array().and_then(|o| o.iter().find(|o| o["category"] == "mode")) {
+            let options: Vec<ModelInfo> = option["options"]
+                .as_array()?
+                .iter()
+                .filter_map(|m| {
+                    let id = m["value"].as_str()?.to_owned();
+                    Some(ModelInfo { name: m["name"].as_str().unwrap_or(&id).to_owned(), id })
+                })
+                .collect();
+            return Some(Self {
+                config_id: option["id"].as_str().map(str::to_owned),
+                current: option["currentValue"].as_str().map(str::to_owned),
+                options,
+            });
+        }
+        let legacy = &result["modes"];
+        let list = legacy["availableModes"].as_array()?;
+        Some(Self {
+            config_id: None,
+            current: legacy["currentModeId"].as_str().map(str::to_owned),
+            options: list
+                .iter()
+                .filter_map(|m| {
+                    let id = m["id"].as_str()?.to_owned();
+                    Some(ModelInfo { name: m["name"].as_str().unwrap_or(&id).to_owned(), id })
+                })
+                .collect(),
+        })
+    }
+
+    /// Le mode « plan » de l'agent, s'il en a un.
+    pub fn plan(&self) -> Option<&ModelInfo> {
+        self.options.iter().find(|m| m.id.eq_ignore_ascii_case("plan") || m.id.to_ascii_lowercase().ends_with("#plan") || m.name.eq_ignore_ascii_case("plan"))
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AgentModels {
+    /// Les modes de travail, quand l'agent en propose (dont un mode « plan » en lecture seule).
+    pub modes: Option<ModesInfo>,
     /// Le niveau d'effort, quand l'agent en propose.
     pub effort: Option<EffortInfo>,
     /// Le modèle utilisé par défaut.
@@ -35,6 +85,7 @@ impl AgentModels {
     pub fn from_session(result: &Value) -> Self {
         let mut models = Self::models_from_session(result);
         models.effort = EffortInfo::from_config_options(&result["configOptions"]);
+        models.modes = ModesInfo::from_session(result);
         models
     }
 
@@ -49,7 +100,7 @@ impl AgentModels {
                     Some(ModelInfo { id, name })
                 })
                 .collect();
-            return Self { current: legacy["currentModelId"].as_str().map(str::to_owned), available, config_id: None, effort: None };
+            return Self { current: legacy["currentModelId"].as_str().map(str::to_owned), available, config_id: None, effort: None, modes: None };
         }
         Self::from_config_options(&result["configOptions"]).unwrap_or_default()
     }
@@ -71,6 +122,7 @@ impl AgentModels {
             available,
             config_id: option["id"].as_str().map(str::to_owned),
             effort: None,
+            modes: None,
         })
     }
 }
@@ -102,6 +154,22 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn finds_the_plan_mode() {
+        let result = json!({ "configOptions": [
+            { "id": "mode", "category": "mode", "currentValue": "build",
+              "options": [{ "value": "build", "name": "Build" }, { "value": "plan", "name": "Plan" }] }
+        ]});
+        let modes = AgentModels::from_session(&result).modes.unwrap();
+        assert_eq!(modes.current.as_deref(), Some("build"));
+        assert_eq!(modes.plan().unwrap().id, "plan");
+        let legacy = json!({ "modes": { "currentModeId": "default", "availableModes": [{ "id": "default" }, { "id": "plan", "name": "Plan" }] } });
+        let modes = AgentModels::from_session(&legacy).modes.unwrap();
+        assert!(modes.config_id.is_none());
+        assert_eq!(modes.plan().unwrap().id, "plan");
+        assert!(AgentModels::from_session(&json!({})).modes.is_none());
+    }
 
     #[test]
     fn reads_the_effort_option() {
