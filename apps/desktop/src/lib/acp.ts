@@ -41,6 +41,11 @@ export function startAgent(threadId: string, agent: string, cwd?: string, model?
     : Promise.resolve();
 }
 
+/** Met l'agent en mode « plan » (il refuse alors lui-même de modifier quoi que ce soit) ou le remet en mode habituel. `false` : il n'a pas de mode plan. */
+export function setPlanMode(threadId: string, on: boolean): Promise<boolean> {
+  return inTauri ? invoke<boolean>("set_plan_mode", { threadId, on }) : Promise.resolve(false);
+}
+
 /** Arrête l'agent d'un fil : le prochain message en lance un neuf (peut-être d'un autre fournisseur). */
 export function stopAgent(threadId: string): Promise<void> {
   return inTauri ? invoke("stop_agent", { threadId }) : Promise.resolve();
