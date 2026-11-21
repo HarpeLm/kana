@@ -12,6 +12,9 @@ import {
   addError,
   addUserMessage,
   applyEvent,
+  enqueueMessage,
+  prioritizeQueuedMessage,
+  removeQueuedMessage,
   type ChatMessage,
   type ChatState,
 } from "../lib/chatState";
@@ -126,7 +129,11 @@ export function useChat(
   });
 
   const update = useCallback((id: string, change: (chat: ChatState) => ChatState) => {
-    setChats((all) => ({ ...all, [id]: change(all[id] ?? EMPTY_CHAT) }));
+    setChats((all) => {
+      const next = { ...all, [id]: change(all[id] ?? EMPTY_CHAT) };
+      chatsRef.current = next;
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -160,7 +167,11 @@ export function useChat(
   }, [update]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, fromQueue = false) => {
+      if (!fromQueue && chatsRef.current[threadId]?.busy) {
+        update(threadId, (chat) => enqueueMessage(chat, text));
+        return;
+      }
       let priorMessages = chatsRef.current[threadId]?.messages ?? [];
       if (priorMessages.length === 0) {
         const pending = loading.current.get(threadId);
@@ -184,6 +195,39 @@ export function useChat(
     [threadId, agentId, update],
   );
 
+  const removeQueued = useCallback(
+    (index: number) => {
+      update(threadId, (chat) => removeQueuedMessage(chat, index));
+    },
+    [threadId, update],
+  );
+
+  const steerQueued = useCallback(
+    (index: number) => {
+      update(threadId, (chat) => prioritizeQueuedMessage(chat, index));
+      cancelPrompt(threadId).catch(() => {});
+    },
+    [threadId, update],
+  );
+
+  // Dès que le tour courant s'achève, le message suivant en file d'attente part automatiquement.
+  const activeChat = chats[threadId];
+  const activeBusy = activeChat?.busy ?? false;
+  const queuedCount = activeChat?.queued.length ?? 0;
+  useEffect(() => {
+    if (activeBusy || queuedCount === 0) return;
+    const current = chatsRef.current[threadId];
+    if (!current || current.busy || current.queued.length === 0) return;
+    const next = current.queued[0];
+    // Marque immédiatement busy et dépile dans chatsRef pour résister au double passage de StrictMode.
+    chatsRef.current = {
+      ...chatsRef.current,
+      [threadId]: { ...removeQueuedMessage(current, 0), busy: true },
+    };
+    update(threadId, (chat) => removeQueuedMessage(chat, 0));
+    void send(next, true);
+  }, [threadId, activeBusy, queuedCount, send, update]);
+
   const stop = useCallback(() => {
     cancelPrompt(threadId).catch(() => {});
   }, [threadId]);
@@ -201,14 +245,23 @@ export function useChat(
 
   /** Efface l'occupation du contexte d'un fil (l'agent repart de zéro après un compactage). */
   const clearContext = useCallback((id: string) => {
-    setChats((all) => (all[id] ? { ...all, [id]: { ...all[id], context: null } } : all));
+    setChats((all) => {
+      if (!all[id]) return all;
+      const next = { ...all, [id]: { ...all[id], context: null } };
+      chatsRef.current = next;
+      return next;
+    });
   }, []);
 
   /** Donne à un fil neuf un début d'historique (la copie faite par « bifurquer »). */
   const seed = useCallback((id: string, messages: ChatMessage[]) => {
     loaded.current.add(id);
-    setChats((all) => ({ ...all, [id]: { ...EMPTY_CHAT, messages } }));
+    setChats((all) => {
+      const next = { ...all, [id]: { ...EMPTY_CHAT, messages } };
+      chatsRef.current = next;
+      return next;
+    });
   }, []);
 
-  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer, seed, clearContext };
+  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer, seed, clearContext, removeQueued, steerQueued };
 }
