@@ -21,7 +21,8 @@ import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
 import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
 import { isArtifactPath } from "./lib/fileKinds";
-import { ARTIFACT_GUIDE } from "./lib/agentGuide";
+import { getArtifactGuide } from "./lib/agentGuide";
+import { tr, translateRustError, useLocale } from "./lib/i18n";
 import { OpenArtifactContext } from "./lib/artifactRefs";
 import { buildRelayContext } from "./lib/fork";
 import { OpenFileContext } from "./lib/fileRefs";
@@ -57,6 +58,7 @@ import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
 import DiffDock from "./components/DiffDock";
 import ExtensibilityModal, { type ExtensibilityTab } from "./components/ExtensibilityModal";
+import InspectorModal from "./components/InspectorModal";
 import FilesDock from "./components/FilesDock";
 import ArtifactDock from "./components/ArtifactDock";
 import ConversationTitle from "./components/ConversationTitle";
@@ -76,12 +78,14 @@ const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => 
 
 export default function App({ startup }: { startup: Startup }) {
   useNativeContextMenu();
+  const locale = useLocale();
   const [view, setView] = useState<View>("workspace");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   /** Conversation dont le dossier de travail est gardé car il contient du travail non enregistré. */
   const [keptWorktree, setKeptWorktree] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
   const [extensibility, setExtensibility] = useState<{ open: boolean; tab: ExtensibilityTab }>({
     open: false,
     tab: "mcp",
@@ -134,9 +138,12 @@ export default function App({ startup }: { startup: Startup }) {
       const rules = await loadActiveRulesPreface(cwd ?? projectPath);
       const mcpServers = toMcpServerParams(activeMcpServersFor(projectPath));
       const folders = conversation.extraFolders?.length
-        ? `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`
+        ? tr(
+            `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`,
+            `Additional folders you can access alongside the working directory (read them if needed, only modify them if asked):\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`,
+          )
         : "";
-      const preface = `${ARTIFACT_GUIDE}${memory}${rules}${folders}${carried ?? ""}`;
+      const preface = `${getArtifactGuide()}${memory}${rules}${folders}${carried ?? ""}`;
       return {
         cwd,
         projectPath,
@@ -164,14 +171,27 @@ export default function App({ startup }: { startup: Startup }) {
       if (threadId.startsWith("side:")) return;
       conversations.setAcpSessionId(threadId, sessionId);
     },
-    onTurnUsage: (threadId: string, usage: { input: number; output: number; total: number }) => {
+    onTurnUsage: (
+      threadId: string,
+      usage: { input: number; output: number; total: number; cacheRead?: number; cacheWrite?: number },
+    ) => {
       if (threadId.startsWith("side:")) return;
-      const agent = agentOf(threadId);
-      if (agent) recordTokens(agent, usage.input, usage.output, usage.total);
+      const conv = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
+      const agent = conv?.agentId;
+      if (agent) {
+        recordTokens(agent, usage.input, usage.output, usage.total, {
+          cacheRead: usage.cacheRead,
+          cacheWrite: usage.cacheWrite,
+          threadId,
+          projectPath: conv?.projectPath && conv.projectPath !== NO_PROJECT ? conv.projectPath : undefined,
+          modelId: conv?.modelId,
+        });
+      }
     },
     onDone: (threadId: string) => {
       if (threadId.startsWith("side:")) return;
-      const agent = agentOf(threadId);
+      const conv = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
+      const agent = conv?.agentId;
       if (!agent) return;
       // Au premier tour fini, l'agent écrit un vrai titre (sauf si la conversation a été renommée entre-temps).
       const pending = pendingTitles.current.get(threadId);
@@ -182,13 +202,16 @@ export default function App({ startup }: { startup: Startup }) {
           if (title && now && now.title === pending.provisional) conversations.rename(threadId, title);
         });
       }
-      recordTurn(agent);
+      recordTurn(agent, {
+        threadId,
+        projectPath: conv?.projectPath && conv.projectPath !== NO_PROJECT ? conv.projectPath : undefined,
+      });
       clearProblem(agent);
 
-      const convTitle = (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.title || "Kana";
+      const convTitle = conv?.title || "Kana";
       const inBackground = threadId !== selectedIdRef.current;
       if (inBackground || (typeof document !== "undefined" && document.hidden)) {
-        notifyOs(convTitle, "L'agent a terminé sa réponse.");
+        notifyOs(convTitle, tr("L'agent a terminé sa réponse.", "The agent finished its response."));
       }
       if (inBackground) {
         conversations.markUnread(threadId);
@@ -199,7 +222,7 @@ export default function App({ startup }: { startup: Startup }) {
       const convTitle = (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.title || "Kana";
       const inBackground = threadId !== selectedIdRef.current;
       if (inBackground || (typeof document !== "undefined" && document.hidden)) {
-        notifyOs(convTitle, `Autorisation demandée : ${title}`);
+        notifyOs(convTitle, tr(`Autorisation demandée : ${title}`, `Permission requested: ${title}`));
       }
       if (inBackground) {
         conversations.markUnread(threadId);
@@ -246,7 +269,7 @@ export default function App({ startup }: { startup: Startup }) {
       selectProject(await createProject(name));
       return null;
     } catch (error) {
-      return String(error);
+      return translateRustError(String(error));
     }
   };
   // Fournisseur et modèle : le fournisseur ne change que tant que la conversation est vide.
@@ -353,7 +376,7 @@ export default function App({ startup }: { startup: Startup }) {
       void sessionSummary.refresh();
       setArtifactToDelete(null);
     } catch (error) {
-      setDeleteError(String(error));
+      setDeleteError(translateRustError(String(error)));
     }
   };
 
@@ -569,6 +592,7 @@ export default function App({ startup }: { startup: Startup }) {
       artifactToDelete !== null ||
       browserAgent.approval !== null ||
       extensibility.open ||
+      showInspector ||
       document.querySelector('[role="alertdialog"]') !== null;
     if (blockedByModal) return;
 
@@ -705,6 +729,8 @@ export default function App({ startup }: { startup: Startup }) {
               },
               showArtifacts: showArtDock,
               onArtifacts: toggle(setShowArtDock),
+              showInspector,
+              onInspector: () => setShowInspector(true),
               keepAwake,
               onKeepAwake: toggleKeepAwake,
             },
@@ -712,7 +738,11 @@ export default function App({ startup }: { startup: Startup }) {
         >
           {view === "settings" || view === "scheduled" || view === "artifacts" ? (
             <span className="px-2 text-[14px] text-[#e6e5df]">
-              {view === "settings" ? "Réglages" : view === "artifacts" ? "Artéfacts" : "Tâches planifiées"}
+              {view === "settings"
+                ? tr("Réglages", "Settings", locale)
+                : view === "artifacts"
+                  ? tr("Artéfacts", "Artifacts", locale)
+                  : tr("Tâches planifiées", "Scheduled tasks", locale)}
             </span>
           ) : (
             <ConversationTitle
@@ -934,7 +964,7 @@ export default function App({ startup }: { startup: Startup }) {
         {browserOpened && (
           <BrowserDock
             visible={browserVisible}
-            suspended={searchOpen || deletingId !== null || browserAgent.approval !== null}
+            suspended={searchOpen || deletingId !== null || browserAgent.approval !== null || showInspector}
             width={browserPanel.width}
             dragging={browserPanel.dragging}
             onResizeStart={browserPanel.startDrag}
@@ -980,12 +1010,14 @@ export default function App({ startup }: { startup: Startup }) {
 
       {artifactToDelete && (
         <ConfirmDialog
-          title="Supprimer cet artéfact ?"
-          confirmLabel="Supprimer"
+          title={tr("Supprimer cet artéfact ?", "Delete this artifact?", locale)}
+          confirmLabel={tr("Supprimer", "Delete", locale)}
           onCancel={() => setArtifactToDelete(null)}
           onConfirm={() => void deleteArtifact()}
         >
-          « {artifactTitle(artifactToDelete.path)} » sera mis à la corbeille.
+          {tr("« ", '"', locale)}
+          {artifactTitle(artifactToDelete.path)}
+          {tr(" » sera mis à la corbeille.", '" will be moved to the Trash.', locale)}
           {deleteError && <span className="mt-2 block text-red-300">{deleteError}</span>}
         </ConfirmDialog>
       )}
@@ -1018,10 +1050,17 @@ export default function App({ startup }: { startup: Startup }) {
         onClose={() => setExtensibility((prev) => ({ ...prev, open: false }))}
       />
 
+      <InspectorModal
+        open={showInspector}
+        conversation={selected}
+        messages={chat.messages}
+        onClose={() => setShowInspector(false)}
+      />
+
       {deleting && (
         <ConfirmDialog
-          title="Supprimer cette conversation ?"
-          confirmLabel="Supprimer"
+          title={tr("Supprimer cette conversation ?", "Delete this conversation?", locale)}
+          confirmLabel={tr("Supprimer", "Delete", locale)}
           onCancel={() => {
             setDeletingId(null);
             setKeptWorktree(null);
