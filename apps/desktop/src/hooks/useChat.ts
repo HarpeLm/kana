@@ -32,6 +32,8 @@ export interface PreparedThread {
   preface?: string;
   /** Modèle choisi pour la conversation. */
   model?: string;
+  /** Niveau d'effort choisi pour ce fournisseur. */
+  effort?: string;
 }
 
 /** Un outil resté « en cours » quand l'app s'est arrêtée n'a jamais fini : on le montre comme interrompu. */
@@ -143,8 +145,8 @@ export function useChat(
     async (text: string) => {
       update(threadId, (chat) => addUserMessage(chat, text));
       try {
-        const { cwd, preface, model } = await prepareRef.current(threadId);
-        await startAgent(threadId, agentId, cwd, model);
+        const { cwd, preface, model, effort } = await prepareRef.current(threadId);
+        await startAgent(threadId, agentId, cwd, model, effort);
         await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
