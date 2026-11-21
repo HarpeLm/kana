@@ -414,7 +414,7 @@ test("tâches planifiées : création, exécution immédiate, historique, budget
   await page.getByRole("button", { name: "Créer la tâche" }).click();
 
   await expect(page.getByText("Veille sécurité").first()).toBeVisible();
-  await expect(page.getByText("Active")).toBeVisible();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Exécuter maintenant" }).click();
   await expect(page.getByText("Succès").first()).toBeVisible();
@@ -1020,6 +1020,43 @@ test("handoff worktree bidirectionnel : basculer vers un worktree isolé puis ra
   await expect(panel.getByText(/Rapatrié en local \(Handoff\) : 2 fichiers transférés\./)).toBeVisible();
   await expect(toWorktreeBtn).toBeVisible();
   await expect(toLocalBtn).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
+test("daemon macOS launchctl en 1 clic et cible Kana Cloud (Managé / Mobile)", async ({ page }) => {
+  const errors = watchErrors(page);
+
+  // 1. Daemon launchctl dans « Tâches planifiées »
+  await nav(page).getByRole("button", { name: "Tâches planifiées" }).click();
+  const daemonCard = page.getByRole("region", { name: "Daemon système macOS (launchd)" });
+  await expect(daemonCard).toBeVisible();
+  await expect(daemonCard.getByText("Non installé")).toBeVisible();
+
+  await daemonCard.getByLabel("Intervalle du daemon").selectOption("900");
+  await daemonCard.getByRole("button", { name: "Installer / Activer le daemon système (launchctl)" }).click();
+  await expect(daemonCard.getByText("Actif (app fermée)")).toBeVisible();
+  await expect(daemonCard.getByText(/vérification toutes les 15 min/)).toBeVisible();
+
+  await daemonCard.getByRole("button", { name: "Désactiver le daemon" }).click();
+  await expect(daemonCard.getByText("Non installé")).toBeVisible();
+  await expect(daemonCard.getByText(/Daemon système désactivé/)).toBeVisible();
+
+  // 2. Cible Kana Cloud (Managé / Mobile) dans SessionPanel
+  await page.getByRole("button", { name: "Essai" }).click();
+  await page.getByRole("button", { name: "Plan et tâches" }).click();
+  const panel = page.locator("aside").last();
+
+  await panel.getByLabel("Environnement d'exécution").selectOption("cloud");
+  await panel.getByLabel("URL du serveur Kana Cloud").fill("https://kana.example.com");
+  await panel.getByLabel("Token Bearer Kana Cloud").fill("cloud-secret-token");
+  await panel.getByRole("button", { name: "Tester la connexion" }).click();
+  await expect(panel.getByText(/Connecté · 0 actif\(s\)/)).toBeVisible();
+
+  await panel.getByLabel("Prompt tâche Kana Cloud").fill("Lance cargo test sur le serveur Cloud");
+  await panel.getByRole("button", { name: "Envoyer une tâche Cloud" }).click();
+  await expect(panel.getByText("Lance cargo test sur le serveur Cloud")).toBeVisible();
+  await expect(panel.getByText("done", { exact: true })).toBeVisible();
 
   expect(errors).toEqual([]);
 });
