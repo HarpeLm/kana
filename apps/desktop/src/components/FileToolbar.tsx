@@ -1,4 +1,4 @@
-import { ChevronsDownUp, Code, ListTree } from "lucide-react";
+import { AlertTriangle, ChevronsDownUp, Code, ListTree } from "lucide-react";
 import FilesMenu from "./FilesMenu";
 import ToolbarButton from "./ToolbarButton";
 
@@ -15,6 +15,9 @@ interface FileToolbarProps {
   onCollapseAll: () => void;
   treeVisible: boolean;
   onToggleTree: () => void;
+  diagnosticsVisible?: boolean;
+  diagnosticsCount?: number;
+  onToggleDiagnostics?: () => void;
   onCopyPath: () => void;
   onRefresh: () => void;
 }
@@ -35,6 +38,27 @@ export default function FileToolbar(p: FileToolbarProps) {
             className="mr-1 h-7 rounded-lg bg-[#d97757] px-3 text-[13px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-60"
           >
             {p.saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        )}
+        {p.onToggleDiagnostics && (
+          <button
+            type="button"
+            onClick={p.onToggleDiagnostics}
+            aria-pressed={!!p.diagnosticsVisible}
+            title="Diagnostics LSP & Compilateur"
+            className={`mr-1 flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition ${
+              p.diagnosticsVisible
+                ? "border-[#d97757] bg-[#d97757]/15 text-[#f0efe9]"
+                : "border-[#343431] bg-[#1f1f1d] text-[#cfcec6] hover:bg-[#2a2a28]"
+            }`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 text-[#f0883e]" strokeWidth={1.8} />
+            <span>Diagnostics</span>
+            {typeof p.diagnosticsCount === "number" && p.diagnosticsCount > 0 && (
+              <span className="rounded bg-[#f85149]/20 px-1.5 py-0.2 font-mono text-[11px] text-[#ff9b96]">
+                {p.diagnosticsCount}
+              </span>
+            )}
           </button>
         )}
         {p.canToggleSource && (
