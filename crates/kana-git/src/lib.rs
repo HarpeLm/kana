@@ -8,7 +8,7 @@ mod run;
 mod status;
 mod worktree;
 
-pub use forge::{BranchSummary, CommitInfo, FileStat, PullRequest, branch_summary, create_pull_request, parse_pull_requests, pull_requests};
+pub use forge::{MergeReport, base_branch, discard_work, merge_branch, save_work, BranchSummary, CommitInfo, FileStat, PullRequest, branch_summary, create_pull_request, parse_pull_requests, pull_requests};
 pub use files::{FileList, FilePreview, list_files, read_preview, write_text};
 pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
 pub use parse::parse_diff;
