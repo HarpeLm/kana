@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, type MouseEvent } from "react";
 import { linkifyArtifacts, OpenArtifactContext } from "../lib/artifactRefs";
+import { linkifyFiles, OpenFileContext } from "../lib/fileRefs";
 import { useFaviconVersion } from "../lib/favicons";
 import { linkifyGithubRefs } from "../lib/githubRefs";
 import { addLinkIcons, globeIcon } from "../lib/linkIcons";
@@ -12,9 +13,10 @@ import { renderMarkdown } from "../lib/markdown";
 export default function ChatMarkdown({ source, onOpenLink }: { source: string; onOpenLink: (url: string) => void }) {
   // Les icônes se redessinent quand le Globe découvre le favicon d'un site.
   const icons = useFaviconVersion();
-  const html = useMemo(() => addLinkIcons(renderMarkdown(linkifyGithubRefs(linkifyArtifacts(source)))), [source, icons]);
+  const html = useMemo(() => addLinkIcons(renderMarkdown(linkifyGithubRefs(linkifyFiles(linkifyArtifacts(source))))), [source, icons]);
   const root = useRef<HTMLDivElement>(null);
   const openArtifact = useContext(OpenArtifactContext);
+  const openLocalFile = useContext(OpenFileContext);
 
   // Un lien d'artéfact reçoit la petite icône de document, devant son titre.
   useEffect(() => {
@@ -33,6 +35,23 @@ export default function ChatMarkdown({ source, onOpenLink }: { source: string; o
     });
   }, [html]);
 
+  // Un lien de fichier local reçoit une icône de fichier.
+  useEffect(() => {
+    root.current?.querySelectorAll<HTMLAnchorElement>('a[href^="#file/"]').forEach((link) => {
+      if (link.querySelector(".file-icon")) return;
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("class", "artifact-icon file-icon");
+      icon.setAttribute("fill", "none");
+      icon.setAttribute("stroke", "currentColor");
+      icon.setAttribute("stroke-width", "1.8");
+      icon.setAttribute("stroke-linecap", "round");
+      icon.setAttribute("stroke-linejoin", "round");
+      icon.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>';
+      link.prepend(icon);
+    });
+  }, [html]);
+
   // Un favicon introuvable est remplacé par le globe.
   useEffect(() => {
     root.current?.querySelectorAll<HTMLImageElement>("img[data-favicon]").forEach((image) => {
@@ -46,6 +65,7 @@ export default function ChatMarkdown({ source, onOpenLink }: { source: string; o
     event.preventDefault();
     const href = link.getAttribute("href") ?? "";
     if (href.startsWith("#artifact/")) return openArtifact(decodeURI(href.slice("#artifact/".length)));
+    if (href.startsWith("#file/")) return openLocalFile(decodeURI(href.slice("#file/".length)).replace(/\?line=\d+$/, ""));
     if (/^https?:\/\//i.test(href)) onOpenLink(href);
   };
 
