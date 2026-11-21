@@ -12,13 +12,15 @@ export interface ToolCall {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "agent" | "error";
+  role: "user" | "agent" | "error" | "notice";
   text: string;
   thought: string;
   tools: ToolCall[];
   /** Début et fin du travail de l'agent sur ce message (ms), pour afficher la durée. */
   startedAt?: number;
   endedAt?: number;
+  /** Pour un « /compact » : le contexte occupé avant, afin d'annoncer les jetons économisés. */
+  contextBefore?: number;
 }
 
 export interface PermissionRequest {
@@ -68,7 +70,9 @@ function withAgentMessage(messages: ChatMessage[]): [ChatMessage[], ChatMessage]
 }
 
 export function addUserMessage(chat: ChatState, text: string): ChatState {
-  return { ...chat, busy: true, messages: [...chat.messages, makeMessage("user", text)] };
+  const message = makeMessage("user", text);
+  if (text.trim() === "/compact" && chat.context) message.contextBefore = chat.context.used;
+  return { ...chat, busy: true, messages: [...chat.messages, message] };
 }
 
 export function addError(chat: ChatState, message: string): ChatState {
@@ -128,8 +132,18 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
           { requestId: event.request_id, title: event.title, options: event.options },
         ],
       };
-    case "done":
-      return { ...chat, busy: false, messages: endLastAgentMessage(chat.messages) };
+    case "done": {
+      const messages = endLastAgentMessage(chat.messages);
+      const at = messages.map((m) => m.role).lastIndexOf("user");
+      const asked = messages[at];
+      // Un « /compact » : on remplace la réponse de l'agent par une simple ligne, comme Claude Code.
+      if (asked && asked.text.trim() === "/compact" && messages.length > at + 1 && messages.slice(at + 1).every((m) => m.role === "agent")) {
+        const saved = asked.contextBefore && chat.context ? asked.contextBefore - chat.context.used : 0;
+        const label = saved > 0 ? `Session compactée · ${(saved / 1000).toFixed(1).replace(".", ",")} k tokens économisés` : "Session compactée";
+        return { ...chat, busy: false, messages: [...messages.slice(0, at + 1), { ...makeMessage("notice", label), endedAt: Date.now() }] };
+      }
+      return { ...chat, busy: false, messages };
+    }
     case "error":
       return addError(chat, event.message);
     case "closed":
