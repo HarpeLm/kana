@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Problem } from "./limits";
+import { persistSharedSetting } from "./store";
 
 /** Ce qu'un fournisseur, une session ou un projet a consommé. */
 export interface DayUsage {
@@ -96,11 +97,7 @@ function commit(next: Store): void {
     days: Object.fromEntries(days.map((d) => [d, next.days[d]])),
   };
   version++;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(store));
-  } catch {
-    // stockage indisponible : la consommation ne sera pas conservée
-  }
+  persistSharedSetting(KEY, JSON.stringify(store));
   listeners.forEach((notify) => notify());
 }
 
