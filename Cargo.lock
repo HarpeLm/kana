@@ -794,6 +794,7 @@ dependencies = [
  "getrandom 0.4.3",
  "image",
  "kana-acp",
+ "kana-core",
  "kana-db",
  "kana-git",
  "kana-mcp",
@@ -2168,6 +2169,10 @@ dependencies = [
 [[package]]
 name = "kana-core"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "kana-db"
