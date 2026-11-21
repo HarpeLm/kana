@@ -1,6 +1,4 @@
 import { useRef, useState, type PointerEvent } from "react";
-import { Settings } from "lucide-react";
-import { tr, useLocale } from "../lib/i18n";
 import { loadView } from "../lib/sidebarView";
 import type { View } from "../data";
 import {
@@ -10,6 +8,7 @@ import {
   type Conversation,
 } from "../lib/conversations";
 import type { ConversationActions } from "./conversationActions";
+import AccountMenu from "./AccountMenu";
 import ConversationGroup from "./ConversationGroup";
 import ConversationRow from "./ConversationRow";
 import RenameInput from "./RenameInput";
@@ -26,6 +25,7 @@ interface SidebarProps {
   selectedId: string;
   editingId: string | null;
   view: View;
+  settingsOpen: boolean;
   /** Visible ou masquée : le passage de l'un à l'autre est animé. */
   open: boolean;
   width: number;
@@ -39,6 +39,7 @@ interface SidebarProps {
   onOpenScheduled: () => void;
   onOpenCustomizations: () => void;
   onOpenSettings: () => void;
+  onOpenSignIn: () => void;
 }
 
 export default function Sidebar({
@@ -47,6 +48,7 @@ export default function Sidebar({
   selectedId,
   editingId,
   view,
+  settingsOpen,
   open,
   width,
   dragging,
@@ -59,8 +61,8 @@ export default function Sidebar({
   onOpenScheduled,
   onOpenCustomizations,
   onOpenSettings,
+  onOpenSignIn,
 }: SidebarProps) {
-  const locale = useLocale();
   const [listView, setListView] = useState<SidebarView>(loadView);
   const [menuFor, setMenuFor] = useState<{ name: string; anchor: DOMRect } | null>(null);
   const [expandSignal, setExpandSignal] = useState(0);
@@ -202,17 +204,11 @@ export default function Sidebar({
           ))}
         </div>
 
-        <button
-          onClick={onOpenSettings}
-          className={`flex h-[44px] shrink-0 items-center gap-2 border-t border-[#2b2b28] px-5 text-left text-[14px] transition ${
-            view === "settings"
-              ? "bg-[#2b2b29] text-[#f0efe9]"
-              : "text-[#c4c3bc] hover:bg-[#262624] hover:text-[#f0efe9]"
-          }`}
-        >
-          <Settings className="h-[16px] w-[16px]" strokeWidth={1.6} />
-          {tr("Réglages", "Settings", locale)}
-        </button>
+        <AccountMenu
+          settingsOpen={settingsOpen || view === "settings"}
+          onOpenSettings={onOpenSettings}
+          onOpenSignIn={onOpenSignIn}
+        />
 
         <SidebarResizer dragging={dragging} onPointerDown={onResizeStart} />
       </aside>
