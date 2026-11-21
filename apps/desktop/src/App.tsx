@@ -433,6 +433,9 @@ export default function App({ startup }: { startup: Startup }) {
                 onOpenDiff={() => setShowDiff(true)}
                 onOpenLink={openInGlobe}
                 onRefresh={() => void sessionSummary.refresh()}
+                context={chat.context}
+                agentId={selected.agentId}
+                onOpenRelay={() => setView("relay")}
               />
             )}
           </div>
