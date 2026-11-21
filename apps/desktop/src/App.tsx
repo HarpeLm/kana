@@ -12,7 +12,8 @@ import { useChat, type PreparedThread } from "./hooks/useChat";
 import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
 import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
-import { buildForkContext } from "./lib/fork";
+import { buildCompactContext, buildForkContext } from "./lib/fork";
+import { stopAgent } from "./lib/acp";
 import { createWorktree, removeWorktree } from "./lib/worktree";
 import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
 import { useConversations } from "./hooks/useConversations";
@@ -120,7 +121,7 @@ export default function App({ startup }: { startup: Startup }) {
       if (agent && problem) markProblem(agent, problem, message);
     },
   };
-  const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
+  const { chat, send, stop, answer, seed, clearContext } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
 
   // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
   const { setProject, setUseWorktree, setAgent } = conversations;
@@ -173,6 +174,14 @@ export default function App({ startup }: { startup: Startup }) {
     if (project) projectList.use(project);
     conversations.touch(selected.id);
     return send(text);
+  };
+
+  /** Compacte la session : l'agent s'éteint et repart avec un résumé ; l'historique reste affiché. */
+  const compactSession = () => {
+    if (chat.busy || chat.messages.length === 0) return;
+    stopAgent(selected.id).catch(() => {});
+    conversations.setForkContext(selected.id, buildCompactContext(chat.messages));
+    clearContext(selected.id);
   };
 
   const relayBanner = useRelayFlow({
@@ -437,6 +446,8 @@ export default function App({ startup }: { startup: Startup }) {
                 agentId={selected.agentId}
                 onOpenRelay={() => setView("relay")}
                 started={chat.messages.length > 0}
+                onCompact={compactSession}
+                canCompact={!chat.busy && chat.messages.length > 0}
               />
             )}
           </div>
