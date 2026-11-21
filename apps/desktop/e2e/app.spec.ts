@@ -1134,23 +1134,22 @@ test("compositeur : dictée vocale temps réel (micro, transcription et envoi)",
   expect(errors).toEqual([]);
 });
 
-test("écran d'accueil nouvelle session : emblème Kana, Cockpit prêt, pilules projets et amorces 1 clic", async ({ page }) => {
+test("écran d'accueil nouvelle session : mise en page épurée centrée (style Codex / Antigravity)", async ({ page }) => {
   const errors = watchErrors(page);
 
   await nav(page).getByRole("button", { name: "Créer" }).click();
 
-  await expect(page.getByRole("heading", { name: "Que veux-tu construire ?" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Cockpit prêt/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "+ Projet…" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Que voulez-vous créer ?" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
 
-  // Les 4 cartes d'amorce en 1 clic sont visibles
-  await expect(page.getByRole("button", { name: /Corriger & tester/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Cross-Review \(A → B → C\)/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Vérifier dans Globe/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Conseiller \/advisor/ })).toBeVisible();
+  // Actions rapides discrètes sur une ligne sous le Composer
+  await expect(page.getByRole("button", { name: "Corriger & tester", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cross-Review", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vérifier dans Globe", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "/advisor", exact: true })).toBeVisible();
 
   // Cliquer sur « Corriger & tester » lance immédiatement la conversation
-  await page.getByRole("button", { name: /Corriger & tester/ }).click();
+  await page.getByRole("button", { name: "Corriger & tester", exact: true }).click();
   await expect(page.getByText(/Analyse les erreurs récentes du dépôt/).first()).toBeVisible();
 
   expect(errors).toEqual([]);
