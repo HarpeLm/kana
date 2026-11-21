@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { persistSharedSetting } from "./store";
 
 export type Locale = "fr" | "en";
 
@@ -24,11 +25,7 @@ export function setLocale(locale: Locale): void {
   const next: Locale = locale === "en" ? "en" : "fr";
   currentLocale = next;
   if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    try {
-      localStorage.setItem(LOCALE_KEY, next);
-    } catch {
-      // stockage indisponible : la langue reste en mémoire pour la session
-    }
+    persistSharedSetting(LOCALE_KEY, next);
   }
   if (typeof document !== "undefined" && document.documentElement) {
     document.documentElement.lang = next;
