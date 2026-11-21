@@ -102,3 +102,21 @@ export function languageOf(path: string): Language {
 }
 
 export const isMarkdown = (path: string) => languageOf(path) === "markdown";
+
+export const isHtml = (path: string) => /\.html?$/i.test(path);
+/** Un fichier qui s'affiche mis en forme (et qu'on peut aussi voir en texte source) : markdown ou page HTML. */
+export const hasRenderedView = (path: string) => isMarkdown(path) || isHtml(path);
+
+/** Un artéfact : un fichier que l'agent produit dans le dossier `artefacts/`. Les pages HTML qui y sont s'ouvrent en mode visuel. */
+export const isArtifactPath = (path: string) => /(^|\/)artefacts\//.test(path);
+
+/**
+ * Le fichier s'affiche-t-il mis en forme ? `toggled` : l'utilisateur a basculé l'affichage. Le markdown s'ouvre mis en forme ;
+ * une page HTML s'ouvre en mode visuel seulement dans `artefacts/` (ailleurs c'est du code d'un projet, où les scripts
+ * comptent : on montre le source), et le bouton passe de l'un à l'autre.
+ */
+export function showsRendered(path: string, toggled: boolean): boolean {
+  if (isMarkdown(path)) return !toggled;
+  if (isHtml(path)) return isArtifactPath(path) ? !toggled : toggled;
+  return false;
+}
