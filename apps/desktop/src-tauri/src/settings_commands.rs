@@ -69,3 +69,35 @@ pub async fn list_models(agent: String) -> Result<AgentModels, String> {
         Err(_) => Err("l'agent met trop de temps à répondre".into()),
     }
 }
+
+/// Un titre court pour une conversation, écrit par l'agent à partir de la première demande.
+/// Une session à part, dans un dossier neutre : rien n'apparaît dans la conversation.
+#[tauri::command]
+pub async fn suggest_title(agent: String, request: String) -> Result<String, String> {
+    let spec = spec_for(&agent)?;
+    let dir = std::env::temp_dir();
+    let prompt = format!(
+        "Résume cette demande en un titre de 3 à 6 mots, dans la même langue, sans guillemets ni point final. \
+         Réponds uniquement par le titre, sans rien d'autre.\n\nDemande : {}",
+        request.chars().take(600).collect::<String>()
+    );
+    let work = async {
+        let (client, mut events) = AcpClient::spawn(&spec, &dir).await.map_err(|e| e.to_string())?;
+        let collector = tokio::spawn(async move {
+            let mut out = String::new();
+            while let Some(event) = events.recv().await {
+                match event {
+                    kana_acp::AcpEvent::Message { text } => out.push_str(&text),
+                    kana_acp::AcpEvent::Done { .. } | kana_acp::AcpEvent::Error { .. } | kana_acp::AcpEvent::Closed => break,
+                    _ => {}
+                }
+            }
+            out
+        });
+        client.prompt(&prompt).await.map_err(|e| e.to_string())?;
+        collector.await.map_err(|e| e.to_string())
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(90), work)
+        .await
+        .map_err(|_| "l'agent met trop de temps à répondre".to_string())?
+}
