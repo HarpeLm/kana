@@ -80,6 +80,76 @@ export function loadDiagnostics(root?: string): Promise<CodeDiagnostic[]> {
   return Promise.resolve(SAMPLE_DIAGNOSTICS);
 }
 
+/**
+ * Analyse statique en temps réel du tampon ouvert dans `FilesDock` :
+ * marqueurs de conflit Git, JSON invalide et délimiteurs non équilibrés.
+ */
+export function analyzeBufferDiagnostics(file: string, content: string): CodeDiagnostic[] {
+  const results: CodeDiagnostic[] = [];
+  const lines = content.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("<<<<<<<") || line.startsWith("=======") || line.startsWith(">>>>>>>")) {
+      results.push({
+        file,
+        line: i + 1,
+        column: 1,
+        severity: "error",
+        code: "GIT_CONFLICT",
+        message: "Marqueur de conflit de fusion Git non résolu",
+        source: "lsp-live",
+      });
+    }
+  }
+
+  if (file.endsWith(".json")) {
+    try {
+      JSON.parse(content);
+    } catch (err) {
+      results.push({
+        file,
+        line: 1,
+        column: 1,
+        severity: "error",
+        code: "JSON_PARSE",
+        message: err instanceof Error ? err.message : "Syntaxe JSON invalide",
+        source: "lsp-live",
+      });
+    }
+  } else if (/\.(rs|ts|tsx|js|jsx)$/i.test(file)) {
+    let braces = 0;
+    let lastOpenLine = 1;
+    for (let i = 0; i < lines.length; i++) {
+      const stripped = lines[i].replace(/\/\/.*$/, "");
+      for (const ch of stripped) {
+        if (ch === "{") {
+          if (braces === 0) lastOpenLine = i + 1;
+          braces++;
+        } else if (ch === "}") {
+          braces--;
+        }
+      }
+    }
+    if (braces !== 0) {
+      results.push({
+        file,
+        line: braces > 0 ? lastOpenLine : lines.length,
+        column: 1,
+        severity: "error",
+        code: "SYNTAX_BRACE",
+        message:
+          braces > 0
+            ? `Accolade ouvrante '{' non refermée (${braces} manquante${braces > 1 ? "s" : ""})`
+            : "Accolade fermante '}' en trop",
+        source: "lsp-live",
+      });
+    }
+  }
+
+  return results;
+}
+
 // Dans un navigateur sans Tauri : quelques fichiers d'exemple, modifiables en mémoire.
 const SAMPLE_FILES = [
   "artefacts/plan.html",
