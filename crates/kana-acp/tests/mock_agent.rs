@@ -27,6 +27,8 @@ async fn prompt_streams_message_then_done() {
         r#"{HANDSHAKE}
 echo '{{"jsonrpc":"2.0","method":"session/update","params":{{"sessionId":"s1","update":{{"sessionUpdate":"agent_message_chunk","content":{{"type":"text","text":"Salut"}}}}}}}}'
 echo '{{"jsonrpc":"2.0","id":3,"result":{{"stopReason":"end_turn"}}}}'
+# L'agent reste en vie tant que le client est là : sinon sa sortie (Closed) peut devancer la fin du tour (Done).
+cat > /dev/null
 "#
     );
     let (client, mut events) = AcpClient::spawn(&shell_agent(&script), &std::env::temp_dir())
