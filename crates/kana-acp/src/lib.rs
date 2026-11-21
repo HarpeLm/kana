@@ -18,5 +18,5 @@ pub use auth::AuthMethod;
 pub use client::AcpClient;
 pub use error::AcpError;
 pub use event::{AcpEvent, AvailableCommand, PermissionOption, PlanEntry};
-pub use mcp::McpServerConfig;
+pub use mcp::{McpServerConfig, McpTransport};
 pub use models::{AgentModels, EffortInfo, ModelInfo, ModesInfo};
