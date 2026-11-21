@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
+import { ChevronRight, Copy } from "lucide-react";
+import { artifactTitle, findArtifacts, OpenArtifactContext } from "../lib/artifactRefs";
 import type { ChatMessage } from "../lib/chatState";
 import ChatMarkdown from "./ChatMarkdown";
 import MessageActions from "./MessageActions";
@@ -25,6 +27,8 @@ function AgentMessage({
   onOpenLink: (url: string) => void;
   onFork?: () => void;
 }) {
+  const openArtifact = useContext(OpenArtifactContext);
+  const artifacts = message.text ? findArtifacts(message.text) : [];
   return (
     <div className="group/message space-y-2 text-[#dfded8]">
       {message.thought && (
@@ -34,6 +38,18 @@ function AgentMessage({
         </details>
       )}
       {message.tools.length > 0 && <ToolGroup tools={message.tools} startedAt={message.startedAt} endedAt={message.endedAt} />}
+      {artifacts.map((path) => (
+        <button
+          key={path}
+          type="button"
+          onClick={() => openArtifact(path)}
+          className="flex w-full items-center gap-3 rounded-xl bg-[#262624] px-4 py-3 text-left text-[15px] text-[#e8e7e1] transition-colors hover:bg-[#2d2d2a]"
+        >
+          <Copy className="h-[17px] w-[17px] shrink-0 text-[#a8a79f]" strokeWidth={1.6} />
+          <span className="min-w-0 flex-1 truncate">{artifactTitle(path)}</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-[#8c8b83]" strokeWidth={1.8} />
+        </button>
+      ))}
       {message.text && <ChatMarkdown source={message.text} onOpenLink={onOpenLink} />}
       {message.text && <MessageActions text={message.text} at={message.endedAt ?? message.startedAt} onFork={onFork} />}
     </div>
