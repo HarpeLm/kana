@@ -18,3 +18,6 @@ apps/desktop/src-tauri/gen/
 .env
 .env.local
 .DS_Store
+
+# Réglages locaux de Claude Code (propres à chaque poste)
+.claude/
