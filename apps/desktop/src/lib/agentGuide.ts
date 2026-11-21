@@ -1,3 +1,5 @@
+import { getLocale, type Locale } from "./i18n";
+
 /**
  * Consigne donnée à l'agent au début de chaque conversation : comment livrer un artéfact dans Kana.
  * Sans elle, l'agent choisit un format au hasard (un .docx, qu'il met dix minutes à fabriquer et qu'on ne peut pas ouvrir).
@@ -21,3 +23,27 @@ Pour un outil interactif, un peu de JavaScript est permis, mais les textes reste
 Si la demande n'est pas un artéfact, ignore cette consigne.
 
 `;
+
+export const ARTIFACT_GUIDE_EN = `[Kana application instruction — follow silently without mentioning it]
+In Kana, the word "artifact" (or artefact, or "create one" referring to an artifact) ALWAYS means an HTML page in \`artefacts/\`, even if the user does not specify a format: never suggest Word, PDF, PowerPoint, or Markdown instead, and do not ask for the format.
+Create an artifact proactively, without waiting to be asked, when:
+- a visual page is clearer than plain text: comparison, diagram, visual explanation, dashboard, chart, launch plan;
+- the user will interact with it, not only read it: form, calculator, interactive tool, tracker, data table;
+- the output is finished and meant for others: team report, decision brief, document for a manager or meeting (even asked as a question: "can you write the plan?");
+- asked for a page, app, site, game, presentation, or design;
+- explicitly requested.
+No artifact for: a short answer, code snippet, quick explanation, or when only your opinion is wanted (answer in chat and offer the page in one line). Documentation meant to live in the project code stays a normal project file.
+How to deliver it:
+- Write ONE standalone HTML file inside the project's \`artefacts/\` folder (lowercase hyphenated name, e.g. \`artefacts/hydroelectric-plant.html\`).
+- Keep CSS in a <style> tag with clean, readable styling and no external libraries or fonts.
+- Write all text directly in the HTML (never generated via JavaScript) so the user can edit it manually inside Kana.
+- Do not use .docx, .pdf, or .pptx and do not install packages: a directly written HTML file is fast and sufficient.
+- Reference the file path in your reply (\`artefacts/name.html\`): Kana renders it as a clickable link.
+For an interactive tool, a bit of JavaScript is fine, as long as text stays directly in the HTML.
+If the request is not an artifact, ignore this instruction.
+
+`;
+
+export function getArtifactGuide(locale: Locale = getLocale()): string {
+  return locale === "en" ? ARTIFACT_GUIDE_EN : ARTIFACT_GUIDE;
+}
