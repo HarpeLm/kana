@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ArtifactEntry } from "./artifactIndex";
 import type { Conversation } from "./conversations";
+import type { ScheduledTask } from "./schedule";
 import {
   ACTION_CYCLE_MODE,
   ACTION_NEW,
@@ -77,5 +78,38 @@ describe("buildSections", () => {
     expect(filtered.map((a) => a.id)).toEqual([ACTION_TOGGLE_TERMINAL]);
     const byHint = buildSections(conversations, "⇧⌘M", "all").find((s) => s.name === "Actions")?.items ?? [];
     expect(byHint.map((a) => a.id)).toEqual([ACTION_CYCLE_MODE]);
+  });
+  it("l'onglet Tâches planifiées recherche les tâches planifiées", () => {
+    const tasks: ScheduledTask[] = [
+      {
+        id: "t1",
+        title: "Audit sécurité",
+        prompt: "Vérifie les dépendances",
+        projectPath: "/tmp/kana",
+        agentId: "claude",
+        interval: "24h",
+        maxTokensBudget: 50_000,
+        enabled: true,
+        lastRunAt: null,
+        lastStatus: null,
+      },
+      {
+        id: "t2",
+        title: "Tests nocturnes",
+        prompt: "Lance cargo test",
+        projectPath: "/tmp/kana",
+        agentId: "codex",
+        interval: "6h",
+        maxTokensBudget: 25_000,
+        enabled: false,
+        lastRunAt: null,
+        lastStatus: null,
+      },
+    ];
+    expect(buildSections(conversations, "", "scheduled", [], tasks)[0].items).toHaveLength(2);
+    const filtered = buildSections(conversations, "audit", "scheduled", [], tasks)[0].items;
+    expect(filtered.map((i) => i.title)).toEqual(["Audit sécurité"]);
+    expect(filtered[0].kind).toBe("scheduled");
+    expect(buildSections(conversations, "inconnu", "scheduled", [], tasks)).toEqual([]);
   });
 });
