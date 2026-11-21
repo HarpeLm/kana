@@ -97,6 +97,14 @@ pub async fn send_prompt(
     Ok(())
 }
 
+/// Arrête l'agent d'un fil (le processus s'éteint) : le prochain message en relance un neuf,
+/// possiblement d'un autre fournisseur. Sans effet si rien ne tourne.
+#[tauri::command]
+pub async fn stop_agent(sessions: State<'_, AgentSessions>, thread_id: String) -> Result<(), String> {
+    sessions.remove(&thread_id).await;
+    Ok(())
+}
+
 /// Change le modèle d'un agent déjà lancé.
 #[tauri::command]
 pub async fn set_model(
