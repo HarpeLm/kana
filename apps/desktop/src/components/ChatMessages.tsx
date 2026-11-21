@@ -83,6 +83,10 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
         {messages.map((message) =>
           message.role === "user" ? (
             <UserMessage key={message.id} message={message} busy={busy} onSend={onSend} onFork={() => onFork(message.id)} />
+          ) : message.role === "notice" ? (
+            <p key={message.id} className="text-[15px] text-[#8a8982]">
+              {message.text}
+            </p>
           ) : message.role === "error" ? (
             <div
               key={message.id}
