@@ -8,10 +8,11 @@ interface ArtifactsViewProps {
   items: ArtifactEntry[];
   loading: boolean;
   onOpen: (item: ArtifactEntry) => void;
+  onMenu: (item: ArtifactEntry, x: number, y: number) => void;
 }
 
 /** La galerie de tous les artéfacts : une carte par page, avec son aperçu. */
-export default function ArtifactsView({ items, loading, onOpen }: ArtifactsViewProps) {
+export default function ArtifactsView({ items, loading, onOpen, onMenu }: ArtifactsViewProps) {
   const [query, setQuery] = useState("");
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -44,6 +45,10 @@ export default function ArtifactsView({ items, loading, onOpen }: ArtifactsViewP
               <button
                 key={item.key}
                 onClick={() => onOpen(item)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onMenu(item, e.clientX, e.clientY);
+                }}
                 className="group overflow-hidden rounded-xl border border-[#333331] bg-[#232321] text-left transition hover:border-[#4a4a46]"
               >
                 <ArtifactThumb html={item.html} className="aspect-[4/3] w-full" />
