@@ -81,7 +81,7 @@ export default function ConversationGroup({
         <button
           onClick={() => setCollapsed((v) => !v)}
           aria-expanded={!collapsed}
-          className="flex h-6 min-w-0 flex-1 items-center gap-1 px-[10px] text-left text-[13px] text-[#8a8982] transition hover:text-[#c4c3bc]"
+          className="flex h-6 min-w-0 flex-1 cursor-[inherit] items-center gap-1 px-[10px] text-left text-[13px] text-[#8a8982] transition hover:text-[#c4c3bc]"
         >
           <span className="truncate">{name}</span>
           <ChevronDown
