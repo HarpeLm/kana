@@ -10,7 +10,10 @@ mod models;
 mod protocol;
 mod reader;
 
-pub use agents::{AgentSpec, api_key_env, preset};
+pub use agents::{
+    AgentSpec, ExecutionTarget, SandboxPolicy, api_key_env, bwrap_args, effective_command, preset,
+    seatbelt_profile,
+};
 pub use auth::AuthMethod;
 pub use client::AcpClient;
 pub use error::AcpError;
