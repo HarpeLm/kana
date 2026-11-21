@@ -56,6 +56,8 @@ pub struct AcpClient {
     next_id: AtomicU64,
     session_id: String,
     models: AgentModels,
+    /// L'agent accepte de vraies images dans un message.
+    images: bool,
     _child: Child,
 }
 
@@ -124,9 +126,11 @@ impl AcpClient {
             next_id: AtomicU64::new(1),
             session_id: String::new(),
             models: AgentModels::default(),
+            images: false,
             _child: child,
         };
         let init = client.request("initialize", protocol::initialize_params()).await?;
+        client.images = init["agentCapabilities"]["promptCapabilities"]["image"] == true;
         if let Some(method_id) = method_id {
             client
                 .request("authenticate", json!({ "methodId": method_id }))
@@ -156,6 +160,11 @@ impl AcpClient {
 
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// L'agent sait lire de vraies images dans un message (sinon on ne lui donne que leur chemin).
+    pub fn supports_images(&self) -> bool {
+        self.images
     }
 
     /// Les modèles que l'agent propose (liste vide s'il n'a pas de choix).
@@ -188,7 +197,12 @@ impl AcpClient {
     /// Les réponses partielles arrivent en `AcpEvent::Message` pendant l'attente ;
     /// le tour se termine par `AcpEvent::Done` ou `AcpEvent::Error`.
     pub async fn prompt(&self, text: &str) -> Result<String, AcpError> {
-        let params = protocol::prompt_params(&self.session_id, text);
+        self.prompt_with_images(text, &[]).await
+    }
+
+    /// Comme `prompt`, avec des images `(type MIME, base64)` jointes au message.
+    pub async fn prompt_with_images(&self, text: &str, images: &[(String, String)]) -> Result<String, AcpError> {
+        let params = protocol::prompt_params_with_images(&self.session_id, text, images);
         match self.request("session/prompt", params).await {
             Ok(result) => {
                 let stop_reason = result["stopReason"].as_str().unwrap_or("end_turn").to_owned();
