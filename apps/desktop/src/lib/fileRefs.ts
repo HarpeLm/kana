@@ -32,4 +32,4 @@ export function linkifyFiles(source: string): string {
 }
 
 /** Ouvre un fichier du dossier de travail dans le volet Fichiers ; fourni par l'application. */
-export const OpenFileContext = createContext<(path: string) => void>(() => {});
+export const OpenFileContext = createContext<(path: string, line?: number) => void>(() => {});
