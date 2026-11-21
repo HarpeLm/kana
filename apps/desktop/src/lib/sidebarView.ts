@@ -1,5 +1,4 @@
-import type { Conversation, ConversationGroup } from "./conversations";
-import { ARCHIVED_GROUP, PINNED_GROUP } from "./conversations";
+import { ARCHIVED_GROUP, PINNED_GROUP, groupConversations, type Conversation, type ConversationGroup } from "./conversations";
 
 /** Comment la liste de la barre latérale est présentée. */
 export interface SidebarView {
@@ -58,4 +57,22 @@ export function flatGroups(groups: ConversationGroup[]): ConversationGroup[] {
   const archived = groups.filter((g) => g.name === ARCHIVED_GROUP);
   const rest = groups.filter((g) => g.name !== PINNED_GROUP && g.name !== ARCHIVED_GROUP).flatMap((g) => g.items);
   return [...pinned, ...(rest.length > 0 ? [{ name: "Conversations", items: rest }] : []), ...archived];
+}
+
+/** Groupes visibles dans la barre latérale selon la vue choisie. */
+export function visibleGroups(items: Conversation[], view: SidebarView): ConversationGroup[] {
+  const shown = applyView(items, view);
+  const grouped = groupConversations(shown, "");
+  return view.groupBy === "none" ? flatGroups(grouped) : grouped;
+}
+
+/** Liste linéaire des conversations navigables au clavier (exclut les archivées sauf si sélectionnée). */
+export function orderedVisibleConversations(
+  items: Conversation[],
+  view: SidebarView,
+  selectedId?: string,
+): Conversation[] {
+  return visibleGroups(items, view)
+    .filter((g) => g.name !== ARCHIVED_GROUP || g.items.some((c) => c.id === selectedId))
+    .flatMap((g) => g.items);
 }
