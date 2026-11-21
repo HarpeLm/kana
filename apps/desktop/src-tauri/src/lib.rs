@@ -41,6 +41,9 @@ pub fn run() {
             db_commands::db_load_projects,
             db_commands::db_save_projects,
             db_commands::db_search_messages,
+            db_commands::db_load_settings,
+            db_commands::db_set_setting,
+            db_commands::db_sync_settings,
             project_commands::launch_project,
             project_commands::create_project,
             project_commands::scratch_dir,
@@ -138,6 +141,113 @@ fn start_browser_mcp(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
+/// Contexte partagé chargé depuis `~/.kana/config.json` pour une exécution CLI `kana run`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CliSharedContext {
+    pub mcp_servers: Vec<kana_acp::McpServerConfig>,
+    pub memory_preface: String,
+    pub permission_mode: kana_core::PermissionMode,
+    pub rules: Vec<kana_core::PermissionRule>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredMcpServer {
+    #[serde(default = "default_true")]
+    enabled: bool,
+    #[serde(default)]
+    scope: Option<String>,
+    #[serde(flatten)]
+    param: agent_commands::UserMcpServerParam,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn normalize_shared_scope(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "global" || trimmed == "none" {
+        "global".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn parse_permission_mode(raw: &str) -> kana_core::PermissionMode {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "plan" => kana_core::PermissionMode::Plan,
+        "auto" => kana_core::PermissionMode::Auto,
+        "full" => kana_core::PermissionMode::Full,
+        _ => kana_core::PermissionMode::Ask,
+    }
+}
+
+/// Charge les serveurs MCP utilisateur actifs, la mémoire projet et les règles de permissions
+/// depuis le miroir partagé `~/.kana/config.json`.
+pub(crate) fn load_cli_shared_context(home: &std::path::Path, workdir: &std::path::Path) -> CliSharedContext {
+    let settings = kana_db::read_shared_config(&kana_db::shared_config_path(home));
+    let workdir_raw = workdir.to_string_lossy();
+    let workdir_norm = normalize_shared_scope(&workdir_raw);
+
+    let mcp_servers = settings
+        .get("kana-mcp-servers")
+        .and_then(|raw| serde_json::from_str::<Vec<StoredMcpServer>>(raw).ok())
+        .map(|items| {
+            let active: Vec<agent_commands::UserMcpServerParam> = items
+                .into_iter()
+                .filter(|item| {
+                    if !item.enabled {
+                        return false;
+                    }
+                    let scope = normalize_shared_scope(item.scope.as_deref().unwrap_or("global"));
+                    scope == "global" || (workdir_norm != "global" && scope == workdir_norm)
+                })
+                .map(|item| item.param)
+                .collect();
+            agent_commands::user_mcp_to_configs(Some(active))
+        })
+        .unwrap_or_default();
+
+    let memory_preface = settings
+        .get("kana-project-memory")
+        .and_then(|raw| serde_json::from_str::<std::collections::BTreeMap<String, Vec<String>>>(raw).ok())
+        .map(|map| {
+            let mut notes = Vec::new();
+            for (path, items) in map {
+                if normalize_shared_scope(&path) == workdir_norm && workdir_norm != "global" {
+                    for note in items {
+                        let clean = note.trim();
+                        if !clean.is_empty() && !notes.iter().any(|existing: &String| existing == clean) {
+                            notes.push(clean.to_string());
+                        }
+                    }
+                }
+            }
+            if notes.is_empty() {
+                String::new()
+            } else {
+                let bullets = notes.iter().map(|n| format!("- {n}")).collect::<Vec<_>>().join("\n");
+                format!(
+                    "Mémoire partagée du projet (notes persistantes entre sessions et fournisseurs) :\n{bullets}\n\n"
+                )
+            }
+        })
+        .unwrap_or_default();
+
+    let permission_mode = settings
+        .get("kana-permission-mode")
+        .map(|raw| parse_permission_mode(raw))
+        .unwrap_or(kana_core::PermissionMode::Ask);
+
+    let rules = settings
+        .get("kana-permission-rules")
+        .and_then(|raw| serde_json::from_str::<Vec<kana_core::PermissionRule>>(raw).ok())
+        .unwrap_or_default();
+
+    CliSharedContext { mcp_servers, memory_preface, permission_mode, rules }
+}
+
 /// Exécute une commande CLI Headless (`kana run`, `kana advisor`, `--help`, `--version`) et renvoie le code de sortie.
 pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
     match cmd {
@@ -184,6 +294,12 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
                 let workdir = cwd
                     .map(std::path::PathBuf::from)
                     .unwrap_or_else(agent_spec::project_dir);
+                let shared_ctx = load_cli_shared_context(&agent_spec::default_cwd(), &workdir);
+                let effective_mode = if read_only {
+                    kana_core::PermissionMode::Plan
+                } else {
+                    shared_ctx.permission_mode
+                };
                 let agents_chain = cross_review.unwrap_or_else(|| vec![agent.clone()]);
                 let mut steps_output = Vec::new();
                 for (idx, step_agent) in agents_chain.iter().enumerate() {
@@ -201,7 +317,7 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
                             kana_acp::SandboxPolicy::WorkspaceWrite
                         });
                     }
-                    let step_prompt = if agents_chain.len() == 1 {
+                    let base_prompt = if agents_chain.len() == 1 {
                         prompt.clone()
                     } else if idx == 0 {
                         format!("[Cross-Review Étape 1/3 · Implémentation]\n{prompt}")
@@ -214,14 +330,20 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
                             "[Cross-Review Étape 3/3 · Vérification finale]\nVérifie la compilation, les tests et la conformité finale pour « {prompt} »."
                         )
                     };
-
-                    let (client, mut events) = match kana_acp::AcpClient::spawn(&spec, &workdir).await {
-                        Ok(pair) => pair,
-                        Err(e) => {
-                            eprintln!("impossible de démarrer '{step_agent}' : {e}");
-                            return 1;
-                        }
+                    let step_prompt = if shared_ctx.memory_preface.is_empty() {
+                        base_prompt
+                    } else {
+                        format!("{}{}", shared_ctx.memory_preface, base_prompt)
                     };
+
+                    let (client, mut events) =
+                        match kana_acp::AcpClient::spawn_with_mcp(&spec, &workdir, &shared_ctx.mcp_servers).await {
+                            Ok(pair) => pair,
+                            Err(e) => {
+                                eprintln!("impossible de démarrer '{step_agent}' : {e}");
+                                return 1;
+                            }
+                        };
                     if let Some(m) = model.as_deref() {
                         let _ = client.set_model(m).await;
                     }
@@ -240,6 +362,23 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
                                     print!("{text}");
                                 }
                                 collected.push_str(&text);
+                            }
+                            kana_acp::AcpEvent::Permission { request_id, title, options } => {
+                                let choices: Vec<kana_core::PermissionChoice> = options
+                                    .iter()
+                                    .map(|o| kana_core::PermissionChoice {
+                                        id: o.id.clone(),
+                                        name: o.name.clone(),
+                                        kind: o.kind.clone(),
+                                    })
+                                    .collect();
+                                let answer = kana_core::auto_answer_with_rules(
+                                    effective_mode,
+                                    &title,
+                                    &choices,
+                                    &shared_ctx.rules,
+                                );
+                                client.resolve_permission(&request_id, answer).await;
                             }
                             kana_acp::AcpEvent::Done { .. } | kana_acp::AcpEvent::Closed => break,
                             kana_acp::AcpEvent::Error { message } => {
@@ -271,5 +410,106 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
                 0
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    #[test]
+    fn loads_cli_shared_context_mcp_memory_and_permissions() {
+        let tmp_home = std::env::temp_dir().join(format!("kana-cli-ctx-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp_home);
+        let cfg_path = kana_db::shared_config_path(&tmp_home);
+
+        let mut settings = BTreeMap::new();
+        settings.insert(
+            "kana-mcp-servers".into(),
+            serde_json::json!([
+                {
+                    "id": "m1",
+                    "name": "global-http",
+                    "transport": "http",
+                    "url": "https://mcp.example/http",
+                    "oauthToken": "tok-global",
+                    "enabled": true,
+                    "scope": "global"
+                },
+                {
+                    "id": "m2",
+                    "name": "proj-stdio",
+                    "transport": "stdio",
+                    "command": "npx",
+                    "args": ["-y", "@mcp/local"],
+                    "enabled": true,
+                    "scope": "/tmp/my-repo/"
+                },
+                {
+                    "id": "m3",
+                    "name": "other-proj",
+                    "transport": "sse",
+                    "url": "https://other.example/sse",
+                    "enabled": true,
+                    "scope": "/tmp/other-repo"
+                },
+                {
+                    "id": "m4",
+                    "name": "disabled-global",
+                    "transport": "http",
+                    "url": "https://off.example",
+                    "enabled": false,
+                    "scope": "global"
+                }
+            ])
+            .to_string(),
+        );
+        settings.insert(
+            "kana-project-memory".into(),
+            serde_json::json!({
+                "/tmp/my-repo": ["Toujours exécuter cargo test", "Ne pas toucher à test/"],
+                "/tmp/other-repo": ["Ignoré pour my-repo"]
+            })
+            .to_string(),
+        );
+        settings.insert("kana-permission-mode".into(), "auto".into());
+        settings.insert(
+            "kana-permission-rules".into(),
+            serde_json::json!([
+                {
+                    "id": "r1",
+                    "scope": "command",
+                    "pattern": "git push",
+                    "policy": "deny",
+                    "enabled": true
+                }
+            ])
+            .to_string(),
+        );
+
+        kana_db::write_shared_config(&cfg_path, &settings).unwrap();
+
+        let ctx = load_cli_shared_context(&tmp_home, std::path::Path::new("/tmp/my-repo"));
+        assert_eq!(ctx.mcp_servers.len(), 2);
+        assert_eq!(
+            ctx.mcp_servers[0],
+            kana_acp::McpServerConfig::http("global-http", "https://mcp.example/http")
+                .with_bearer_token("tok-global")
+        );
+        assert_eq!(
+            ctx.mcp_servers[1],
+            kana_acp::McpServerConfig::stdio("proj-stdio", "npx", vec!["-y".into(), "@mcp/local".into()])
+        );
+        assert!(ctx.memory_preface.contains("Toujours exécuter cargo test"));
+        assert!(ctx.memory_preface.contains("Ne pas toucher à test/"));
+        assert!(!ctx.memory_preface.contains("Ignoré pour my-repo"));
+        assert_eq!(ctx.permission_mode, kana_core::PermissionMode::Auto);
+        assert_eq!(ctx.rules.len(), 1);
+        assert_eq!(ctx.rules[0].pattern, "git push");
+        assert_eq!(ctx.rules[0].policy, kana_core::PermissionPolicy::Deny);
+
+        let _ = std::fs::remove_dir_all(&tmp_home);
     }
 }
