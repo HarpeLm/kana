@@ -15,6 +15,7 @@ interface DocPaneProps {
   onSave: () => void;
   onOverwrite: () => void;
   onReload: () => void;
+  goTo?: { id: number; line: number } | null;
   onComment?: (note: { comment: string; html: string; text: string; heading: string }) => void;
 }
 
@@ -27,7 +28,7 @@ function formatSize(bytes: number): string {
 }
 
 /** Contenu d'un onglet : éditeur, rendu markdown ou page HTML modifiable à même la page, ou le message qui explique pourquoi il n'y en a pas. */
-export default function DocPane({ path, doc, active, source, onChange, onSave, onOverwrite, onReload, onComment }: DocPaneProps) {
+export default function DocPane({ path, doc, active, source, onChange, onSave, onOverwrite, onReload, onComment, goTo }: DocPaneProps) {
   if (doc.status === "loading") return <p className="p-4 text-[13px] text-[#8c8b83]">Chargement…</p>;
   if (doc.status === "error") {
     return (
@@ -86,6 +87,7 @@ export default function DocPane({ path, doc, active, source, onChange, onSave, o
             active={active && !rendered}
             onChange={onChange}
             onSave={onSave}
+            goTo={goTo}
           />
         </div>
       </div>
