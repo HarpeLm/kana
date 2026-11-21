@@ -317,7 +317,7 @@ export default function ExtensibilityModal({
       >
         <div className="flex items-center justify-between border-b border-[#2f2f2c] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <Blocks className="h-4 w-4 text-[#d97757]" strokeWidth={1.8} />
+            <Blocks className="h-4 w-4 text-[#60a5fa]" strokeWidth={1.8} />
             <h2 className="text-[15px] font-medium">Extensibilité & Connecteurs</h2>
             {hasProject && (
               <span className="rounded-md bg-[#2b2b29] px-2 py-0.5 text-[11.5px] text-[#a3a29a]">
@@ -388,7 +388,7 @@ export default function ExtensibilityModal({
                         checked={srv.enabled}
                         aria-label={`Activer ${srv.name}`}
                         onChange={() => toggleMcpServer(srv.id)}
-                        className="h-3.5 w-3.5 accent-[#d97757]"
+                        className="h-3.5 w-3.5 accent-[#2563eb]"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -538,7 +538,7 @@ export default function ExtensibilityModal({
                   <button
                     type="button"
                     onClick={saveMcp}
-                    className="flex items-center gap-1.5 rounded-lg bg-[#d97757] px-3.5 py-1.5 text-[12.5px] font-medium text-[#181817] hover:bg-[#e38768]"
+                    className="flex items-center gap-1.5 rounded-lg bg-[#1e40af] px-3.5 py-1.5 text-[12.5px] font-medium text-[#f8fafc] hover:bg-[#2563eb]"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>{mcpEditId ? "Mettre à jour" : "Ajouter le serveur MCP"}</span>
@@ -565,7 +565,7 @@ export default function ExtensibilityModal({
                         }}
                         className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-mono text-[12px] transition ${
                           active
-                            ? "border-[#d97757] bg-[#d97757]/15 text-[#ecebe4]"
+                            ? "border-[#3b82f6] bg-[#1e3a8a]/35 text-[#ecebe4]"
                             : "border-[#343431] bg-[#232321] text-[#b3b2aa] hover:bg-[#2c2c29]"
                         }`}
                       >
@@ -610,7 +610,7 @@ export default function ExtensibilityModal({
                               e.target.checked ? [...new Set([...prev, path])] : prev.filter((p) => p !== path),
                             )
                           }
-                          className="h-3.5 w-3.5 accent-[#d97757]"
+                          className="h-3.5 w-3.5 accent-[#2563eb]"
                         />
                         <span>{path}</span>
                       </label>
@@ -629,7 +629,7 @@ export default function ExtensibilityModal({
                   <button
                     type="button"
                     onClick={() => void syncSelectedRules()}
-                    className="flex items-center gap-1.5 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12.5px] font-medium text-[#181817] hover:bg-[#e38768]"
+                    className="flex items-center gap-1.5 rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12.5px] font-medium text-[#f8fafc] hover:bg-[#2563eb]"
                   >
                     <Check className="h-3.5 w-3.5" />
                     <span>Synchroniser les règles</span>
@@ -652,7 +652,7 @@ export default function ExtensibilityModal({
                       checked={skill.enabled}
                       aria-label={`Activer /${skill.slash}`}
                       onChange={() => toggleSkill(skill.id)}
-                      className="mt-1 h-3.5 w-3.5 accent-[#d97757]"
+                      className="mt-1 h-3.5 w-3.5 accent-[#2563eb]"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -735,7 +735,7 @@ export default function ExtensibilityModal({
                   <button
                     type="button"
                     onClick={addSkill}
-                    className="w-full rounded-lg bg-[#d97757] px-3 py-1.5 text-[12.5px] font-medium text-[#181817] hover:bg-[#e38768]"
+                    className="w-full rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12.5px] font-medium text-[#f8fafc] hover:bg-[#2563eb]"
                   >
                     Ajouter le skill
                   </button>
@@ -784,7 +784,7 @@ export default function ExtensibilityModal({
                         checked={hook.enabled}
                         aria-label={`Activer hook ${hook.event}`}
                         onChange={() => toggleHook(hook.id)}
-                        className="h-3.5 w-3.5 accent-[#d97757]"
+                        className="h-3.5 w-3.5 accent-[#2563eb]"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -857,7 +857,7 @@ export default function ExtensibilityModal({
                   <button
                     type="button"
                     onClick={addHook}
-                    className="shrink-0 rounded-lg bg-[#d97757] px-3.5 py-1.5 text-[12.5px] font-medium text-[#181817] hover:bg-[#e38768]"
+                    className="shrink-0 rounded-lg bg-[#1e40af] px-3.5 py-1.5 text-[12.5px] font-medium text-[#f8fafc] hover:bg-[#2563eb]"
                   >
                     Ajouter le hook
                   </button>
@@ -921,7 +921,7 @@ export default function ExtensibilityModal({
                   <div key={pack.id} className="flex flex-col justify-between rounded-xl border border-[#2f2f2c] bg-[#232321] p-3.5">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Plug className="h-4 w-4 text-[#d97757]" />
+                        <Plug className="h-4 w-4 text-[#60a5fa]" />
                         <span className="text-[13.5px] font-medium">{pack.name}</span>
                       </div>
                       <p className="mt-1 text-[12px] text-[#9a9992]">{pack.description}</p>
@@ -941,7 +941,7 @@ export default function ExtensibilityModal({
                           })
                           .catch((e) => setError(String(e)));
                       }}
-                      className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12.5px] font-medium text-[#181817] hover:bg-[#e38768]"
+                      className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12.5px] font-medium text-[#f8fafc] hover:bg-[#2563eb]"
                     >
                       <Play className="h-3.5 w-3.5" />
                       <span>Installer en 1 clic</span>
