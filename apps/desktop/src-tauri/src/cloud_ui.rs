@@ -26,13 +26,14 @@ pub const CLOUD_DASHBOARD_HTML: &str = r#"<!doctype html>
       width: 100%; background: #181817; color: #ecebe4; border: 1px solid #363632;
       border-radius: 9px; padding: 9px 11px; font-size: 14px; outline: none;
     }
-    input:focus, select:focus, textarea:focus { border-color: #55554f; }
+    input:focus, select:focus, textarea:focus { border-color: #3b82f6; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
     button {
-      background: #d97757; color: #181817; border: 0; border-radius: 9px;
+      background: #1e40af; color: #f8fafc; border: 0; border-radius: 9px;
       padding: 9px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer;
     }
+    button:hover { background: #2563eb; }
     button.sec { background: #2f2f2c; color: #ecebe4; font-weight: 500; }
     .actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
     .job { border-top: 1px solid #2f2f2c; padding: 10px 0; }
