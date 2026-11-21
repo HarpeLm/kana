@@ -277,7 +277,7 @@ export default function App({ startup }: { startup: Startup }) {
   // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
   const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
   // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
-  const sessionSummary = useSessionSummary(showRightPanel, workPath, chat.busy);
+  const sessionSummary = useSessionSummary(showRightPanel && chat.messages.length > 0, workPath, chat.busy);
 
   const nav = {
     onToggleSidebar: toggle(setShowSidebar),
@@ -436,6 +436,7 @@ export default function App({ startup }: { startup: Startup }) {
                 context={chat.context}
                 agentId={selected.agentId}
                 onOpenRelay={() => setView("relay")}
+                started={chat.messages.length > 0}
               />
             )}
           </div>
