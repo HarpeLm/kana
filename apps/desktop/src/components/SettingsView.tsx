@@ -67,6 +67,20 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
     }
   };
 
+  const handleInstallAllAdapters = async () => {
+    if (installingAdapter) return;
+    for (const adapter of adapterCaches) {
+      setInstallingAdapter(adapter.agent_id);
+      try {
+        const updated = await installAdapterCache(adapter.agent_id);
+        setAdapterCaches((prev) => prev.map((item) => (item.agent_id === adapter.agent_id ? updated : item)));
+      } catch {
+        // continue caching remaining adapters
+      }
+    }
+    setInstallingAdapter(null);
+  };
+
   const handleCheckUpdate = async () => {
     if (checkingUpdate) return;
     setCheckingUpdate(true);
@@ -337,15 +351,26 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleCheckUpdate()}
-              disabled={checkingUpdate}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#2e2e2b] px-3 py-1.5 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36] disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdate ? "animate-spin" : ""}`} />
-              <span>{tr("Vérifier les mises à jour", "Check for updates", locale)}</span>
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleInstallAllAdapters()}
+                disabled={installingAdapter !== null || adapterCaches.length === 0}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>{tr("Tout mettre en cache", "Cache all adapters", locale)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCheckUpdate()}
+                disabled={checkingUpdate}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#2e2e2b] px-3 py-1.5 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36] disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdate ? "animate-spin" : ""}`} />
+                <span>{tr("Vérifier les mises à jour", "Check for updates", locale)}</span>
+              </button>
+            </div>
           </div>
 
           {updateInfo && (
