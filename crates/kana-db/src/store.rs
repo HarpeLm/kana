@@ -1,8 +1,8 @@
-use std::{path::Path, sync::Mutex};
+use std::{collections::HashSet, path::Path, sync::Mutex};
 
 use rusqlite::{Connection, params};
 
-use crate::{StoredConversation, StoredMessage, StoredProject};
+use crate::{StoredConversation, StoredMessage, StoredMessageHit, StoredProject};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -51,6 +51,13 @@ CREATE TABLE IF NOT EXISTS messages (
     ended_at INTEGER,
     PRIMARY KEY (conversation_id, position)
 );
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    conversation_id UNINDEXED,
+    message_id UNINDEXED,
+    role UNINDEXED,
+    text,
+    thought
+);
 ";
 
 /// La base de Kana. Une seule connexion, protégée par un verrou : les accès sont courts.
@@ -86,6 +93,19 @@ impl Store {
             "role_label TEXT",
         ] {
             let _ = conn.execute(&format!("ALTER TABLE conversations ADD COLUMN {column}"), []);
+        }
+        let has_messages: bool = conn
+            .query_row("SELECT EXISTS(SELECT 1 FROM messages)", [], |row| row.get(0))
+            .unwrap_or(false);
+        let has_fts: bool = conn
+            .query_row("SELECT EXISTS(SELECT 1 FROM messages_fts)", [], |row| row.get(0))
+            .unwrap_or(false);
+        if has_messages && !has_fts {
+            conn.execute(
+                "INSERT INTO messages_fts (conversation_id, message_id, role, text, thought)
+                 SELECT conversation_id, id, role, text, thought FROM messages",
+                [],
+            )?;
         }
         Ok(Self { conn: Mutex::new(conn) })
     }
@@ -169,6 +189,7 @@ impl Store {
             statement.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?
         };
         for id in existing.iter().filter(|id| !keep.contains(&id.as_str())) {
+            tx.execute("DELETE FROM messages_fts WHERE conversation_id = ?1", params![id])?;
             tx.execute("DELETE FROM conversations WHERE id = ?1", params![id])?;
         }
         tx.commit()?;
@@ -234,22 +255,152 @@ impl Store {
             return Ok(());
         }
         tx.execute("DELETE FROM messages WHERE conversation_id = ?1", params![conversation_id])?;
+        tx.execute("DELETE FROM messages_fts WHERE conversation_id = ?1", params![conversation_id])?;
         {
             let mut insert = tx.prepare(
                 "INSERT INTO messages
                     (conversation_id, position, id, role, text, thought, tools, started_at, ended_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             )?;
+            let mut insert_fts = tx.prepare(
+                "INSERT INTO messages_fts (conversation_id, message_id, role, text, thought)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
             for (position, m) in messages.iter().enumerate() {
                 insert.execute(params![
                     conversation_id, position as i64, m.id, m.role, m.text, m.thought,
                     serde_json::to_string(&m.tools)?, m.started_at, m.ended_at,
                 ])?;
+                insert_fts.execute(params![conversation_id, m.id, m.role, m.text, m.thought])?;
             }
         }
         tx.commit()?;
         Ok(())
     }
+
+    /// Recherche plein texte dans les messages enregistrés (index FTS5 puis repli `LIKE`).
+    pub fn search_messages(&self, query: &str, limit: usize) -> Result<Vec<StoredMessageHit>, StoreError> {
+        let trimmed = query.trim();
+        if trimmed.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+        if tokens.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.lock()?;
+        let mut hits = Vec::new();
+        let mut seen: HashSet<(String, String)> = HashSet::new();
+
+        // Échappe chaque terme entre guillemets FTS5 avec préfixe `*` pour éviter toute erreur de syntaxe
+        // sur les caractères spéciaux (`:`, `-`, `/`, `OR`, `AND`, etc.).
+        let fts_tokens: Vec<String> = tokens
+            .iter()
+            .filter(|t| t.chars().any(|c| c.is_alphanumeric()))
+            .map(|t| format!("\"{}\"*", t.replace('"', "\"\"")))
+            .collect();
+
+        if !fts_tokens.is_empty() {
+            let match_expr = fts_tokens.join(" ");
+            if let Ok(mut stmt) = conn.prepare(
+                "SELECT f.conversation_id, f.message_id, f.role,
+                        snippet(messages_fts, -1, '', '', '…', 18)
+                 FROM messages_fts AS f
+                 JOIN conversations AS c ON c.id = f.conversation_id
+                 WHERE messages_fts MATCH ?1
+                 ORDER BY bm25(messages_fts)
+                 LIMIT ?2",
+            )
+                && let Ok(rows) = stmt.query_map(params![match_expr, limit as i64], |row| {
+                    Ok(StoredMessageHit {
+                        conversation_id: row.get(0)?,
+                        message_id: row.get(1)?,
+                        role: row.get(2)?,
+                        snippet: row.get(3)?,
+                    })
+                })
+            {
+                for hit in rows.flatten() {
+                    let key = (hit.conversation_id.clone(), hit.message_id.clone());
+                    if seen.insert(key) {
+                        hits.push(hit);
+                    }
+                }
+            }
+        }
+
+        if hits.len() < limit {
+            let remaining = limit - hits.len();
+            let like_pattern = format!("%{}%", escape_like(&trimmed.to_lowercase()));
+            let mut stmt = conn.prepare(
+                "SELECT m.conversation_id, m.id, m.role, m.text, m.thought
+                 FROM messages AS m
+                 JOIN conversations AS c ON c.id = m.conversation_id
+                 WHERE LOWER(m.text) LIKE ?1 ESCAPE '\\' OR LOWER(m.thought) LIKE ?1 ESCAPE '\\'
+                 ORDER BY COALESCE(c.opened_at, 0) DESC, m.position DESC
+                 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![like_pattern, (remaining + hits.len()) as i64], |row| {
+                let text: String = row.get(3)?;
+                let thought: String = row.get(4)?;
+                Ok(StoredMessageHit {
+                    conversation_id: row.get(0)?,
+                    message_id: row.get(1)?,
+                    role: row.get(2)?,
+                    snippet: make_snippet(&text, &thought, trimmed),
+                })
+            })?;
+            for hit in rows.flatten() {
+                if hits.len() >= limit {
+                    break;
+                }
+                let key = (hit.conversation_id.clone(), hit.message_id.clone());
+                if seen.insert(key) {
+                    hits.push(hit);
+                }
+            }
+        }
+
+        Ok(hits)
+    }
+}
+
+fn escape_like(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn make_snippet(text: &str, thought: &str, query: &str) -> String {
+    let source = if text.to_lowercase().contains(&query.to_lowercase()) || thought.trim().is_empty() {
+        text
+    } else {
+        thought
+    };
+    let clean = source.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.chars().count() <= 140 {
+        return clean;
+    }
+    let lower_clean = clean.to_lowercase();
+    let needle = query.to_lowercase();
+    if let Some(byte_pos) = lower_clean.find(&needle) {
+        let char_pos = lower_clean[..byte_pos].chars().count();
+        let start = char_pos.saturating_sub(40);
+        let chars: Vec<char> = clean.chars().collect();
+        let end = (start + 120).min(chars.len());
+        let slice: String = chars[start..end].iter().collect();
+        let prefix = if start > 0 { "…" } else { "" };
+        let suffix = if end < chars.len() { "…" } else { "" };
+        return format!("{prefix}{slice}{suffix}");
+    }
+    let slice: String = clean.chars().take(120).collect();
+    format!("{slice}…")
 }
 
 #[cfg(test)]
@@ -371,5 +522,96 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         store.save_messages("nope", &[message("m1", "x")]).unwrap();
         assert!(store.messages("nope").unwrap().is_empty());
+    }
+
+    #[test]
+    fn fts5_searches_text_and_thought_escapes_tokens_and_syncs_deletes() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_conversations(&[conversation("a"), conversation("b")]).unwrap();
+        store
+            .save_messages(
+                "a",
+                &[
+                    StoredMessage {
+                        id: "m1".into(),
+                        role: "user".into(),
+                        text: "Migration PostgreSQL vers SQLite FTS5".into(),
+                        thought: String::new(),
+                        tools: json!([]),
+                        started_at: Some(1),
+                        ended_at: Some(2),
+                    },
+                    StoredMessage {
+                        id: "m2".into(),
+                        role: "agent".into(),
+                        text: "Tout est prêt.".into(),
+                        thought: "Vérifier l'indexation fulltext_custom_token".into(),
+                        tools: json!([]),
+                        started_at: Some(3),
+                        ended_at: Some(4),
+                    },
+                ],
+            )
+            .unwrap();
+        store
+            .save_messages("b", &[message("m3", "Analyse OAuth2 et foo:bar")])
+            .unwrap();
+
+        let hits = store.search_messages("PostgreSQL", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].conversation_id, "a");
+        assert_eq!(hits[0].message_id, "m1");
+        assert!(hits[0].snippet.contains("PostgreSQL"));
+
+        // Recherche dans `thought` et préfixe FTS5
+        let thought_hits = store.search_messages("fulltext", 10).unwrap();
+        assert_eq!(thought_hits.len(), 1);
+        assert_eq!(thought_hits[0].message_id, "m2");
+
+        // Repli LIKE pour sous-chaîne au milieu d'un mot
+        let like_hits = store.search_messages("custom_tok", 10).unwrap();
+        assert_eq!(like_hits.len(), 1);
+        assert_eq!(like_hits[0].message_id, "m2");
+
+        // Échappement des opérateurs et ponctuations FTS5 sans erreur SQL
+        let escaped_hits = store.search_messages("foo:bar OR \"test\"", 10).unwrap();
+        assert!(escaped_hits.is_empty());
+        let colon_hits = store.search_messages("foo:bar", 10).unwrap();
+        assert_eq!(colon_hits.len(), 1);
+        assert_eq!(colon_hits[0].conversation_id, "b");
+
+        // Suppression de la conversation "a" retire ses entrées de messages_fts
+        store.save_conversations(&[conversation("b")]).unwrap();
+        assert!(store.search_messages("PostgreSQL", 10).unwrap().is_empty());
+        assert!(store.search_messages("   ", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn backfills_fts5_index_on_startup_for_existing_messages() {
+        let path = std::env::temp_dir().join(format!("kana-fts-backfill-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE conversations (
+                    id TEXT PRIMARY KEY, position INTEGER NOT NULL, title TEXT NOT NULL,
+                    project TEXT NOT NULL, agent_id TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0,
+                    unread INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
+                    opened_at INTEGER, worktree TEXT, branch TEXT, forked_from TEXT, fork_context TEXT);
+                 CREATE TABLE messages (
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    position INTEGER NOT NULL, id TEXT NOT NULL, role TEXT NOT NULL,
+                    text TEXT NOT NULL, thought TEXT NOT NULL DEFAULT '', tools TEXT NOT NULL DEFAULT 'null',
+                    started_at INTEGER, ended_at INTEGER, PRIMARY KEY (conversation_id, position));
+                 INSERT INTO conversations (id, position, title, project, agent_id) VALUES ('c1', 0, 't', 'p', 'claude');
+                 INSERT INTO messages (conversation_id, position, id, role, text, thought) VALUES ('c1', 0, 'm1', 'agent', 'Indice historique indexé', '');",
+            )
+            .unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        let hits = store.search_messages("historique", 5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].conversation_id, "c1");
+        let _ = std::fs::remove_file(&path);
     }
 }
