@@ -7,6 +7,8 @@ import { useProjects } from "./hooks/useProjects";
 import { setThreadEffort, setThreadModel } from "./lib/models";
 import { chosenEffort } from "./lib/effort";
 import { agentTitle, autoTitle } from "./lib/autoTitle";
+import ArtifactsView from "./components/ArtifactsView";
+import { useAllArtifacts, type ArtifactEntry } from "./lib/artifactIndex";
 import EffortPicker from "./components/EffortPicker";
 import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
@@ -210,6 +212,14 @@ export default function App({ startup }: { startup: Startup }) {
     setShowArtDock(true);
   };
 
+  // Tous les artéfacts : relus quand on ouvre la galerie ou la recherche.
+  const allArtifacts = useAllArtifacts(conversations.items, view === "artifacts" || searchOpen);
+  const openArtifactEntry = (entry: ArtifactEntry) => {
+    conversations.select(entry.conversationId);
+    setView("workspace");
+    openFile(entry.path);
+  };
+
   const relayBanner = useRelayFlow({
     conversation: selected,
     chat,
@@ -386,10 +396,7 @@ export default function App({ startup }: { startup: Startup }) {
         searchOpen={searchOpen}
         onCreate={createConversation}
         onOpenSearch={() => setSearchOpen(true)}
-        onArtifacts={() => {
-          setShowArtifacts((v) => !v);
-          setView("workspace");
-        }}
+        onArtifacts={() => setView("artifacts")}
         onOpenScheduled={() => setView("scheduled")}
         onOpenSettings={() => setView("settings")}
       />
@@ -427,9 +434,9 @@ export default function App({ startup }: { startup: Startup }) {
             },
           }}
         >
-          {view === "settings" || view === "scheduled" ? (
+          {view === "settings" || view === "scheduled" || view === "artifacts" ? (
             <span className="px-2 text-[14px] text-[#e6e5df]">
-              {view === "settings" ? "Réglages" : "Tâches planifiées"}
+              {view === "settings" ? "Réglages" : view === "artifacts" ? "Artéfacts" : "Tâches planifiées"}
             </span>
           ) : (
             <ConversationTitle
@@ -448,6 +455,8 @@ export default function App({ startup }: { startup: Startup }) {
           />
         ) : view === "scheduled" ? (
           <ScheduledView />
+        ) : view === "artifacts" ? (
+          <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} />
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <OpenArtifactContext.Provider value={openFile}>
@@ -604,6 +613,8 @@ export default function App({ startup }: { startup: Startup }) {
       {searchOpen && (
         <SearchPalette
           conversations={conversations.items}
+          artifacts={allArtifacts.items}
+          onOpenArtifact={openArtifactEntry}
           onOpenConversation={openConversation}
           onCreate={createConversation}
           onOpenSettings={() => setView("settings")}
