@@ -9,7 +9,7 @@ mod status;
 mod worktree;
 
 pub use forge::{MergeReport, base_branch, discard_work, merge_branch, save_work, BranchSummary, CommitInfo, FileStat, PullRequest, branch_summary, create_pull_request, parse_pull_requests, pull_requests};
-pub use files::{FileList, FilePreview, list_files, read_preview, trash_file, write_text};
+pub use files::{FileList, FilePreview, RepoSymbol, list_files, read_preview, trash_file, write_text};
 pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
 pub use parse::parse_diff;
 pub use run::{GitError, diff, repo_root};
