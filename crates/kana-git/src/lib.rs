@@ -23,4 +23,7 @@ pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
 pub use parse::parse_diff;
 pub use run::{GitError, create_checkpoint, diff, repo_root, restore_checkpoint, revert_file, revert_hunk};
 pub use status::{ChangedFile, changed_files, parse_status};
-pub use worktree::{KanaBranch, add_worktree, current_branch, delete_merged_branch, init_repository, kana_branches, remove_worktree};
+pub use worktree::{
+    HandoffReport, KanaBranch, add_worktree, current_branch, delete_merged_branch, handoff_local_to_worktree,
+    handoff_worktree_to_local, init_repository, kana_branches, remove_worktree,
+};
