@@ -125,10 +125,12 @@ interface SessionPanelProps {
   /** Fournisseur de la conversation. */
   agentId: string;
   onOpenRelay: () => void;
+  /** La conversation a commencé : avant, il n'y a encore rien à montrer du travail de l'agent. */
+  started: boolean;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started }: SessionPanelProps) {
   useUsageVersion();
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -146,7 +148,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
 
   const changed = summary?.changed ?? [];
   // Rien de rempli : la carte ne prend que la place de son contenu, comme une petite carte.
-  const anyFilled = plan.length > 0 || recent.length > 0 || created.length + links.length > 0 || changed.length > 0 || pulls.length > 0;
+  const anyFilled = started && (plan.length > 0 || recent.length > 0 || created.length + links.length > 0 || changed.length > 0 || pulls.length > 0);
   const commits = summary?.commits ?? [];
   const onMainBranch = !summary?.branch || summary.branch === summary.base;
   const nothingToShare = !!summary && summary.ahead === 0 && !summary.dirty;
@@ -238,6 +240,8 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
           })}
         </Section>
 
+        {started && (
+          <>
         <Section title="Plan et tâches" count={plan.length} compact={plan.length === 0}>
           {plan.length === 0 && <Empty>L'agent n'a pas annoncé de plan.</Empty>}
           {plan.map((item, index) => (
@@ -357,8 +361,11 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
             </MoreButton>
           )}
         </Section>
+          </>
+        )}
         </div>
 
+        {started && (
         <div className="shrink-0 border-t border-[#2f2f2c] p-3">
           <button
             onClick={startPr}
@@ -369,6 +376,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
             Créer une PR
           </button>
         </div>
+        )}
       </div>
 
       {creating && summary?.branch && (
