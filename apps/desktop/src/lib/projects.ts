@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./env";
 
@@ -75,4 +76,98 @@ export async function loadBranches(paths: string[]): Promise<Record<string, stri
   } catch {
     return {};
   }
+}
+
+export const PROJECT_MEMORY_KEY = "kana-project-memory";
+
+let memoryMapFallback: Record<string, string[]> = {};
+let memoryVersion = 0;
+const memoryListeners = new Set<() => void>();
+
+function hasBrowserStorage(): boolean {
+  return typeof window !== "undefined" && typeof localStorage !== "undefined";
+}
+
+function readMemoryMap(): Record<string, string[]> {
+  if (!hasBrowserStorage()) return memoryMapFallback;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PROJECT_MEMORY_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const clean: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        clean[key] = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+      }
+    }
+    return clean;
+  } catch {
+    return {};
+  }
+}
+
+function writeMemoryMap(next: Record<string, string[]>): void {
+  if (!hasBrowserStorage()) {
+    memoryMapFallback = next;
+  } else {
+    try {
+      localStorage.setItem(PROJECT_MEMORY_KEY, JSON.stringify(next));
+    } catch {
+      // stockage indisponible : la mémoire ne sera pas conservée
+    }
+  }
+  memoryVersion += 1;
+  memoryListeners.forEach((notify) => notify());
+}
+
+/** Retourne les notes persistantes partagées pour ce projet entre sessions et fournisseurs. */
+export function getProjectMemory(projectPath: string): string[] {
+  const path = projectPath.trim();
+  if (!path || path === NO_PROJECT) return [];
+  return [...(readMemoryMap()[path] ?? [])];
+}
+
+/** Ajoute une note persistante à la mémoire du projet et retourne la liste à jour. */
+export function addProjectMemory(projectPath: string, note: string): string[] {
+  const path = projectPath.trim();
+  const cleanNote = note.trim();
+  if (!path || path === NO_PROJECT) return [];
+  const current = readMemoryMap();
+  const list = current[path] ?? [];
+  if (!cleanNote || list.includes(cleanNote)) return [...list];
+  const updated = [...list, cleanNote];
+  writeMemoryMap({ ...current, [path]: updated });
+  return updated;
+}
+
+/** Supprime une note persistante du projet par son index et retourne la liste à jour. */
+export function removeProjectMemory(projectPath: string, index: number): string[] {
+  const path = projectPath.trim();
+  if (!path || path === NO_PROJECT) return [];
+  const current = readMemoryMap();
+  const list = current[path] ?? [];
+  if (index < 0 || index >= list.length) return [...list];
+  const updated = list.filter((_, i) => i !== index);
+  const nextMap = { ...current };
+  if (updated.length === 0) delete nextMap[path];
+  else nextMap[path] = updated;
+  writeMemoryMap(nextMap);
+  return updated;
+}
+
+/** Construit le préambule de mémoire projet injecté à chaque nouvel agent ou relais. */
+export function buildProjectMemoryPreface(projectPath?: string): string {
+  if (!projectPath || projectPath === NO_PROJECT) return "";
+  const notes = getProjectMemory(projectPath);
+  if (notes.length === 0) return "";
+  return `Mémoire partagée du projet (notes persistantes entre sessions et fournisseurs) :\n${notes.map((n) => `- ${n}`).join("\n")}\n\n`;
+}
+
+export function useProjectMemoryVersion(): number {
+  return useSyncExternalStore(
+    (notify) => {
+      memoryListeners.add(notify);
+      return () => memoryListeners.delete(notify);
+    },
+    () => memoryVersion,
+  );
 }
