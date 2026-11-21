@@ -35,7 +35,7 @@ export default function FileToolbar(p: FileToolbarProps) {
             onClick={p.onSave}
             disabled={p.saving}
             title="Enregistrer (⌘S)"
-            className="mr-1 h-7 rounded-lg bg-[#d97757] px-3 text-[13px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-60"
+            className="mr-1 h-7 rounded-lg bg-[#1e40af] px-3 text-[13px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-60"
           >
             {p.saving ? "Enregistrement…" : "Enregistrer"}
           </button>
@@ -48,7 +48,7 @@ export default function FileToolbar(p: FileToolbarProps) {
             title="Diagnostics LSP & Compilateur"
             className={`mr-1 flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition ${
               p.diagnosticsVisible
-                ? "border-[#d97757] bg-[#d97757]/15 text-[#f0efe9]"
+                ? "border-[#3b82f6] bg-[#1e3a8a]/35 text-[#f0efe9]"
                 : "border-[#343431] bg-[#1f1f1d] text-[#cfcec6] hover:bg-[#2a2a28]"
             }`}
           >
