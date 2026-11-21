@@ -237,7 +237,7 @@ test("le menu Plus ouvre le volet Artéfacts et bascule Maintenir l'ordinateur a
   const errors = watchErrors(page);
   const banner = page.getByRole("banner");
   await banner.getByRole("button", { name: "Plus" }).click();
-  await expect(banner.getByRole("button", { name: "Conversation annexe" })).toHaveCount(0);
+  await expect(banner.getByRole("button", { name: /Conversation annexe/ })).toBeVisible();
   await expect(banner.getByRole("button", { name: "Tâches en arrière-plan" })).toHaveCount(0);
   await expect(banner.getByRole("button", { name: "Simulateur iOS" })).toHaveCount(0);
 
@@ -400,5 +400,109 @@ test("réglages : options de Notifications système et son", async ({ page }) =>
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-notifications") ?? "null"));
   expect(stored).toEqual({ enabled: false, sound: true });
 
+  expect(errors).toEqual([]);
+});
+
+test("tâches planifiées : création, exécution immédiate, historique, budget et launchd .plist", async ({ page }) => {
+  const errors = watchErrors(page);
+  await nav(page).getByRole("button", { name: "Tâches planifiées" }).click();
+
+  await page.getByLabel("Titre de la tâche").fill("Veille sécurité");
+  await page.getByLabel("Prompt de la tâche").fill("Analyse les dépendances et signale les CVE.");
+  await page.getByLabel("Fréquence").selectOption("15m");
+  await page.getByLabel("Budget max").selectOption("25000");
+  await page.getByRole("button", { name: "Créer la tâche" }).click();
+
+  await expect(page.getByText("Veille sécurité").first()).toBeVisible();
+  await expect(page.getByText("Active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Exécuter maintenant" }).click();
+  await expect(page.getByText("Succès").first()).toBeVisible();
+  await expect(page.getByText(/25[\s\u202f]000 jetons/).last()).toBeVisible();
+  await expect(page.getByText(/Exécution terminée pour « Veille sécurité »/)).toBeVisible();
+
+  await page.getByRole("button", { name: "launchd .plist" }).click();
+  await expect(page.getByText(/<integer>900<\/integer>/)).toBeVisible();
+
+  const storedTasks = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-scheduled-tasks") ?? "[]"));
+  const storedRuns = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-scheduled-runs") ?? "[]"));
+  expect(storedTasks).toHaveLength(1);
+  expect(storedTasks[0].lastStatus).toBe("ok");
+  expect(storedRuns).toHaveLength(1);
+
+  // La recherche dans l'onglet « Tâches planifiées » retrouve la tâche créée.
+  await nav(page).getByRole("button", { name: "Rechercher" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rechercher" });
+  await dialog.getByRole("tab", { name: "Tâches planifiées" }).click();
+  await expect(dialog.getByRole("option", { name: /Veille sécurité/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  expect(errors).toEqual([]);
+});
+
+test("conversation annexe (⌘;) : poser une question rapide sans polluer le fil principal", async ({ page }) => {
+  const errors = watchErrors(page);
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  const main = page.locator("main");
+
+  const composer = page.getByRole("textbox").last();
+  await composer.fill("Fil principal intact");
+  await composer.press("Enter");
+  await expect(main.getByText(/Tu as écrit « Fil principal intact »\./)).toBeVisible();
+
+  await page.keyboard.press(`${mod}+;`);
+  const sideChat = page.getByRole("region", { name: "Conversation annexe" });
+  await expect(sideChat).toBeVisible();
+
+  const sideInput = sideChat.getByLabel("Question annexe");
+  await sideInput.fill("Question rapide annexe");
+  await sideInput.press("Enter");
+
+  await expect(sideChat.getByText(/Tu as écrit « Question rapide annexe »\./)).toBeVisible();
+  await expect(main.getByText("Question rapide annexe")).toHaveCount(0);
+
+  await sideChat.getByRole("button", { name: "Effacer" }).click();
+  await expect(sideChat.getByText("Question rapide annexe")).toHaveCount(0);
+  await sideChat.getByRole("button", { name: "Fermer" }).click();
+  await expect(sideChat).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
+test("sessionPanel : mémoire projet, environnement distant/sandbox et sous-agent parallèle", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+  await page.getByRole("button", { name: "Plan et tâches" }).click();
+  const panel = page.locator("aside").last();
+
+  // Mémoire du projet
+  await panel.getByLabel("Nouvelle note projet").fill("Toujours lancer cargo test");
+  await panel.getByRole("button", { name: "Ajouter", exact: true }).click();
+  await expect(panel.getByText("Toujours lancer cargo test")).toBeVisible();
+
+  const memory = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-project-memory") ?? "{}"));
+  expect(memory["/tmp/kana"]).toEqual(["Toujours lancer cargo test"]);
+
+  // Environnement : sandbox OS puis SSH distant
+  const sandboxCheckbox = panel.getByLabel("Sandbox OS isolé");
+  await sandboxCheckbox.check();
+  await expect(sandboxCheckbox).toBeChecked();
+
+  await panel.getByLabel("Environnement d'exécution").selectOption("ssh");
+  const sshInput = panel.getByLabel("Cible SSH");
+  await sshInput.fill("dev@box:/srv/kana");
+  await expect(sshInput).toHaveValue("dev@box:/srv/kana");
+
+  await panel.getByLabel("Environnement d'exécution").selectOption("local");
+
+  // Sous-agent parallèle en lecture seule
+  await panel.getByRole("button", { name: "Recherche (lecture seule)" }).click();
+  await expect(panel.getByText("Terminé").first()).toBeVisible();
+
+  const subRow = panel.getByRole("button", { name: /Recherche.*Explore en lecture seule/ });
+  await expect(subRow).toBeVisible();
+  await subRow.click();
+
+  await expect(page.locator("header").getByText(/Recherche · /)).toBeVisible();
   expect(errors).toEqual([]);
 });
