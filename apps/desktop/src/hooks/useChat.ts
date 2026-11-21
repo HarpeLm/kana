@@ -14,6 +14,7 @@ import {
   type ChatMessage,
   type ChatState,
 } from "../lib/chatState";
+import { imagePathsIn } from "../lib/attachments";
 import { loadStoredMessages, saveStoredMessages } from "../lib/store";
 import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
 
@@ -147,7 +148,7 @@ export function useChat(
       try {
         const { cwd, preface, model, effort } = await prepareRef.current(threadId);
         await startAgent(threadId, agentId, cwd, model, effort);
-        await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text));
+        await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text), imagePathsIn(text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
         observerRef.current?.onError?.(threadId, String(error));
