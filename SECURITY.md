@@ -1,21 +1,21 @@
-# Politique de sécurité
+# Security policy
 
-## Signaler une faille
+## Reporting a vulnerability
 
-Merci de **ne pas** ouvrir d'issue publique pour une faille de sécurité.
+Please **do not** open a public issue for a security vulnerability.
 
-Utilisez le signalement privé de GitHub : onglet **Security** du dépôt, puis **Report a vulnerability** ([lien direct](https://github.com/HarpeLm/kana/security/advisories/new)). Décrivez le problème, comment le reproduire et ce qu'il permettrait de faire.
+Use GitHub's private reporting: the **Security** tab of the repository, then **Report a vulnerability** ([direct link](https://github.com/HarpeLm/kana/security/advisories/new)). Describe the problem, how to reproduce it and what it would allow.
 
-Vous recevrez une réponse dès que possible, et nous vous tiendrons au courant de la correction. Merci de nous laisser le temps de corriger avant de rendre la faille publique.
+You will get a reply as soon as possible, and we will keep you posted on the fix. Please give us time to fix the problem before making it public.
 
-## Ce qui compte comme une faille
+## What counts as a vulnerability
 
-Kana lance des agents de code, ouvre des fichiers locaux, pilote un navigateur intégré et garde des clés d'API dans le Trousseau. Sont notamment importants :
+Kana runs coding agents, opens local files, drives a built-in browser and keeps API keys in the Keychain. In particular, these matter:
 
-- un agent ou une page web qui sortirait des limites prévues (lire ou écrire hors du dossier de travail, contourner une demande d'autorisation, un mode « plan » qui modifierait des fichiers) ;
-- une fuite de clé d'API ou de contenu de conversation ;
-- l'exécution de code venant d'un artéfact, d'une page ou d'un fichier ouvert.
+- an agent or a web page escaping its intended limits (reading or writing outside the working folder, bypassing a permission request, a "plan" mode that would modify files);
+- a leak of an API key or of conversation content;
+- execution of code coming from an artifact, a page or an opened file.
 
-## Versions prises en charge
+## Supported versions
 
-Kana est jeune : seule la dernière version de la branche `main` reçoit des correctifs.
+Kana is young: only the latest version of the `main` branch receives fixes.
