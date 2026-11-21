@@ -20,6 +20,7 @@ import type { Conversation } from "../lib/conversations";
 import { createPullRequest, discardWork, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
 import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
+import { isArtifactPath } from "../lib/fileKinds";
 import ConfirmDialog from "./ConfirmDialog";
 import SiteIcon from "./SiteIcon";
 import { AGENTS } from "../data";
@@ -132,10 +133,12 @@ interface SessionPanelProps {
   canCompact: boolean;
   /** Le travail a été abandonné (dossier de travail supprimé) : l'agent doit être arrêté et le dossier oublié. */
   onDiscarded: () => void;
+  /** Ouvre un fichier du dossier de travail dans le volet Fichiers (une page HTML s'y modifie visuellement). */
+  onOpenFile: (path: string) => void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile }: SessionPanelProps) {
   const [action, setAction] = useState<"merge" | "discard" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -153,7 +156,10 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
   const running = tools.filter((t) => t.status === "pending" || t.status === "in_progress").length;
   const recent = tools.slice(-6).reverse();
-  const created = (summary?.changed ?? []).filter((f) => f.status === "added");
+  // Un artéfact : un fichier du dossier `artefacts/`, ou une page, un SVG, une image ou un PDF que la session a créés.
+  const created = (summary?.changed ?? []).filter(
+    (f) => isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path)),
+  );
   const links = linksIn(messages).slice(0, 6);
 
   const changed = summary?.changed ?? [];
@@ -328,7 +334,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
         <Section title="Artéfacts" count={created.length + links.length} compact={created.length + links.length === 0}>
           {created.length === 0 && links.length === 0 && <Empty>Rien de créé pour l'instant.</Empty>}
           {created.slice(0, 5).map((file) => (
-            <Row key={file.path} onClick={onOpenDiff} title={file.path} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
+            <Row key={file.path} onClick={() => onOpenFile(file.path)} title={`Ouvrir ${file.path}`} icon={<FileText className="h-4 w-4 text-[#3fb950]" strokeWidth={1.6} />}>
               {baseName(file.path)}
             </Row>
           ))}
