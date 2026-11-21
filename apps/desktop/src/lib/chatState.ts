@@ -23,6 +23,8 @@ export interface ChatMessage {
   contextBefore?: number;
   /** Une pensée ou un outil est venu après le dernier texte : le texte qui reprend commence une nouvelle ligne. */
   breakBefore?: boolean;
+  /** Snapshot Git capturé avant l'exécution de ce tour utilisateur (pour `/rewind`). */
+  checkpoint?: string;
 }
 
 export interface PermissionRequest {
@@ -82,10 +84,61 @@ function withAgentMessage(messages: ChatMessage[]): [ChatMessage[], ChatMessage]
   return [messages, makeMessage("agent")];
 }
 
-export function addUserMessage(chat: ChatState, text: string): ChatState {
-  const message = makeMessage("user", text);
+export function addUserMessage(chat: ChatState, text: string, customMessage?: ChatMessage): ChatState {
+  const message = customMessage ?? makeMessage("user", text);
   if (text.trim() === "/compact" && chat.context) message.contextBefore = chat.context.used;
   return { ...chat, busy: true, messages: [...chat.messages, message] };
+}
+
+export function attachCheckpointToMessage(chat: ChatState, messageId: string, checkpoint: string): ChatState {
+  return {
+    ...chat,
+    messages: chat.messages.map((m) => (m.id === messageId ? { ...m, checkpoint } : m)),
+  };
+}
+
+export function rewindChatToMessage(
+  chat: ChatState,
+  messageId?: string,
+): { chat: ChatState; target?: ChatMessage; checkpoint?: string } {
+  const index = messageId
+    ? chat.messages.findIndex((m) => m.id === messageId && m.role === "user")
+    : chat.messages.map((m) => m.role).lastIndexOf("user");
+  if (index < 0) return { chat };
+  const target = chat.messages[index];
+  return {
+    chat: {
+      ...chat,
+      busy: false,
+      permissions: [],
+      plan: [],
+      messages: chat.messages.slice(0, index),
+    },
+    target,
+    checkpoint: target.checkpoint,
+  };
+}
+
+const CHECKPOINTS_PREFIX = "kana-checkpoints-";
+
+export function loadThreadCheckpoints(threadId: string): Record<string, string> {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(`${CHECKPOINTS_PREFIX}${threadId}`) ?? "{}");
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveThreadCheckpoint(threadId: string, messageId: string, checkpoint: string): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return;
+  try {
+    const current = loadThreadCheckpoints(threadId);
+    localStorage.setItem(`${CHECKPOINTS_PREFIX}${threadId}`, JSON.stringify({ ...current, [messageId]: checkpoint }));
+  } catch {
+    // stockage indisponible : la liste ne sera pas conservée
+  }
 }
 
 export function addError(chat: ChatState, message: string): ChatState {
@@ -186,6 +239,7 @@ export function prioritizeQueuedMessage(chat: ChatState, index: number): ChatSta
 
 export const DEFAULT_COMMANDS: AvailableCommand[] = [
   { name: "compact", description: "Compacter la session et économiser le contexte" },
+  { name: "rewind", description: "Revenir au tour précédent (code et conversation)" },
   { name: "plan", description: "Planifier sans modifier les fichiers" },
   { name: "review", description: "Relire les changements en cours et signaler les problèmes" },
   { name: "init", description: "Analyser le dépôt et préparer les instructions du projet" },
