@@ -326,6 +326,182 @@ pub async fn check_app_update() -> Result<AppUpdateInfo, String> {
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaemonStatus {
+    pub installed: bool,
+    pub loaded: bool,
+    pub label: String,
+    pub plist_path: String,
+    pub log_path: String,
+    pub binary_path: String,
+    pub platform_supported: bool,
+    pub message: String,
+}
+
+fn daemon_plist_path(home: &std::path::Path) -> std::path::PathBuf {
+    home.join("Library")
+        .join("LaunchAgents")
+        .join(format!("{}.plist", kana_core::LAUNCHD_DAEMON_LABEL))
+}
+
+fn daemon_log_path(home: &std::path::Path) -> std::path::PathBuf {
+    home.join(".kana").join("daemon.log")
+}
+
+fn current_binary_path() -> String {
+    std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "/Applications/Kana.app/Contents/MacOS/Kana".to_string())
+}
+
+pub(crate) fn write_daemon_plist_at(
+    home: &std::path::Path,
+    binary_path: &str,
+    interval_secs: u32,
+) -> Result<std::path::PathBuf, String> {
+    let launch_agents = home.join("Library").join("LaunchAgents");
+    let kana_dir = home.join(".kana");
+    std::fs::create_dir_all(&launch_agents)
+        .map_err(|e| format!("impossible de créer ~/Library/LaunchAgents : {e}"))?;
+    std::fs::create_dir_all(&kana_dir)
+        .map_err(|e| format!("impossible de créer ~/.kana : {e}"))?;
+
+    let plist_path = daemon_plist_path(home);
+    let plist_xml = kana_core::launchd_daemon_plist(
+        binary_path,
+        &home.to_string_lossy(),
+        interval_secs.max(60),
+    );
+    std::fs::write(&plist_path, plist_xml)
+        .map_err(|e| format!("impossible d'écrire {} : {e}", plist_path.display()))?;
+    Ok(plist_path)
+}
+
+fn is_launchd_loaded(label: &str) -> bool {
+    if !cfg!(target_os = "macos") {
+        return false;
+    }
+    std::process::Command::new("launchctl")
+        .args(["list", label])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Retourne l'état courant du daemon système macOS `launchd` (`dev.kana.daemon`).
+#[tauri::command]
+pub fn scheduled_daemon_status() -> DaemonStatus {
+    let home = default_cwd();
+    let plist_path = daemon_plist_path(&home);
+    let log_path = daemon_log_path(&home);
+    let binary_path = current_binary_path();
+    let installed = plist_path.is_file();
+
+    if !cfg!(target_os = "macos") {
+        return DaemonStatus {
+            installed,
+            loaded: false,
+            label: kana_core::LAUNCHD_DAEMON_LABEL.to_string(),
+            plist_path: plist_path.to_string_lossy().into_owned(),
+            log_path: log_path.to_string_lossy().into_owned(),
+            binary_path,
+            platform_supported: false,
+            message: "Le daemon launchd est spécifique à macOS (utilisez `kana daemon` ou systemd sous Linux).".into(),
+        };
+    }
+
+    let loaded = installed && is_launchd_loaded(kana_core::LAUNCHD_DAEMON_LABEL);
+    let message = match (installed, loaded) {
+        (true, true) => "Daemon actif : les tâches planifiées s'exécutent même lorsque Kana est fermée.".into(),
+        (true, false) => "Fichier .plist installé mais non chargé dans launchctl.".into(),
+        (false, _) => "Daemon système non installé.".into(),
+    };
+
+    DaemonStatus {
+        installed,
+        loaded,
+        label: kana_core::LAUNCHD_DAEMON_LABEL.to_string(),
+        plist_path: plist_path.to_string_lossy().into_owned(),
+        log_path: log_path.to_string_lossy().into_owned(),
+        binary_path,
+        platform_supported: true,
+        message,
+    }
+}
+
+/// Installe et charge le daemon macOS `launchctl` (`~/Library/LaunchAgents/dev.kana.daemon.plist`) en 1 clic.
+#[tauri::command]
+pub fn scheduled_daemon_install(interval_secs: Option<u32>) -> Result<DaemonStatus, String> {
+    if !cfg!(target_os = "macos") {
+        return Err("L'installation launchctl n'est prise en charge que sur macOS.".into());
+    }
+    let home = default_cwd();
+    let binary_path = current_binary_path();
+    let interval = interval_secs.unwrap_or(300).max(60);
+    let plist_path = write_daemon_plist_at(&home, &binary_path, interval)?;
+    let plist_str = plist_path.to_string_lossy().into_owned();
+
+    // Décharge une éventuelle version précédente (best-effort).
+    let _ = std::process::Command::new("launchctl")
+        .args(["unload", &plist_str])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+
+    let output = std::process::Command::new("launchctl")
+        .args(["load", "-w", &plist_str])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("impossible de lancer launchctl : {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("launchctl load a échoué (code {:?})", output.status.code())
+        } else {
+            format!("launchctl load a échoué : {stderr}")
+        });
+    }
+
+    let mut status = scheduled_daemon_status();
+    status.message = format!(
+        "Daemon système activé (vérification toutes les {} min, app fermée incluse).",
+        (interval / 60).max(1)
+    );
+    Ok(status)
+}
+
+/// Décharge (`launchctl unload`) et supprime le `.plist` du daemon système macOS.
+#[tauri::command]
+pub fn scheduled_daemon_uninstall() -> Result<DaemonStatus, String> {
+    let home = default_cwd();
+    let plist_path = daemon_plist_path(&home);
+    let plist_str = plist_path.to_string_lossy().into_owned();
+
+    if cfg!(target_os = "macos") && plist_path.is_file() {
+        let _ = std::process::Command::new("launchctl")
+            .args(["unload", &plist_str])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+
+    if plist_path.is_file() {
+        std::fs::remove_file(&plist_path)
+            .map_err(|e| format!("impossible de supprimer {} : {e}", plist_path.display()))?;
+    }
+
+    let mut status = scheduled_daemon_status();
+    status.message = "Daemon système désactivé et supprimé.".into();
+    Ok(status)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,5 +570,24 @@ mod tests {
 
             assert!(run_hook_command(None, "   ".into()).await.is_err());
         });
+    }
+
+    #[test]
+    fn writes_launchd_daemon_plist_in_temp_home() {
+        let tmp_home = std::env::temp_dir().join(format!("kana-daemon-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp_home);
+
+        let plist_path = write_daemon_plist_at(&tmp_home, "/Applications/Kana.app/Contents/MacOS/Kana", 300).unwrap();
+        assert!(plist_path.is_file());
+        assert!(tmp_home.join(".kana").is_dir());
+
+        let content = std::fs::read_to_string(&plist_path).unwrap();
+        assert!(content.contains("<string>dev.kana.daemon</string>"));
+        assert!(content.contains("<string>daemon</string>"));
+        assert!(content.contains("<string>--once</string>"));
+        assert!(content.contains("<integer>300</integer>"));
+        assert!(content.contains(".kana/daemon.log"));
+
+        let _ = std::fs::remove_dir_all(&tmp_home);
     }
 }
