@@ -23,13 +23,15 @@ interface CodeEditorProps {
   active: boolean;
   onChange: (text: string) => void;
   onSave: () => void;
+  /** Aller à une ligne (un lien « fichier:42 ») ; `id` change à chaque demande. */
+  goTo?: { id: number; line: number } | null;
 }
 
 /**
  * Éditeur de code : coloration, numéros de ligne, retour à la ligne, annuler/rétablir,
  * recherche (⌘F) et enregistrement (⌘S).
  */
-export default function CodeEditor({ path, value, readOnly, active, onChange, onSave }: CodeEditorProps) {
+export default function CodeEditor({ path, value, readOnly, active, onChange, onSave, goTo }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const editable = useRef(new Compartment());
@@ -103,6 +105,13 @@ export default function CodeEditor({ path, value, readOnly, active, onChange, on
       effects: editable.current.reconfigure(EditorState.readOnly.of(readOnly)),
     });
   }, [readOnly]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor || !goTo) return;
+    const line = editor.state.doc.line(Math.min(Math.max(1, goTo.line), editor.state.doc.lines));
+    editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
+  }, [goTo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (active) view.current?.focus();
