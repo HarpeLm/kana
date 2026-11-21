@@ -21,6 +21,8 @@ export interface ChatMessage {
   endedAt?: number;
   /** Pour un « /compact » : le contexte occupé avant, afin d'annoncer les jetons économisés. */
   contextBefore?: number;
+  /** Une pensée ou un outil est venu après le dernier texte : le texte qui reprend commence une nouvelle ligne. */
+  breakBefore?: boolean;
 }
 
 export interface PermissionRequest {
@@ -83,11 +85,13 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
   switch (event.kind) {
     case "message": {
       const [rest, agent] = withAgentMessage(chat.messages);
-      return { ...chat, messages: [...rest, { ...agent, text: agent.text + event.text }] };
+      // Le texte qui reprend après une pensée ou un outil ne se colle pas à la phrase d'avant.
+      const gap = agent.breakBefore && agent.text.trim() && !/\s$/.test(agent.text) && !/^\s/.test(event.text) ? "\n\n" : "";
+      return { ...chat, messages: [...rest, { ...agent, text: agent.text + gap + event.text, breakBefore: false }] };
     }
     case "thought": {
       const [rest, agent] = withAgentMessage(chat.messages);
-      return { ...chat, messages: [...rest, { ...agent, thought: agent.thought + event.text }] };
+      return { ...chat, messages: [...rest, { ...agent, thought: agent.thought + event.text, breakBefore: true }] };
     }
     case "tool_call": {
       const [rest, agent] = withAgentMessage(chat.messages);
@@ -114,7 +118,7 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
               output: event.output ?? undefined,
             },
           ];
-      return { ...chat, messages: [...rest, { ...agent, tools }] };
+      return { ...chat, messages: [...rest, { ...agent, tools, breakBefore: true }] };
     }
     case "context":
       return { ...chat, context: { used: event.used, size: event.size } };
