@@ -17,6 +17,13 @@ import {
 import { loadStoredMessages, saveStoredMessages } from "../lib/store";
 import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
 
+/** Ce que l'appli veut savoir de ce qui se passe dans les fils (consommation, limites). */
+export interface ChatObserver {
+  onTurnUsage?: (threadId: string, usage: { input: number; output: number; total: number }) => void;
+  onDone?: (threadId: string) => void;
+  onError?: (threadId: string, message: string) => void;
+}
+
 /** Ce qu'il faut préparer avant d'envoyer le premier message d'un fil. */
 export interface PreparedThread {
   /** Dossier de travail de l'agent (le worktree de la conversation). */
@@ -45,7 +52,12 @@ export function useChat(
   agentId: string,
   mode: PermissionMode,
   prepare: (threadId: string) => Promise<PreparedThread>,
+  observer?: ChatObserver,
 ) {
+  const observerRef = useRef(observer);
+  useEffect(() => {
+    observerRef.current = observer;
+  });
   const [chats, setChats] = useState<Record<string, ChatState>>({});
   const loaded = useRef(new Set<string>());
   const saved = useRef(new Map<string, ChatMessage[]>());
@@ -109,6 +121,14 @@ export function useChat(
           return;
         }
       }
+      const watch = observerRef.current;
+      if (event.kind === "turn_usage") {
+        watch?.onTurnUsage?.(event.threadId, { input: event.input_tokens, output: event.output_tokens, total: event.total_tokens });
+      } else if (event.kind === "done") {
+        watch?.onDone?.(event.threadId);
+      } else if (event.kind === "error") {
+        watch?.onError?.(event.threadId, event.message);
+      }
       update(event.threadId, (chat) => applyEvent(chat, event));
     }).then(
       (off) => (cancelled ? off() : (unlisten = off)),
@@ -128,6 +148,7 @@ export function useChat(
         await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
+        observerRef.current?.onError?.(threadId, String(error));
       }
     },
     [threadId, agentId, update],

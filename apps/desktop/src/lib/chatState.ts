@@ -37,11 +37,13 @@ export interface ChatState {
   messages: ChatMessage[];
   /** Le plan en cours de l'agent (chaque annonce remplace la précédente). */
   plan: PlanItem[];
+  /** L'occupation de la fenêtre de contexte de l'agent : `used` jetons sur `size`. */
+  context: { used: number; size: number } | null;
   permissions: PermissionRequest[];
   busy: boolean;
 }
 
-export const EMPTY_CHAT: ChatState = { messages: [], plan: [], permissions: [], busy: false };
+export const EMPTY_CHAT: ChatState = { messages: [], plan: [], context: null, permissions: [], busy: false };
 
 let counter = 0;
 // L'heure rend l'identifiant unique d'un lancement à l'autre : les messages rechargés gardent le leur.
@@ -110,6 +112,10 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
           ];
       return { ...chat, messages: [...rest, { ...agent, tools }] };
     }
+    case "context":
+      return { ...chat, context: { used: event.used, size: event.size } };
+    case "turn_usage":
+      return chat;
     case "plan":
       return { ...chat, plan: event.entries };
     case "permission":

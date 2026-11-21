@@ -9,6 +9,9 @@ import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
 import { NO_PROJECT, NO_PROJECT_NAME, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
 import { useChat, type PreparedThread } from "./hooks/useChat";
+import { useRelayFlow } from "./hooks/useRelayFlow";
+import { detectProblem } from "./lib/limits";
+import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
 import { buildForkContext } from "./lib/fork";
 import { createWorktree, removeWorktree } from "./lib/worktree";
 import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
@@ -98,7 +101,26 @@ export default function App({ startup }: { startup: Startup }) {
     },
     [attachWorktree, clearForkContext],
   );
-  const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread);
+  // Ce que les agents consomment, et les limites qu'ils atteignent (voir « Relais »).
+  const agentOf = (threadId: string) => itemsRef.current.find((c) => c.id === threadId)?.agentId;
+  const observer = {
+    onTurnUsage: (threadId: string, usage: { input: number; output: number; total: number }) => {
+      const agent = agentOf(threadId);
+      if (agent) recordTokens(agent, usage.input, usage.output, usage.total);
+    },
+    onDone: (threadId: string) => {
+      const agent = agentOf(threadId);
+      if (!agent) return;
+      recordTurn(agent);
+      clearProblem(agent);
+    },
+    onError: (threadId: string, message: string) => {
+      const agent = agentOf(threadId);
+      const problem = detectProblem(message);
+      if (agent && problem) markProblem(agent, problem, message);
+    },
+  };
+  const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
 
   // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
   const { setProject, setUseWorktree, setAgent } = conversations;
@@ -152,6 +174,14 @@ export default function App({ startup }: { startup: Startup }) {
     conversations.touch(selected.id);
     return send(text);
   };
+
+  const relayBanner = useRelayFlow({
+    conversation: selected,
+    chat,
+    send,
+    relayTo: conversations.relayTo,
+    onOpenRelay: () => setView("relay"),
+  });
 
   /** Bifurque : une nouvelle conversation qui reprend l'échange jusqu'à ce message. */
   const forkFrom = (messageId: string) => {
@@ -381,6 +411,7 @@ export default function App({ startup }: { startup: Startup }) {
               mode={permissionMode}
               onModeChange={changeMode}
               newSession={newSession}
+              relayBanner={relayBanner}
               modelPicker={
                 <ModelPicker
                   agents={AGENTS}

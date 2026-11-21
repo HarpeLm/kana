@@ -5,6 +5,7 @@ import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
 import { EnvironmentRow, NewSessionCenter, type NewSessionProps } from "./NewSession";
 import PermissionPrompt from "./PermissionPrompt";
+import RelayBanner, { type RelayBannerProps } from "./RelayBanner";
 
 interface ChatViewProps {
   agentLabel: string;
@@ -20,6 +21,8 @@ interface ChatViewProps {
   newSession: NewSessionProps;
   /** Choix du fournisseur et du modèle (le fournisseur ne change que dans une conversation vide). */
   modelPicker: ReactNode;
+  /** Le fournisseur ne répond plus : proposition de relais. */
+  relayBanner: RelayBannerProps | null;
 }
 
 export default function ChatView({
@@ -34,6 +37,7 @@ export default function ChatView({
   onModeChange,
   newSession,
   modelPicker,
+  relayBanner,
 }: ChatViewProps) {
   // Une conversation vide s'ouvre sur l'écran de nouvelle session : les projets au centre,
   // et sous la saisie, l'endroit où l'agent travaillera.
@@ -41,6 +45,7 @@ export default function ChatView({
     return (
       <main className="flex flex-1 flex-col overflow-hidden">
         <NewSessionCenter session={newSession} />
+        {relayBanner && <RelayBanner {...relayBanner} />}
         <Composer
           agentLabel={agentLabel}
           busy={chat.busy}
@@ -77,6 +82,7 @@ export default function ChatView({
         </div>
       )}
 
+      {relayBanner && <RelayBanner {...relayBanner} />}
       <Composer
         agentLabel={agentLabel}
         busy={chat.busy}

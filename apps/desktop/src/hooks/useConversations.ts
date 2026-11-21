@@ -139,6 +139,13 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Le relais : la conversation continue chez un autre fournisseur, avec le résumé de ce qui s'est dit. */
+  const relayTo = useCallback(
+    (id: string, agentId: string, context: string) =>
+      patch(id, (c) => ({ ...c, agentId, modelId: undefined, forkContext: context })),
+    [patch],
+  );
+
   const setUseWorktree = useCallback(
     (id: string, useWorktree: boolean) => patch(id, (c) => ({ ...c, useWorktree })),
     [patch],
@@ -210,6 +217,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     setProject,
     setUseWorktree,
     setAgent,
+    relayTo,
     createIn,
     moveSection,
     touch,

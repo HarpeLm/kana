@@ -20,6 +20,8 @@ export type AcpEvent =
       raw_input?: unknown;
       output?: string | null;
     }
+  | { kind: "turn_usage"; input_tokens: number; output_tokens: number; total_tokens: number }
+  | { kind: "context"; used: number; size: number }
   | { kind: "plan"; entries: { content: string; status: string }[] }
   | { kind: "permission"; request_id: string; title: string; options: PermissionOption[] }
   | { kind: "done"; stop_reason: string }
@@ -37,6 +39,11 @@ export function startAgent(threadId: string, agent: string, cwd?: string, model?
   return inTauri
     ? invoke("start_agent", { threadId, agent, cwd: cwd ?? null, model: model ?? null })
     : Promise.resolve();
+}
+
+/** Arrête l'agent d'un fil : le prochain message en lance un neuf (peut-être d'un autre fournisseur). */
+export function stopAgent(threadId: string): Promise<void> {
+  return inTauri ? invoke("stop_agent", { threadId }) : Promise.resolve();
 }
 
 export function sendPrompt(threadId: string, text: string): Promise<void> {
