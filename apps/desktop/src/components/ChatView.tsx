@@ -12,6 +12,9 @@ interface ChatViewProps {
   chat: ChatState;
   onSend: (text: string) => void;
   onStop: () => void;
+  onRemoveQueued?: (index: number) => void;
+  onSteerQueued?: (index: number) => void;
+  workPath?: string;
   onAnswer: (requestId: string, optionId: string | null) => void;
   onOpenLink: (url: string) => void;
   onFork: (messageId: string) => void;
@@ -30,6 +33,9 @@ export default function ChatView({
   chat,
   onSend,
   onStop,
+  onRemoveQueued,
+  onSteerQueued,
+  workPath,
   onAnswer,
   onOpenLink,
   onFork,
@@ -49,8 +55,13 @@ export default function ChatView({
         <Composer
           agentLabel={agentLabel}
           busy={chat.busy}
+          commands={chat.commands}
+          queued={chat.queued}
           onSend={onSend}
           onStop={onStop}
+          onRemoveQueued={onRemoveQueued}
+          onSteerQueued={onSteerQueued}
+          workPath={workPath}
           mode={mode}
           onModeChange={onModeChange}
           footerLeft={<EnvironmentRow session={newSession} />}
@@ -86,8 +97,13 @@ export default function ChatView({
       <Composer
         agentLabel={agentLabel}
         busy={chat.busy}
+        commands={chat.commands}
+        queued={chat.queued}
         onSend={onSend}
         onStop={onStop}
+        onRemoveQueued={onRemoveQueued}
+        onSteerQueued={onSteerQueued}
+        workPath={workPath}
         mode={mode}
         onModeChange={onModeChange}
         modelPicker={modelPicker}
