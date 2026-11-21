@@ -110,6 +110,57 @@ pub fn set_keep_awake(
     awake.set(active)
 }
 
+pub(crate) fn escape_applescript(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                out.push(' ');
+            }
+            '\n' => out.push(' '),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+fn notification_script(title: &str, body: &str, sound: bool) -> String {
+    let title_esc = escape_applescript(title);
+    let body_esc = escape_applescript(body);
+    let mut script = format!("display notification \"{body_esc}\" with title \"{title_esc}\"");
+    if sound {
+        script.push_str(" sound name \"Glass\"");
+    }
+    script
+}
+
+/// Envoie une notification système macOS (avec son optionnel « Glass ») sans bloquer le thread Tauri.
+#[tauri::command]
+pub fn notify_user(title: String, body: String, sound: bool) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Ok(());
+    }
+    let script = notification_script(&title, &body, sound);
+    let mut child = std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("impossible d'envoyer la notification : {e}"))?;
+    // Récolte le processus enfant sans bloquer le thread de commande Tauri.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -178,6 +229,22 @@ mod tests {
         assert_eq!(
             core_auto_answer(kana_core::PermissionMode::Auto, "rm -rf /tmp/x".into(), opts),
             None
+        );
+    }
+
+    #[test]
+    fn escapes_applescript_strings_and_builds_notification_script() {
+        assert_eq!(
+            escape_applescript("Chemin C:\\a\\\"b\"\nLigne 2\r\nLigne 3\rFin"),
+            "Chemin C:\\\\a\\\\\\\"b\\\" Ligne 2 Ligne 3 Fin"
+        );
+        assert_eq!(
+            notification_script("Mon \"fil\"", "Ligne 1\nLigne 2", true),
+            "display notification \"Ligne 1 Ligne 2\" with title \"Mon \\\"fil\\\"\" sound name \"Glass\""
+        );
+        assert_eq!(
+            notification_script("Kana", "Terminé", false),
+            "display notification \"Terminé\" with title \"Kana\""
         );
     }
 }
