@@ -14,11 +14,11 @@ export interface RelayBannerProps {
 export default function RelayBanner({ message, targetName, onSwitch, onDismiss, onOpenRelay }: RelayBannerProps) {
   return (
     <div className="px-6 pb-2">
-      <div role="status" className="mx-auto flex max-w-[740px] items-center gap-3 rounded-2xl border border-[#d97757]/35 bg-[#d97757]/8 px-4 py-2.5 text-[13px]">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-[#e69b80]" strokeWidth={1.8} />
+      <div role="status" className="mx-auto flex max-w-[740px] items-center gap-3 rounded-2xl border border-[#3b82f6]/40 bg-[#1e3a8a]/25 px-4 py-2.5 text-[13px]">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-[#93c5fd]" strokeWidth={1.8} />
         <span className="min-w-0 flex-1 text-[#e6e5df]">{message}</span>
         {targetName ? (
-          <button onClick={onSwitch} className="shrink-0 rounded-lg bg-[#d97757] px-3 py-1 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768]">
+          <button onClick={onSwitch} className="shrink-0 rounded-lg bg-[#1e40af] px-3 py-1 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]">
             Continuer avec {targetName}
           </button>
         ) : (
