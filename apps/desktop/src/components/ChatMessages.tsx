@@ -60,12 +60,12 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    endRef.current?.scrollIntoView({ block: "end", inline: "nearest" });
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-6 select-text">
-      <div className="mx-auto max-w-[740px] space-y-5 text-[15px] leading-[1.7]">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text">
+      <div className="mx-auto min-w-0 max-w-[740px] space-y-5 text-[15px] leading-[1.7] [overflow-wrap:anywhere]">
         {messages.length === 0 && (
           <p className="pt-10 text-center text-[13px] text-[#7e7d76]">
             Écris un message pour démarrer la conversation avec {agentLabel}.
