@@ -31,6 +31,13 @@ export interface PermissionRequest {
   options: PermissionOption[];
 }
 
+export interface StructuredQuestion {
+  messageId: string;
+  question: string;
+  options: string[];
+  multiSelect?: boolean;
+}
+
 /** Une étape du plan que l'agent annonce. */
 export interface PlanItem {
   content: string;
@@ -238,4 +245,171 @@ export function applyTrigger(
   const needsSpace = !tail || !/^\s/.test(tail);
   const inserted = replacement + (needsSpace ? " " : "");
   return { text: head + inserted + tail, cursor: head.length + inserted.length };
+}
+
+function normalizeQuestionOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const options: string[] = [];
+  for (const entry of raw) {
+    const label =
+      typeof entry === "string"
+        ? entry.trim()
+        : entry && typeof entry === "object"
+          ? String(
+              (entry as { label?: unknown; name?: unknown; title?: unknown }).label ??
+                (entry as { name?: unknown }).name ??
+                (entry as { title?: unknown }).title ??
+                "",
+            ).trim()
+          : "";
+    if (label) options.push(label);
+  }
+  return options;
+}
+
+function parseQuestionBlock(messageId: string, block: string): StructuredQuestion | null {
+  const body = block.trim();
+  if (!body) return null;
+
+  try {
+    const parsed = JSON.parse(body) as {
+      question?: unknown;
+      options?: unknown;
+      multiSelect?: unknown;
+      multi_select?: unknown;
+    };
+    const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
+    const options = normalizeQuestionOptions(parsed?.options);
+    if (question && options.length >= 2) {
+      const rawMulti = parsed.multiSelect ?? parsed.multi_select;
+      return {
+        messageId,
+        question,
+        options,
+        ...(typeof rawMulti === "boolean" ? { multiSelect: rawMulti } : {}),
+      };
+    }
+  } catch {
+    // Pas du JSON : on tente le format texte structuré.
+  }
+
+  let question = "";
+  let multiSelect: boolean | undefined;
+  const options: string[] = [];
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const qMatch = line.match(/^question\s*:\s*(.+)$/i);
+    if (qMatch) {
+      question = qMatch[1].trim();
+      continue;
+    }
+    const mMatch = line.match(/^multi_?select\s*:\s*(.+)$/i);
+    if (mMatch) {
+      const val = mMatch[1].trim().toLowerCase();
+      if (val === "true" || val === "oui" || val === "yes" || val === "1") multiSelect = true;
+      else if (val === "false" || val === "non" || val === "no" || val === "0") multiSelect = false;
+      continue;
+    }
+    const oMatch = line.match(/^options\s*:\s*(.*)$/i);
+    if (oMatch) {
+      const inline = oMatch[1].trim();
+      if (inline) {
+        for (const item of inline.split(",")) {
+          const clean = item.trim();
+          if (clean) options.push(clean);
+        }
+      }
+      continue;
+    }
+    const listMatch = line.match(/^(?:[-*]|\d+\.)\s+(.+)$/);
+    if (listMatch) {
+      const clean = listMatch[1].trim();
+      if (clean) options.push(clean);
+      continue;
+    }
+    if (!question) question = line;
+  }
+
+  if (!question || options.length < 2) return null;
+  return {
+    messageId,
+    question,
+    options,
+    ...(multiSelect !== undefined ? { multiSelect } : {}),
+  };
+}
+
+function cleanQuestionLine(raw: string): string {
+  let line = raw.trim().replace(/^#{1,6}\s+/, "").replace(/^>\s+/, "").trim();
+  for (const [open, close] of [
+    ["**", "**"],
+    ["__", "__"],
+  ] as const) {
+    if (line.startsWith(open) && line.endsWith(close) && line.length > open.length + close.length) {
+      line = line.slice(open.length, -close.length).trim();
+    }
+  }
+  return line;
+}
+
+/**
+ * Extrait une question structurée à choix multiples depuis le dernier message de l'agent
+ * lorsqu'il a fini de répondre (`busy === false`).
+ */
+export function extractStructuredQuestion(messages: ChatMessage[], busy: boolean): StructuredQuestion | null {
+  if (busy) return null;
+  const lastNonEmpty = [...messages]
+    .reverse()
+    .find((m) => m.text.trim().length > 0 || m.thought.trim().length > 0 || m.tools.length > 0);
+  if (!lastNonEmpty || lastNonEmpty.role !== "agent") return null;
+
+  const text = lastNonEmpty.text.trim();
+  if (!text) return null;
+
+  const fenceMatches = [...text.matchAll(/```question[^\n]*\r?\n([\s\S]*?)```/gi)];
+  for (let i = fenceMatches.length - 1; i >= 0; i--) {
+    const parsed = parseQuestionBlock(lastNonEmpty.id, fenceMatches[i][1]);
+    if (parsed) return parsed;
+  }
+
+  const lines = text.split(/\r?\n/);
+  while (lines.length > 0 && !lines[lines.length - 1].trim()) lines.pop();
+
+  const reversedOptions: string[] = [];
+  let cursor = lines.length - 1;
+  while (cursor >= 0) {
+    const match = lines[cursor].match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/);
+    if (!match) break;
+    const option = match[1].trim();
+    if (!option) break;
+    reversedOptions.push(option);
+    cursor--;
+  }
+
+  if (reversedOptions.length < 2 || reversedOptions.length > 6) return null;
+  const options = reversedOptions.reverse();
+
+  // Tolère au plus une ligne vide entre la question et la liste d'options.
+  if (cursor >= 0 && !lines[cursor].trim()) cursor--;
+  if (cursor < 0) return null;
+
+  const rawQuestionLine = lines[cursor];
+  if (/^\s*(?:[-*]|\d+\.)\s+/.test(rawQuestionLine) || /^\s*```/.test(rawQuestionLine)) return null;
+
+  // Vérifie qu'on ne se trouve pas dans un bloc de code non fermé.
+  let fenceCount = 0;
+  for (let i = 0; i <= cursor; i++) {
+    if (/^\s*```/.test(lines[i])) fenceCount++;
+  }
+  if (fenceCount % 2 === 1) return null;
+
+  const question = cleanQuestionLine(rawQuestionLine);
+  if (!question.endsWith("?") || question.length <= 1) return null;
+
+  return {
+    messageId: lastNonEmpty.id,
+    question,
+    options,
+  };
 }
