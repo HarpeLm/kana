@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./env";
 
@@ -50,4 +51,91 @@ export function deleteApiKey(agent: string): Promise<void> {
 
 export function setKeepAwake(active: boolean): Promise<boolean> {
   return inTauri ? invoke<boolean>("set_keep_awake", { active }) : Promise.resolve(active);
+}
+
+export interface NotificationPrefs {
+  enabled: boolean;
+  sound: boolean;
+}
+
+export interface OsNotificationEntry {
+  title: string;
+  body: string;
+  sound: boolean;
+  at: number;
+}
+
+const NOTIFICATIONS_KEY = "kana-notifications";
+const DEFAULT_NOTIFICATIONS: NotificationPrefs = { enabled: true, sound: true };
+
+function loadNotificationPrefs(): NotificationPrefs {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return DEFAULT_NOTIFICATIONS;
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_KEY);
+    if (!raw) return DEFAULT_NOTIFICATIONS;
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: parsed?.enabled !== false,
+      sound: parsed?.sound !== false,
+    };
+  } catch {
+    return DEFAULT_NOTIFICATIONS;
+  }
+}
+
+let notificationPrefs: NotificationPrefs = loadNotificationPrefs();
+const notificationListeners = new Set<() => void>();
+const notificationHistory: OsNotificationEntry[] = [];
+
+export function getNotificationPrefs(): NotificationPrefs {
+  return notificationPrefs;
+}
+
+export function setNotificationPrefs(next: NotificationPrefs): void {
+  notificationPrefs = { enabled: !!next.enabled, sound: !!next.sound };
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notificationPrefs));
+    } catch {
+      // stockage indisponible : le choix ne sera pas conservé
+    }
+  }
+  notificationListeners.forEach((notify) => notify());
+}
+
+export function useNotificationPrefs(): NotificationPrefs {
+  return useSyncExternalStore(
+    (notify) => {
+      notificationListeners.add(notify);
+      return () => notificationListeners.delete(notify);
+    },
+    () => notificationPrefs,
+  );
+}
+
+export function getNotificationHistory(): readonly OsNotificationEntry[] {
+  return notificationHistory;
+}
+
+export function clearNotificationHistory(): void {
+  notificationHistory.length = 0;
+}
+
+/** Envoie une notification système macOS (ou navigateur hors Tauri si la permission est déjà accordée). */
+export function notifyOs(title: string, body: string): void {
+  const prefs = getNotificationPrefs();
+  if (!prefs.enabled) return;
+  if (inTauri) {
+    void invoke("notify_user", { title, body, sound: prefs.sound }).catch(() => {});
+    return;
+  }
+  notificationHistory.push({ title, body, sound: prefs.sound, at: Date.now() });
+  if (notificationHistory.length > 50) notificationHistory.shift();
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+    try {
+      new Notification(title, { body, silent: !prefs.sound });
+    } catch {
+      // Notification navigateur indisponible dans cet environnement.
+    }
+  }
 }
