@@ -15,8 +15,9 @@ pub use forge::{
     parse_merge_requests, parse_pull_requests, pull_requests, save_work,
 };
 pub use files::{
-    FileList, FilePreview, RULE_FILE_PATHS, RepoSymbol, RuleFile, list_files, read_preview,
-    read_rule_files, sync_rule_files, trash_file, write_rule_file, write_text,
+    CodeDiagnostic, FileList, FilePreview, RULE_FILE_PATHS, RepoSymbol, RuleFile,
+    collect_repo_diagnostics, list_files, parse_diagnostics_output, read_preview, read_rule_files,
+    sync_rule_files, trash_file, write_rule_file, write_text,
 };
 pub use model::{DiffLine, DiffReport, FileDiff, FileStatus, Hunk, LineKind};
 pub use parse::parse_diff;
