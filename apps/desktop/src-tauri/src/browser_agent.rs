@@ -9,13 +9,13 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{
         Mutex, mpsc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State, Webview};
 
@@ -33,19 +33,157 @@ pub struct McpInfo {
     pub token: String,
 }
 
+/// Un onglet ouvert dans le volet Globe.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobeTabInfo {
+    pub id: String,
+    pub url: String,
+    pub title: String,
+}
+
+/// Une action enregistrée pendant une session de trace Globe.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobeTraceEntry {
+    pub at: u64,
+    pub tool: String,
+    pub target: String,
+    pub url: String,
+    pub title: String,
+    pub status: String,
+}
+
+/// État courant de l'enregistreur de trace Globe.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobeTraceStatus {
+    pub recording: bool,
+    pub entries: Vec<GlobeTraceEntry>,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn escape_html(raw: &str) -> String {
+    raw.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Génère un rapport HTML autonome de preuve de vérification pour une session Globe.
+pub fn build_trace_html(
+    entries: &[GlobeTraceEntry],
+    console_report: &str,
+    network_report: &str,
+) -> String {
+    let mut rows = String::new();
+    for (idx, e) in entries.iter().enumerate() {
+        rows.push_str(&format!(
+            "<tr><td>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+            idx + 1,
+            escape_html(&e.tool),
+            escape_html(&e.target),
+            escape_html(&e.title),
+            escape_html(&e.url),
+            escape_html(&e.status),
+        ));
+    }
+    if rows.is_empty() {
+        rows.push_str("<tr><td colspan=\"6\">Aucune action enregistrée dans cette trace.</td></tr>\n");
+    }
+    format!(
+        r#"<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Preuve de vérification Globe — Kana</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #141413; color: #ecebe4; margin: 24px; }}
+  h1 {{ font-size: 20px; margin-bottom: 4px; }}
+  h2 {{ font-size: 15px; margin-top: 24px; color: #b9b8b0; }}
+  table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }}
+  th, td {{ border: 1px solid #2e2e2a; padding: 8px 10px; text-align: left; }}
+  th {{ background: #1f1f1d; color: #cfcec6; }}
+  pre {{ background: #1c1c1a; border: 1px solid #2e2e2a; border-radius: 8px; padding: 12px; font-size: 12px; white-space: pre-wrap; }}
+  code {{ color: #8ab4f8; }}
+</style>
+</head>
+<body>
+  <h1>Preuve de vérification Globe — Kana</h1>
+  <p>{count} action(s) horodatée(s)</p>
+  <h2>Chronologie des actions</h2>
+  <table>
+    <thead><tr><th>#</th><th>Outil</th><th>Cible</th><th>Titre</th><th>URL</th><th>Statut</th></tr></thead>
+    <tbody>
+{rows}    </tbody>
+  </table>
+  <h2>État Console JS</h2>
+  <pre>{console}</pre>
+  <h2>État Réseau (XHR / Fetch)</h2>
+  <pre>{network}</pre>
+</body>
+</html>"#,
+        count = entries.len(),
+        rows = rows,
+        console = escape_html(console_report),
+        network = escape_html(network_report),
+    )
+}
+
 /// État partagé : l'onglet que l'utilisateur regarde, les sites autorisés et les demandes en attente.
 #[derive(Default)]
 pub struct AgentState {
     active: Mutex<Option<String>>,
+    tabs: Mutex<Vec<GlobeTabInfo>>,
     allowed: Mutex<HashSet<String>>,
     pending: Mutex<HashMap<String, mpsc::Sender<bool>>>,
     next_request: AtomicU64,
     mcp: Mutex<Option<McpInfo>>,
+    recording: AtomicBool,
+    trace: Mutex<Vec<GlobeTraceEntry>>,
 }
 
 impl AgentState {
     pub fn set_active(&self, tab_id: String) {
         *self.active.lock().unwrap() = Some(tab_id);
+    }
+
+    pub fn active_tab(&self) -> Option<String> {
+        self.active.lock().unwrap().clone()
+    }
+
+    pub fn upsert_tab(&self, id: String, url: String, title: Option<String>) {
+        let mut tabs = self.tabs.lock().unwrap();
+        if let Some(existing) = tabs.iter_mut().find(|t| t.id == id) {
+            if !url.is_empty() {
+                existing.url = url;
+            }
+            if let Some(t) = title
+                && !t.is_empty()
+            {
+                existing.title = t;
+            }
+        } else {
+            tabs.push(GlobeTabInfo {
+                id,
+                url: url.clone(),
+                title: title.unwrap_or(url),
+            });
+        }
+    }
+
+    pub fn remove_tab(&self, id: &str) {
+        self.tabs.lock().unwrap().retain(|t| t.id != id);
+    }
+
+    pub fn tabs(&self) -> Vec<GlobeTabInfo> {
+        self.tabs.lock().unwrap().clone()
     }
 
     pub fn set_mcp(&self, info: McpInfo) {
@@ -61,6 +199,41 @@ impl AgentState {
         if let Some(sender) = self.pending.lock().unwrap().remove(request_id) {
             let _ = sender.send(allow);
         }
+    }
+
+    pub fn trace_start(&self, reset: bool) -> GlobeTraceStatus {
+        if reset {
+            self.trace.lock().unwrap().clear();
+        }
+        self.recording.store(true, Ordering::Relaxed);
+        self.trace_status()
+    }
+
+    pub fn trace_stop(&self) -> GlobeTraceStatus {
+        self.recording.store(false, Ordering::Relaxed);
+        self.trace_status()
+    }
+
+    pub fn trace_status(&self) -> GlobeTraceStatus {
+        GlobeTraceStatus {
+            recording: self.recording.load(Ordering::Relaxed),
+            entries: self.trace.lock().unwrap().clone(),
+        }
+    }
+
+    pub fn record_trace(&self, tool: &str, target: &str, url: &str, title: &str, status: &str) {
+        if !self.recording.load(Ordering::Relaxed) {
+            return;
+        }
+        let mut trace = self.trace.lock().unwrap();
+        trace.push(GlobeTraceEntry {
+            at: now_ms(),
+            tool: tool.to_owned(),
+            target: target.to_owned(),
+            url: url.to_owned(),
+            title: title.to_owned(),
+            status: status.to_owned(),
+        });
     }
 }
 
@@ -94,7 +267,7 @@ impl BrowserAgent {
         Self { app }
     }
 
-    fn state(&self) -> State<'_, AgentState> {
+    pub(crate) fn state(&self) -> State<'_, AgentState> {
         self.app.state::<AgentState>()
     }
 
