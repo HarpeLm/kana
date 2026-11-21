@@ -86,8 +86,12 @@ test("les réglages, la personnalisation et les tâches planifiées s'ouvrent", 
   await expect(page.getByText("Aucune tâche planifiée", { exact: true })).toBeVisible();
   await nav(page).getByRole("button", { name: "Personnalisation" }).click();
   await expect(page.getByRole("heading", { name: "Personnalisation" })).toBeVisible();
-  await page.getByRole("button", { name: "Réglages" }).click();
-  await expect(page.getByRole("heading", { name: "Comptes et connexions" })).toBeVisible();
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("menuitem", { name: /Paramètres/ }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "Paramètres" });
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog.getByRole("heading", { name: "Fournisseurs", exact: true })).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Fermer les paramètres" }).click();
   expect(errors).toEqual([]);
 });
 
@@ -386,10 +390,13 @@ test("réglages : options de Notifications système et son", async ({ page }) =>
   const mod = process.platform === "darwin" ? "Meta" : "Control";
 
   await page.keyboard.press(`${mod}+,`);
-  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  const settingsDialog = page.getByRole("dialog", { name: "Paramètres" });
+  await expect(settingsDialog).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Notifications" }).click();
+  await expect(settingsDialog.getByRole("heading", { name: "Notifications" })).toBeVisible();
 
-  const enabledCheckbox = page.getByLabel("Notifications système");
-  const soundCheckbox = page.getByLabel("Son de notification");
+  const enabledCheckbox = settingsDialog.getByLabel("Notifications système");
+  const soundCheckbox = settingsDialog.getByLabel("Son de notification");
 
   await expect(enabledCheckbox).toBeChecked();
   await expect(soundCheckbox).toBeChecked();
@@ -737,36 +744,40 @@ test("règles de permissions, journal d'audit et changement de langue FR/EN", as
     );
   });
   await page.reload();
-  await page.getByRole("button", { name: "Réglages" }).click();
-  await expect(page.getByRole("heading", { name: "Sécurité, règles de permissions & journal d'audit" })).toBeVisible();
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("menuitem", { name: /Paramètres/ }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "Paramètres" });
+  await settingsDialog.getByRole("button", { name: "Permissions & Sécurité" }).click();
+  await expect(settingsDialog.getByRole("heading", { name: "Sécurité, règles de permissions & journal d'audit" })).toBeVisible();
 
   // Vérifie le journal d'audit et le vidage
-  await expect(page.getByText(/Accès \.env bloqué/)).toBeVisible();
-  await page.getByRole("button", { name: "Vider le journal" }).click();
-  await expect(page.getByText("Aucune décision enregistrée pour l'instant.")).toBeVisible();
+  await expect(settingsDialog.getByText(/Accès \.env bloqué/)).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Vider le journal" }).click();
+  await expect(settingsDialog.getByText("Aucune décision enregistrée pour l'instant.")).toBeVisible();
 
   // Ajout, activation et suppression d'une règle granulaire
-  await page.getByLabel("Décision de la règle").selectOption("deny");
-  await page.getByLabel("Motif de la règle").fill("rm -rf");
-  await page.getByRole("button", { name: "Ajouter la règle" }).click();
-  await expect(page.getByText("rm -rf", { exact: true })).toBeVisible();
+  await settingsDialog.getByLabel("Décision de la règle").selectOption("deny");
+  await settingsDialog.getByLabel("Motif de la règle").fill("rm -rf");
+  await settingsDialog.getByRole("button", { name: "Ajouter la règle" }).click();
+  await expect(settingsDialog.getByText("rm -rf", { exact: true })).toBeVisible();
 
-  const toggle = page.getByLabel("Activer rm -rf");
+  const toggle = settingsDialog.getByLabel("Activer rm -rf");
   await expect(toggle).toBeChecked();
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();
 
-  await page.getByRole("button", { name: "Supprimer la règle rm -rf" }).click();
-  await expect(page.getByText("Aucune règle personnalisée enregistrée.")).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Supprimer la règle rm -rf" }).click();
+  await expect(settingsDialog.getByText("Aucune règle personnalisée enregistrée.")).toBeVisible();
 
   // Bascule EN puis retour FR
-  await page.getByLabel("Langue de l'interface").selectOption("en");
-  await expect(page.getByRole("heading", { name: "Accounts & connections" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Security, permission rules & audit log" })).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Apparence & Langue" }).click();
+  await settingsDialog.getByLabel("Langue de l'interface").selectOption("en");
+  const enSettingsDialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(enSettingsDialog.getByRole("heading", { name: "Appearance & Language" })).toBeVisible();
   await expect(nav(page).getByRole("button", { name: "Customize" })).toBeVisible();
 
-  await page.getByLabel("Interface language").selectOption("fr");
-  await expect(page.getByRole("heading", { name: "Comptes et connexions" })).toBeVisible();
+  await enSettingsDialog.getByLabel("Interface language").selectOption("fr");
+  await expect(settingsDialog.getByRole("heading", { name: "Apparence & Langue" })).toBeVisible();
   await expect(nav(page).getByRole("button", { name: "Personnalisation" })).toBeVisible();
 
   expect(errors).toEqual([]);
@@ -929,15 +940,18 @@ test("/advisor & Cross-Review, Diagnostics LSP dans FilesDock et Cache local des
   await diagRegion.getByRole("button", { name: "Envoyer les erreurs à l'agent" }).click();
   await expect(page.locator("main").getByText(/Diagnostics LSP \/ Compilateur détectés dans le dépôt/).first()).toBeVisible();
 
-  // 3. Section Mises à jour Tauri & Cache local des adaptateurs ACP dans SettingsView
-  await page.getByRole("button", { name: "Réglages" }).click();
-  await expect(page.getByRole("heading", { name: "Mises à jour Tauri & Cache local des adaptateurs ACP" })).toBeVisible();
+  // 3. Section Mises à jour Tauri & Cache local des adaptateurs ACP dans le modal Paramètres (onglet Application)
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("menuitem", { name: /Paramètres/ }).click();
+  const settingsDialog = page.getByRole("dialog", { name: "Paramètres" });
+  await settingsDialog.getByRole("button", { name: "Application" }).click();
+  await expect(settingsDialog.getByRole("heading", { name: "Mises à jour Tauri & Cache local des adaptateurs ACP" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Vérifier les mises à jour" }).click();
-  await expect(page.getByText("À jour", { exact: true })).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Vérifier les mises à jour" }).click();
+  await expect(settingsDialog.getByText("À jour", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Mettre en cache" }).first().click();
-  await expect(page.getByText("En cache local").first()).toBeVisible();
+  await settingsDialog.getByRole("button", { name: "Mettre en cache" }).first().click();
+  await expect(settingsDialog.getByText("En cache local").first()).toBeVisible();
 
   expect(errors).toEqual([]);
 });
@@ -1200,6 +1214,71 @@ test("vue Personnalisation (Catalogue MCP, Installés, Skills) et clic sur « Au
   await expect(noFolderBtn).toBeVisible();
   await expect(noFolderBtn).toHaveAttribute("title", "Choisir un dossier de projet");
   await noFolderBtn.click();
+
+  expect(errors).toEqual([]);
+});
+
+test("menu compte arrondi, journal des modifications, mentions légales, feedback et modal Paramètres Fournisseurs", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+
+  // 1. Ouverture du menu compte arrondi en bas de la barre latérale -> Journal des modifications
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  const accountMenu = page.getByRole("menu", { name: "Menu du compte" });
+  await expect(accountMenu).toBeVisible();
+  await accountMenu.getByRole("menuitem", { name: "Voir le journal des modifications" }).click();
+
+  const changelogDialog = page.getByRole("dialog", { name: "Journal des modifications" });
+  await expect(changelogDialog).toBeVisible();
+  await expect(changelogDialog.getByText("v0.1.0")).toBeVisible();
+  await changelogDialog.getByRole("button", { name: "Fermer" }).click();
+  await expect(changelogDialog).toHaveCount(0);
+
+  // 2. En savoir plus -> Mentions légales
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("menuitem", { name: /En savoir plus/ }).click();
+  await page.getByRole("menuitem", { name: "Mentions légales" }).click();
+
+  const legalDialog = page.getByRole("dialog", { name: "Mentions légales" });
+  await expect(legalDialog).toBeVisible();
+  await expect(legalDialog.getByText(/HarpeLm@proton\.me/)).toBeVisible();
+  await legalDialog.getByRole("button", { name: "Fermer" }).click();
+
+  // 3. Envoyer un commentaire -> bulle Feedback avec HarpeLm@proton.me
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("menuitem", { name: "Envoyer un commentaire" }).click();
+
+  const feedbackDialog = page.getByRole("dialog", { name: "Envoyer un commentaire" });
+  await expect(feedbackDialog).toBeVisible();
+  await expect(feedbackDialog.getByText("HarpeLm@proton.me")).toBeVisible();
+  await expect(feedbackDialog.getByRole("button", { name: "Copier l'adresse" })).toBeVisible();
+  await feedbackDialog.getByRole("button", { name: "Fermer" }).click();
+
+  // 4. Paramètres -> modal arrondi avec onglet Fournisseurs façon OpenCode
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("menuitem", { name: /Paramètres/ }).click();
+
+  const settingsDialog = page.getByRole("dialog", { name: "Paramètres" });
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialog.getByRole("heading", { name: "Fournisseurs connectés" })).toBeVisible();
+  await expect(settingsDialog.getByRole("heading", { name: "Fournisseurs disponibles" })).toBeVisible();
+  await expect(settingsDialog.getByText("Claude Code")).toBeVisible();
+  await expect(settingsDialog.getByText("Codex")).toBeVisible();
+  await expect(settingsDialog.getByText("Relais automatique de quota")).toBeVisible();
+
+  // Déplier un fournisseur via "+ Connecter"
+  await settingsDialog.getByRole("button", { name: "Connecter" }).first().click();
+  await expect(settingsDialog.getByRole("button", { name: "Vérifier" })).toBeVisible();
+
+  // Définir un profil local dans l'onglet Compte et vérifier la mise à jour du bouton sidebar
+  await settingsDialog.getByRole("button", { name: "Compte" }).click();
+  await settingsDialog.getByLabel("Comment souhaitez-vous que Kana vous appelle ?").fill("HarpeLm");
+  await settingsDialog.getByRole("button", { name: "Enregistrer" }).click();
+  await settingsDialog.getByRole("button", { name: "Fermer les paramètres" }).click();
+
+  await expect(page.getByRole("button", { name: /HarpeLm/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /HL/ })).toBeVisible();
 
   expect(errors).toEqual([]);
 });
