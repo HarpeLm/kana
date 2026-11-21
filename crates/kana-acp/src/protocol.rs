@@ -39,6 +39,11 @@ pub fn new_session_params(cwd: &Path, mcp_servers: Vec<Value>) -> Value {
     json!({ "cwd": cwd.to_string_lossy(), "mcpServers": mcp_servers })
 }
 
+/// Paramètres de `session/load` : reprend une session existante dans `cwd`, avec les serveurs MCP.
+pub fn load_session_params(session_id: &str, cwd: &Path, mcp_servers: Vec<Value>) -> Value {
+    json!({ "sessionId": session_id, "cwd": cwd.to_string_lossy(), "mcpServers": mcp_servers })
+}
+
 pub fn prompt_params(session_id: &str, text: &str) -> Value {
     prompt_params_with_images(session_id, text, &[])
 }
@@ -84,6 +89,14 @@ mod tests {
         assert_eq!(params["cwd"], "/tmp");
         assert_eq!(params["mcpServers"][0]["name"], "x");
         assert!(new_session_params(Path::new("/tmp"), vec![])["mcpServers"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn load_session_carries_session_id_cwd_and_mcp_servers() {
+        let params = load_session_params("s42", Path::new("/tmp/work"), vec![json!({ "name": "kana-browser" })]);
+        assert_eq!(params["sessionId"], "s42");
+        assert_eq!(params["cwd"], "/tmp/work");
+        assert_eq!(params["mcpServers"][0]["name"], "kana-browser");
     }
 
     #[test]
