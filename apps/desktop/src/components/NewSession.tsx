@@ -98,9 +98,8 @@ export function EnvironmentRow({ session }: { session: NewSessionProps }) {
 }
 
 /** En-tête épuré d'une nouvelle session (style Codex / Antigravity) centré juste au-dessus du Composer. */
-export function NewSessionCenter({ session }: { session: NewSessionProps }) {
+export function NewSessionCenter() {
   const locale = useLocale();
-  const none = !session.projectPath || session.projectPath === NO_PROJECT;
 
   return (
     <div className="mb-7 flex flex-col items-center px-6 text-center">
@@ -108,12 +107,6 @@ export function NewSessionCenter({ session }: { session: NewSessionProps }) {
       <h1 className="mt-4 text-[28px] font-medium tracking-[-0.025em] text-[#ecebe4]">
         {tr("Que voulez-vous créer ?", "What do you want to build?", locale)}
       </h1>
-      {!none && (
-        <p className="mt-1.5 text-[13px] text-[#7a7972]">
-          {session.projectName}
-          {session.useWorktree ? ` · ${tr("worktree isolé", "isolated worktree", locale)}` : ""}
-        </p>
-      )}
     </div>
   );
 }
