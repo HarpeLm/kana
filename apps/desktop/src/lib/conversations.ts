@@ -28,6 +28,8 @@ export interface Conversation {
   modelId?: string;
   /** Dossiers ajoutés à la session, en plus du dossier de travail. */
   extraFolders?: string[];
+  /** Identifiant de la session ACP en cours, pour reprendre après redémarrage. */
+  acpSessionId?: string;
 }
 
 export const DEFAULT_PROJECT = "kana";
