@@ -56,7 +56,18 @@ import { contextWindowFor, useModelWindowsVersion } from "../lib/contextWindow";
 import ConfirmDialog from "./ConfirmDialog";
 import SiteIcon from "./SiteIcon";
 import { AGENTS } from "../data";
-import { formatTokens, problemOf, usageToday, useUsageVersion } from "../lib/usage";
+import { tr, translateRustError, useLocale } from "../lib/i18n";
+import {
+  EMPTY_USAGE,
+  formatCostUsd,
+  formatTokens,
+  problemOf,
+  totalCostTodayUsd,
+  usageForProject,
+  usageForSession,
+  usageToday,
+  useUsageVersion,
+} from "../lib/usage";
 
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
@@ -242,6 +253,7 @@ export default function SessionPanel({
   const [memoryDraft, setMemoryDraft] = useState("");
   const [subagentDraft, setSubagentDraft] = useState("");
   useProjectMemoryVersion();
+  const locale = useLocale();
 
   const noProject = conversation.projectPath === NO_PROJECT;
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
@@ -331,7 +343,7 @@ export default function SessionPanel({
       }
       setAction(null);
     } catch (e) {
-      const msg = String(e);
+      const msg = translateRustError(String(e), locale);
       setActionError(msg);
       if (action === "merge" && /conflit|conflict/i.test(msg)) {
         setConflictDetected(true);
@@ -351,7 +363,7 @@ export default function SessionPanel({
       setConflictDetected(false);
       onResolveConflicts(summary.branch, summary.base ?? "main", conflicts);
     } catch (e) {
-      setActionError(String(e));
+      setActionError(translateRustError(String(e), locale));
     } finally {
       setResolvingConflicts(false);
     }
@@ -366,7 +378,7 @@ export default function SessionPanel({
       setNotice(`Commentaires et logs CI de #${prNumber} envoyés à l'agent.`);
       setTimeout(() => setNotice(""), 6000);
     } catch (e) {
-      setNotice(`Impossible d'importer #${prNumber} : ${String(e)}`);
+      setNotice(`Impossible d'importer #${prNumber} : ${translateRustError(String(e), locale)}`);
       setTimeout(() => setNotice(""), 8000);
     } finally {
       setImportingPr(null);
@@ -389,7 +401,7 @@ export default function SessionPanel({
       onRefresh();
       if (url.startsWith("http")) onOpenLink(url);
     } catch (e) {
-      setError(String(e));
+      setError(translateRustError(String(e), locale));
     } finally {
       setBusy(false);
     }
@@ -545,12 +557,12 @@ export default function SessionPanel({
           )}
         </Section>
 
-        <Section title="Consommation" compact>
+        <Section title={tr("Consommation", "Usage", locale)} compact>
           <div className="px-1 pb-2">
             <div className="flex items-baseline justify-between text-[13px] text-[#ecebe4]">
-              <span>Contexte</span>
+              <span>{tr("Contexte", "Context", locale)}</span>
               <span className="text-[#8c8b83]">
-                {context ? `${context.estimated ? "≈ " : ""}${formatTokens(context.used)} / ${formatTokens(context.size)} jetons` : "pas encore mesuré"}
+                {context ? `${context.estimated ? "≈ " : ""}${formatTokens(context.used)} / ${formatTokens(context.size)} ${tr("jetons", "tokens", locale)}` : tr("pas encore mesuré", "not measured yet", locale)}
               </span>
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#30302d]">
@@ -560,13 +572,45 @@ export default function SessionPanel({
               />
             </div>
           </div>
+          {(() => {
+            const sessionUsage = usageForSession(conversation.id);
+            const projectUsage = projectPath ? usageForProject(projectPath) : EMPTY_USAGE;
+            const todayCost = totalCostTodayUsd();
+            const hasCache = sessionUsage.cacheReadTokens > 0 || sessionUsage.cacheWriteTokens > 0;
+            return (
+              <div className="mb-2 space-y-1 rounded-xl border border-[#2f2f2c] bg-[#1b1b19] px-2.5 py-2 text-[12px]">
+                <div className="flex items-center justify-between text-[#dcdbd3]">
+                  <span>{tr("Coût session", "Session cost", locale)}</span>
+                  <span className="font-mono text-[#ecebe4]">{formatCostUsd(sessionUsage.costUsd)}</span>
+                </div>
+                {hasCache && (
+                  <div className="flex items-center justify-between text-[11.5px] text-[#8c8b83]">
+                    <span>{tr("Cache (lecture / écriture)", "Cache (read / write)", locale)}</span>
+                    <span className="font-mono">
+                      {formatTokens(sessionUsage.cacheReadTokens)} / {formatTokens(sessionUsage.cacheWriteTokens)}
+                    </span>
+                  </div>
+                )}
+                {projectPath && (
+                  <div className="flex items-center justify-between text-[#8c8b83]">
+                    <span>{tr("Coût projet", "Project cost", locale)}</span>
+                    <span className="font-mono text-[#c4c3bc]">{formatCostUsd(projectUsage.costUsd)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-[#8c8b83]">
+                  <span>{tr("Coût du jour", "Today's cost", locale)}</span>
+                  <span className="font-mono text-[#c4c3bc]">{formatCostUsd(todayCost)}</span>
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-3 px-1 pb-2">
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-[#8c8b83]">
               {compacted
-                ? "Compactée ✓"
+                ? tr("Compactée ✓", "Compacted ✓", locale)
                 : context
-                  ? `${formatTokens(Math.max(0, context.size - context.used))} jetons avant saturation`
-                  : "Libère la mémoire de l'agent"}
+                  ? `${formatTokens(Math.max(0, context.size - context.used))} ${tr("jetons avant saturation", "tokens before full", locale)}`
+                  : tr("Libère la mémoire de l'agent", "Free agent memory", locale)}
             </span>
             <button
               onClick={() => {
@@ -575,24 +619,38 @@ export default function SessionPanel({
                 setTimeout(() => setCompacted(false), 4000);
               }}
               disabled={!canCompact}
-              title="Éteint l'agent et le relance avec un résumé de la conversation : tes messages restent affichés"
+              title={tr("Éteint l'agent et le relance avec un résumé de la conversation : tes messages restent affichés", "Stops the agent and restarts with a conversation summary: messages remain visible", locale)}
               className="shrink-0 rounded-lg bg-[#333331] px-3 py-1 text-[12.5px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]"
             >
-              Compacter la session
+              {tr("Compacter la session", "Compact session", locale)}
             </button>
           </div>
           {AGENTS.map((agent) => {
             const usage = usageToday(agent.id);
             const problem = problemOf(agent.id);
+            const hasCache = usage.cacheReadTokens > 0 || usage.cacheWriteTokens > 0;
+            const detail = problem
+              ? problem.kind === "limit"
+                ? tr("limite", "limit", locale)
+                : tr("connexion", "auth", locale)
+              : usage.totalTokens > 0
+                ? `${formatTokens(usage.totalTokens)} · ${formatCostUsd(usage.costUsd)}`
+                : usage.turns > 0
+                  ? `${usage.turns} ${tr("rép.", "rep.", locale)}`
+                  : "—";
             return (
               <Row
                 key={agent.id}
                 onClick={onOpenRelay}
-                title="Ouvrir les réglages du relais"
+                title={
+                  hasCache
+                    ? `${tr("Ouvrir les réglages du relais", "Open relay settings", locale)} · cache ${formatTokens(usage.cacheReadTokens)}/${formatTokens(usage.cacheWriteTokens)}`
+                    : tr("Ouvrir les réglages du relais", "Open relay settings", locale)
+                }
                 icon={<span className={`h-2 w-2 rounded-full ${problem ? "bg-[#f0883e]" : agent.id === agentId ? "bg-[#3fb950]" : "bg-[#55554f]"}`} />}
                 trailing={
                   <span className={`shrink-0 text-[12.5px] ${problem ? "text-[#e69b80]" : "text-[#8c8b83]"}`}>
-                    {problem ? (problem.kind === "limit" ? "limite" : "connexion") : usage.totalTokens > 0 ? formatTokens(usage.totalTokens) : usage.turns > 0 ? `${usage.turns} rép.` : "—"}
+                    {detail}
                   </span>
                 }
               >
