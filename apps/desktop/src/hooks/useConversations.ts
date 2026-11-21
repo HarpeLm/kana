@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { autoTitle } from "../lib/autoTitle";
 import {
   DEFAULT_AGENT,
   DEFAULT_PROJECT,
   makeConversation,
   moveDown as moveItemDown,
   type Conversation,
+  type ConversationEnvironment,
 } from "../lib/conversations";
 import { saveStoredConversations } from "../lib/store";
 
@@ -12,6 +14,13 @@ import { saveStoredConversations } from "../lib/store";
 export function useConversations(initial: Conversation[], initialSelectedId: string) {
   const [items, setItems] = useState(initial);
   const [selectedId, setSelectedId] = useState(initialSelectedId);
+  const latestRef = useRef(items);
+  latestRef.current = items;
+  const recentCreatedRef = useRef(new Map<string, Conversation>());
+
+  useEffect(() => {
+    for (const c of items) recentCreatedRef.current.delete(c.id);
+  }, [items]);
 
   // Chaque changement est rangé dans la base, un court instant après le dernier.
   useEffect(() => {
@@ -192,6 +201,56 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Change l'environnement d'exécution (local, sandbox OS, SSH, Docker, DevContainer) et réinitialise la session ACP. */
+  const setEnvironment = useCallback(
+    (id: string, environment: ConversationEnvironment | undefined) =>
+      patch(id, (c) => {
+        const changed = JSON.stringify(c.environment ?? null) !== JSON.stringify(environment ?? null);
+        return {
+          ...c,
+          environment,
+          acpSessionId: changed ? undefined : c.acpSessionId,
+        };
+      }),
+    [patch],
+  );
+
+  /** Lance un sous-agent parallèle isolé lié au fil courant, sans quitter ce dernier. */
+  const spawnSubagent = useCallback(
+    (parentId: string, roleLabel: string, prompt: string, readOnly = false): string | null => {
+      const cleanPrompt = prompt.trim();
+      const source = latestRef.current.find((c) => c.id === parentId) ?? recentCreatedRef.current.get(parentId);
+      if (!source || !cleanPrompt) return null;
+      const role = roleLabel.trim() || "Sous-agent";
+      const subagent: Conversation = {
+        ...makeConversation(source.project, source.agentId),
+        title: `${role} · ${autoTitle(cleanPrompt)}`,
+        projectPath: source.projectPath,
+        modelId: source.modelId,
+        useWorktree: readOnly ? false : true,
+        parentId: source.id,
+        roleLabel: role,
+        environment: readOnly
+          ? { kind: "local", sandbox: true, readOnly: true }
+          : source.environment,
+      };
+      recentCreatedRef.current.set(subagent.id, subagent);
+      setItems((list) => {
+        const index = list.findIndex((c) => c.id === parentId);
+        if (index < 0) return [subagent, ...list];
+        return [...list.slice(0, index + 1), subagent, ...list.slice(index + 1)];
+      });
+      return subagent.id;
+    },
+    [],
+  );
+
+  const findById = useCallback(
+    (id: string): Conversation | undefined =>
+      latestRef.current.find((c) => c.id === id) ?? recentCreatedRef.current.get(id),
+    [],
+  );
+
   /** Garde le dossier de travail créé pour une conversation. */
   const attachWorktree = useCallback(
     (id: string, worktree: string, branch: string) => patch(id, (c) => ({ ...c, worktree, branch })),
@@ -266,6 +325,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     clearForkContext,
     setProject,
     setUseWorktree,
+    setEnvironment,
     setAgent,
     setAcpSessionId,
     relayTo,
@@ -274,5 +334,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     moveSection,
     touch,
     fork,
+    spawnSubagent,
+    findById,
   };
 }
