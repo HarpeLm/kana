@@ -1,6 +1,13 @@
 //! Dossiers de travail git (worktrees) : un par conversation, pour que les agents ne se marchent pas dessus.
 
-use std::path::Path;
+use std::{
+    fs,
+    io::Write,
+    path::Path,
+    process::{Command, Stdio},
+};
+
+use serde::Serialize;
 
 use crate::run::{GitError, git};
 
@@ -105,6 +112,122 @@ pub fn delete_merged_branch(repo: &Path, branch: &str) -> Result<(), GitError> {
     git(repo, &["branch", "-d", branch], &[]).map(|_| ())
 }
 
+/// Résultat d'un transfert bidirectionnel à chaud entre le dépôt local et un worktree isolé.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HandoffReport {
+    pub direction: String,
+    pub target_path: String,
+    pub branch: Option<String>,
+    pub transferred_files: u32,
+}
+
+fn git_apply_stdin(dir: &Path, args: &[&str], input: &[u8]) -> Result<(), GitError> {
+    let mut child = Command::new("git")
+        .args(["-c", "core.quotepath=off"])
+        .args(args)
+        .current_dir(dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input)?;
+    }
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        return Err(GitError::Failed(String::from_utf8_lossy(&output.stderr).trim().to_owned()));
+    }
+    Ok(())
+}
+
+fn copy_untracked_files(from: &Path, to: &Path) -> Result<Vec<String>, GitError> {
+    let out = git(from, &["ls-files", "--others", "--exclude-standard", "-z"], &[])?;
+    let mut copied = Vec::new();
+    for rel in out.split('\0').filter(|p| !p.is_empty()) {
+        let src = from.join(rel);
+        if !src.is_file() {
+            continue;
+        }
+        let dst = to.join(rel);
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(|e| GitError::Write(e.to_string()))?;
+        }
+        fs::copy(&src, &dst).map_err(|e| GitError::Write(e.to_string()))?;
+        copied.push(rel.to_owned());
+    }
+    Ok(copied)
+}
+
+/// Transfère les modifications non commitées (suivies et non suivies) du dépôt local vers un
+/// worktree isolé à `worktree_path` sur la branche `branch` (créé s'il n'existe pas encore).
+pub fn handoff_local_to_worktree(
+    repo: &Path,
+    worktree_path: &Path,
+    branch: &str,
+    clean_source: bool,
+) -> Result<HandoffReport, GitError> {
+    if !worktree_path.exists() {
+        if let Some(parent) = worktree_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| GitError::Write(e.to_string()))?;
+        }
+        add_worktree(repo, worktree_path, branch, None)?;
+    }
+
+    let tracked_names = git(repo, &["diff", "--name-only", "-z", "HEAD"], &[])?;
+    let tracked_count = tracked_names.split('\0').filter(|p| !p.is_empty()).count();
+    let patch = git(repo, &["diff", "--binary", "HEAD"], &[])?;
+    if !patch.trim().is_empty() {
+        git_apply_stdin(worktree_path, &["apply", "--allow-empty"], patch.as_bytes())?;
+    }
+
+    let copied_untracked = copy_untracked_files(repo, worktree_path)?;
+
+    if clean_source {
+        if tracked_count > 0 {
+            git(repo, &["checkout", "--", "."], &[])?;
+        }
+        for rel in &copied_untracked {
+            let src = repo.join(rel);
+            if src.exists() {
+                fs::remove_file(&src).map_err(|e| GitError::Write(e.to_string()))?;
+            }
+        }
+    }
+
+    let transferred_files = (tracked_count + copied_untracked.len()) as u32;
+    Ok(HandoffReport {
+        direction: "to_worktree".to_owned(),
+        target_path: worktree_path.to_string_lossy().into_owned(),
+        branch: current_branch(worktree_path).or_else(|| Some(branch.to_owned())),
+        transferred_files,
+    })
+}
+
+/// Rapatrie les changements d'un worktree (commits depuis `HEAD` local + modifications en cours +
+/// fichiers non suivis) dans le dépôt local `repo`, sans commit ni fusion définitive.
+/// Vérifie d'abord l'applicabilité du patch avec `git apply --check` pour ne jamais salir `repo`.
+pub fn handoff_worktree_to_local(repo: &Path, worktree_path: &Path) -> Result<HandoffReport, GitError> {
+    let repo_head = git(repo, &["rev-parse", "HEAD"], &[])?.trim().to_owned();
+    let tracked_names = git(worktree_path, &["diff", "--name-only", "-z", &repo_head], &[])?;
+    let tracked_count = tracked_names.split('\0').filter(|p| !p.is_empty()).count();
+    let patch = git(worktree_path, &["diff", "--binary", &repo_head], &[])?;
+
+    if !patch.trim().is_empty() {
+        git_apply_stdin(repo, &["apply", "--check"], patch.as_bytes())?;
+        git_apply_stdin(repo, &["apply"], patch.as_bytes())?;
+    }
+
+    let copied_untracked = copy_untracked_files(worktree_path, repo)?;
+    let transferred_files = (tracked_count + copied_untracked.len()) as u32;
+
+    Ok(HandoffReport {
+        direction: "to_local".to_owned(),
+        target_path: repo.to_string_lossy().into_owned(),
+        branch: current_branch(repo),
+        transferred_files,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, process::Command};
@@ -194,5 +317,75 @@ mod tests {
         add_worktree(&repo, &first, "kana/a", None).unwrap();
         add_worktree(&repo, &second, "kana/b", Some("kana/a")).unwrap();
         assert_eq!(current_branch(&second).as_deref(), Some("kana/b"));
+    }
+
+    #[test]
+    fn handoff_local_to_worktree_transfers_modified_and_untracked_files() {
+        let repo = repo("handoff-to-wt");
+        fs::write(repo.join("tracked.txt"), "initial\n").unwrap();
+        for args in [vec!["add", "tracked.txt"], vec!["commit", "-q", "-m", "add tracked"]] {
+            assert!(Command::new("git").args(&args).current_dir(&repo).status().unwrap().success());
+        }
+
+        // Modifications suivies + fichier non suivi dans un sous-dossier.
+        fs::write(repo.join("tracked.txt"), "modifié localement\n").unwrap();
+        fs::create_dir_all(repo.join("nested")).unwrap();
+        fs::write(repo.join("nested/new.txt"), "contenu non suivi\n").unwrap();
+
+        let wt = repo.with_extension("wt");
+        let report = handoff_local_to_worktree(&repo, &wt, "kana/handoff-wt", true).unwrap();
+
+        assert_eq!(report.direction, "to_worktree");
+        assert_eq!(report.target_path, wt.to_string_lossy());
+        assert_eq!(report.branch.as_deref(), Some("kana/handoff-wt"));
+        assert_eq!(report.transferred_files, 2);
+
+        // Le worktree reçoit les modifications suivies et le fichier non suivi.
+        assert_eq!(fs::read_to_string(wt.join("tracked.txt")).unwrap(), "modifié localement\n");
+        assert_eq!(fs::read_to_string(wt.join("nested/new.txt")).unwrap(), "contenu non suivi\n");
+
+        // Le dépôt source a été nettoyé pour les fichiers transférés.
+        assert_eq!(fs::read_to_string(repo.join("tracked.txt")).unwrap(), "initial\n");
+        assert!(!repo.join("nested/new.txt").exists());
+    }
+
+    #[test]
+    fn handoff_worktree_to_local_transfers_changes_without_merging() {
+        let repo = repo("handoff-to-local");
+        fs::write(repo.join("app.txt"), "v1\n").unwrap();
+        for args in [vec!["add", "app.txt"], vec!["commit", "-q", "-m", "v1"]] {
+            assert!(Command::new("git").args(&args).current_dir(&repo).status().unwrap().success());
+        }
+        let head_before = git(&repo, &["rev-parse", "HEAD"], &[]).unwrap();
+
+        let wt = repo.with_extension("wt");
+        add_worktree(&repo, &wt, "kana/handoff-local", None).unwrap();
+
+        // Dans le worktree : un commit + une modification suivie + un fichier non suivi.
+        fs::write(wt.join("committed.txt"), "depuis commit worktree\n").unwrap();
+        for args in [vec!["add", "committed.txt"], vec!["commit", "-q", "-m", "wt commit"]] {
+            assert!(Command::new("git").args(&args).current_dir(&wt).status().unwrap().success());
+        }
+        fs::write(wt.join("app.txt"), "v2 depuis worktree\n").unwrap();
+        fs::create_dir_all(wt.join("notes")).unwrap();
+        fs::write(wt.join("notes/todo.txt"), "à relire\n").unwrap();
+
+        let report = handoff_worktree_to_local(&repo, &wt).unwrap();
+
+        assert_eq!(report.direction, "to_local");
+        assert_eq!(report.target_path, repo.to_string_lossy());
+        assert_eq!(report.branch.as_deref(), Some("main"));
+        assert_eq!(report.transferred_files, 3);
+
+        // Les changements sont appliqués en local sans commit ni fusion définitive.
+        assert_eq!(git(&repo, &["rev-parse", "HEAD"], &[]).unwrap(), head_before);
+        assert_eq!(fs::read_to_string(repo.join("app.txt")).unwrap(), "v2 depuis worktree\n");
+        assert_eq!(fs::read_to_string(repo.join("committed.txt")).unwrap(), "depuis commit worktree\n");
+        assert_eq!(fs::read_to_string(repo.join("notes/todo.txt")).unwrap(), "à relire\n");
+
+        // En cas de conflit dans le dépôt local, git apply --check échoue sans salir le dépôt.
+        fs::write(repo.join("app.txt"), "conflit local\n").unwrap();
+        assert!(handoff_worktree_to_local(&repo, &wt).is_err());
+        assert_eq!(fs::read_to_string(repo.join("app.txt")).unwrap(), "conflit local\n");
     }
 }
