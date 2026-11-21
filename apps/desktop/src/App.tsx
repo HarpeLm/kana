@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import "./App.css";
 import { AGENTS, type View } from "./data";
-import { useBrowserAgent } from "./hooks/useBrowserAgent";
 import type { Startup } from "./lib/startup";
 import { useProjects } from "./hooks/useProjects";
 import { setThreadEffort, setThreadModel } from "./lib/models";
-import { chosenEffort } from "./lib/effort";
-import { agentTitle, autoTitle } from "./lib/autoTitle";
+import { autoTitle } from "./lib/autoTitle";
 import { artifactTitle } from "./lib/artifactRefs";
 import ArtifactMenu from "./components/ArtifactMenu";
 import { trashFile } from "./lib/files";
@@ -15,22 +13,17 @@ import { useAllArtifacts, type ArtifactEntry } from "./lib/artifactIndex";
 import EffortPicker from "./components/EffortPicker";
 import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
-import { NO_PROJECT, NO_PROJECT_NAME, buildProjectMemoryPreface, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
-import { useChat, type PreparedThread } from "./hooks/useChat";
+import { NO_PROJECT, NO_PROJECT_NAME, createProject, describeFolder, type Project } from "./lib/projects";
+import { useChat } from "./hooks/useChat";
 import { useRelayFlow } from "./hooks/useRelayFlow";
-import { detectProblem } from "./lib/limits";
-import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
 import { isArtifactPath } from "./lib/fileKinds";
-import { getArtifactGuide } from "./lib/agentGuide";
 import { tr, translateRustError, useLocale } from "./lib/i18n";
 import { OpenArtifactContext } from "./lib/artifactRefs";
-import { buildRelayContext } from "./lib/fork";
+import { buildForkContext, buildRelayContext } from "./lib/fork";
 import { OpenFileContext } from "./lib/fileRefs";
-import { buildForkContext } from "./lib/fork";
-import { activeMcpServersFor, loadActiveRulesPreface, toMcpServerParams } from "./lib/extensibility";
 import { setPlanMode, stopAgent } from "./lib/acp";
-import { notifyOs, setKeepAwake } from "./lib/settings";
-import { createWorktree, handoffToLocal, handoffToWorktree, removeWorktree } from "./lib/worktree";
+import { setKeepAwake } from "./lib/settings";
+import { removeWorktree } from "./lib/worktree";
 import { MODES, loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
 import {
   ACTION_CYCLE_MODE,
@@ -44,16 +37,19 @@ import {
   ACTION_TOGGLE_SESSION,
   ACTION_TOGGLE_TERMINAL,
 } from "./lib/searchItems";
-import { loadView, orderedVisibleConversations } from "./lib/sidebarView";
 import { useConversations } from "./hooks/useConversations";
+import { useCrossReviewPipeline } from "./hooks/useCrossReviewPipeline";
+import { useDockPanels } from "./hooks/useDockPanels";
+import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
-import { useResizableWidth } from "./hooks/useResizableWidth";
 import { useNavHistory } from "./hooks/useNavHistory";
 import { useSidebarWidth } from "./hooks/useSidebarWidth";
+import { useThreadOrchestrator } from "./hooks/useThreadOrchestrator";
+import { useWorktreeHandoff } from "./hooks/useWorktreeHandoff";
 import { sectionsOf } from "./lib/conversations";
 import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
-import AdvisorModal, { type CrossReviewPipelineState } from "./components/AdvisorModal";
+import AdvisorModal from "./components/AdvisorModal";
 import BrowserApprovalDialog from "./components/BrowserApprovalDialog";
 import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -87,8 +83,6 @@ export default function App({ startup }: { startup: Startup }) {
   const [keptWorktree, setKeptWorktree] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
-  const [advisorModal, setAdvisorModal] = useState<{ open: boolean; query: string }>({ open: false, query: "" });
-  const [crossReviewMap, setCrossReviewMap] = useState<Record<string, CrossReviewPipelineState>>({});
   const [extensibility, setExtensibility] = useState<{ open: boolean; tab: ExtensibilityTab }>({
     open: false,
     tab: "mcp",
@@ -97,6 +91,7 @@ export default function App({ startup }: { startup: Startup }) {
   const projectList = useProjects(startup.projects);
   const { selected } = conversations;
   const sidebar = useSidebarWidth();
+  const docks = useDockPanels();
 
   const openConversation = (id: string) => {
     conversations.select(id);
@@ -104,140 +99,16 @@ export default function App({ startup }: { startup: Startup }) {
   };
   const history = useNavHistory(selected.id, openConversation);
   const [permissionMode, setPermissionMode] = useState(loadMode);
-  // Avant le premier message d'une conversation : son dossier de travail (worktree) et, pour une
-  // bifurcation, le résumé de la conversation d'origine.
-  const itemsRef = useRef(conversations.items);
-  useEffect(() => {
-    itemsRef.current = conversations.items;
+  const { prepareThread, observer, pendingTitles } = useThreadOrchestrator({
+    items: conversations.items,
+    selectedId: selected.id,
+    findById: conversations.findById,
+    attachWorktree: conversations.attachWorktree,
+    clearForkContext: conversations.clearForkContext,
+    setAcpSessionId: conversations.setAcpSessionId,
+    rename: conversations.rename,
+    markUnread: conversations.markUnread,
   });
-  const { attachWorktree, clearForkContext, findById } = conversations;
-  const prepareThread = useCallback(
-    async (threadId: string): Promise<PreparedThread> => {
-      const conversation = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
-      if (!conversation) return {};
-      let cwd = conversation.worktree;
-      const projectPath = conversation.projectPath;
-      if (projectPath === NO_PROJECT) {
-        // Sans projet : un dossier neutre, jamais le dossier personnel.
-        cwd = await scratchDir();
-      } else if (!cwd) {
-        if (conversation.useWorktree !== false) {
-          const parentId = conversation.forkedFrom ?? conversation.parentId;
-          const base = parentId
-            ? (findById(parentId)?.branch ?? itemsRef.current.find((c) => c.id === parentId)?.branch)
-            : undefined;
-          const info = await createWorktree(threadId, base, projectPath).catch(() => null);
-          if (info) {
-            cwd = info.path;
-            attachWorktree(threadId, info.path, info.branch);
-          }
-        }
-        // Sans dossier de travail à part, l'agent travaille directement dans le dossier du projet.
-        if (!cwd) cwd = projectPath;
-      }
-      const carried = conversation.forkContext;
-      if (carried) clearForkContext(threadId);
-      const memory = buildProjectMemoryPreface(projectPath);
-      const rules = await loadActiveRulesPreface(cwd ?? projectPath);
-      const mcpServers = toMcpServerParams(activeMcpServersFor(projectPath));
-      const folders = conversation.extraFolders?.length
-        ? tr(
-            `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`,
-            `Additional folders you can access alongside the working directory (read them if needed, only modify them if asked):\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`,
-          )
-        : "";
-      const preface = `${getArtifactGuide()}${memory}${rules}${folders}${carried ?? ""}`;
-      return {
-        cwd,
-        projectPath,
-        preface,
-        carried: !!carried,
-        model: conversation.modelId,
-        effort: chosenEffort(conversation.agentId),
-        acpSessionId: conversation.acpSessionId,
-        environment: conversation.environment,
-        mcpServers,
-      };
-    },
-    [attachWorktree, clearForkContext, findById],
-  );
-  // Ce que les agents consomment, et les limites qu'ils atteignent (voir « Relais »).
-  const agentOf = (threadId: string) =>
-    (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.agentId;
-  const selectedIdRef = useRef(selected.id);
-  useEffect(() => {
-    selectedIdRef.current = selected.id;
-  });
-  const pendingTitles = useRef(new Map<string, { request: string; provisional: string }>());
-  const observer = {
-    onSession: (threadId: string, sessionId: string) => {
-      if (threadId.startsWith("side:")) return;
-      conversations.setAcpSessionId(threadId, sessionId);
-    },
-    onTurnUsage: (
-      threadId: string,
-      usage: { input: number; output: number; total: number; cacheRead?: number; cacheWrite?: number },
-    ) => {
-      if (threadId.startsWith("side:")) return;
-      const conv = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
-      const agent = conv?.agentId;
-      if (agent) {
-        recordTokens(agent, usage.input, usage.output, usage.total, {
-          cacheRead: usage.cacheRead,
-          cacheWrite: usage.cacheWrite,
-          threadId,
-          projectPath: conv?.projectPath && conv.projectPath !== NO_PROJECT ? conv.projectPath : undefined,
-          modelId: conv?.modelId,
-        });
-      }
-    },
-    onDone: (threadId: string) => {
-      if (threadId.startsWith("side:")) return;
-      const conv = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
-      const agent = conv?.agentId;
-      if (!agent) return;
-      // Au premier tour fini, l'agent écrit un vrai titre (sauf si la conversation a été renommée entre-temps).
-      const pending = pendingTitles.current.get(threadId);
-      if (pending) {
-        pendingTitles.current.delete(threadId);
-        void agentTitle(agent, pending.request).then((title) => {
-          const now = findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId);
-          if (title && now && now.title === pending.provisional) conversations.rename(threadId, title);
-        });
-      }
-      recordTurn(agent, {
-        threadId,
-        projectPath: conv?.projectPath && conv.projectPath !== NO_PROJECT ? conv.projectPath : undefined,
-      });
-      clearProblem(agent);
-
-      const convTitle = conv?.title || "Kana";
-      const inBackground = threadId !== selectedIdRef.current;
-      if (inBackground || (typeof document !== "undefined" && document.hidden)) {
-        notifyOs(convTitle, tr("L'agent a terminé sa réponse.", "The agent finished its response."));
-      }
-      if (inBackground) {
-        conversations.markUnread(threadId);
-      }
-    },
-    onPermission: (threadId: string, title: string) => {
-      if (threadId.startsWith("side:")) return;
-      const convTitle = (findById(threadId) ?? itemsRef.current.find((c) => c.id === threadId))?.title || "Kana";
-      const inBackground = threadId !== selectedIdRef.current;
-      if (inBackground || (typeof document !== "undefined" && document.hidden)) {
-        notifyOs(convTitle, tr(`Autorisation demandée : ${title}`, `Permission requested: ${title}`));
-      }
-      if (inBackground) {
-        conversations.markUnread(threadId);
-      }
-    },
-    onError: (threadId: string, message: string) => {
-      if (threadId.startsWith("side:")) return;
-      const agent = agentOf(threadId);
-      const problem = detectProblem(message);
-      if (agent && problem) markProblem(agent, problem, message);
-    },
-  };
   const { chat, chats, send, sendToThread, stop, answer, seed, removeQueued, steerQueued, rewind } = useChat(
     selected.id,
     selected.agentId,
@@ -302,6 +173,14 @@ export default function App({ startup }: { startup: Startup }) {
     onToggleWorktree: (value: boolean) => setUseWorktree(selected.id, value),
   };
 
+  // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
+  const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
+  // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
+  const sessionSummary = useSessionSummary(docks.showPlan && chat.messages.length > 0, workPath, chat.busy);
+  const artifactPaths = (sessionSummary.summary?.changed ?? [])
+    .filter((f) => isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path)))
+    .map((f) => f.path);
+
   const handleRewind = async (messageId?: string) => {
     const done = await rewind(messageId);
     if (done) void sessionSummary.refresh();
@@ -314,14 +193,7 @@ export default function App({ startup }: { startup: Startup }) {
       void handleRewind();
       return;
     }
-    if (
-      trimmed === "/advisor" ||
-      trimmed.startsWith("/advisor ") ||
-      trimmed === "/cross-review" ||
-      trimmed.startsWith("/cross-review ")
-    ) {
-      const rest = trimmed.replace(/^\/(?:advisor|cross-review)\s*/i, "");
-      setAdvisorModal({ open: true, query: rest });
+    if (crossReview.tryOpenFromSlashCommand(trimmed)) {
       return;
     }
     if (selected.title === "Nouvelle conversation") {
@@ -334,6 +206,29 @@ export default function App({ startup }: { startup: Startup }) {
     conversations.touch(selected.id);
     return send(text, false, modeOverride);
   };
+
+  const crossReview = useCrossReviewPipeline({
+    selected,
+    setAgent,
+    setEnvironment: conversations.setEnvironment,
+    spawnSubagent: conversations.spawnSubagent,
+    changeMode,
+    onShowPlan: () => docks.setShowPlan(true),
+    sendMessage,
+    sendToThread,
+  });
+
+  const worktreeHandoff = useWorktreeHandoff({
+    selected,
+    messages: chat.messages,
+    summaryBranch: sessionSummary.summary?.branch,
+    attachWorktree: conversations.attachWorktree,
+    clearWorktree: conversations.clearWorktree,
+    setUseWorktree,
+    relayTo: conversations.relayTo,
+    refreshSummary: sessionSummary.refresh,
+    send,
+  });
 
   const approvePlan = (targetMode: PermissionMode) => {
     changeMode(targetMode);
@@ -352,7 +247,7 @@ export default function App({ startup }: { startup: Startup }) {
   const [fileRequest, setFileRequest] = useState<{ id: number; path: string } | null>(null);
   const openFile = (path: string) => {
     setFileRequest((r) => ({ id: (r?.id ?? 0) + 1, path }));
-    setShowArtDock(true);
+    docks.setShowArtDock(true);
   };
 
   // Un fichier local cité par l'agent s'ouvre dans le volet Fichiers (chemin relatif au dossier de travail).
@@ -364,7 +259,7 @@ export default function App({ startup }: { startup: Startup }) {
     }
     path = path.replace(/^\.\//, "");
     setFilesRequest((r) => ({ id: (r?.id ?? 0) + 1, path, line }));
-    setShowFiles(true);
+    docks.setShowFiles(true);
   };
 
   // Tous les artéfacts : relus quand on ouvre la galerie ou la recherche.
@@ -412,18 +307,6 @@ export default function App({ startup }: { startup: Startup }) {
   };
   const agentLabel = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
 
-  // Barre latérale et boutons du haut
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [showPlan, setShowPlan] = useState(false);
-  const [showTerminal, setShowTerminal] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
-  const [diffFocus, setDiffFocus] = useState<{ id: number; path: string } | null>(null);
-  const [showBrowser, setShowBrowser] = useState(false);
-  const [showFiles, setShowFiles] = useState(false);
-  const [showArtDock, setShowArtDock] = useState(false);
-  const [showSideChat, setShowSideChat] = useState(false);
-  const [artMaximized, setArtMaximized] = useState(false);
-
   // Entrées du menu "..."
   const [keepAwake, setKeepAwakeState] = useState(false);
   const keepAwakeSeq = useRef(0);
@@ -440,90 +323,8 @@ export default function App({ startup }: { startup: Startup }) {
       });
   };
 
-  // Le terminal est monté à la première ouverture puis gardé : son shell survit quand on le masque.
-  const [terminalOpened, setTerminalOpened] = useState(false);
-  const [browserOpened, setBrowserOpened] = useState(false);
-  const [terminalMaximized, setTerminalMaximized] = useState(false);
-  const [filesMaximized, setFilesMaximized] = useState(false);
-  const terminalPanel = useResizableWidth({
-    storageKey: "kana-terminal-width",
-    min: 320,
-    max: 900,
-    fallback: 500,
-    from: "right",
-  });
-  const terminalFills = showTerminal && terminalMaximized;
-  const filesFill = showFiles && filesMaximized && !terminalFills;
-  const terminalIsSide = showTerminal && !terminalMaximized;
-  // Largeur des volets placés à droite de chacun, pour que la poignée suive bien la souris.
-  const terminalWidth = terminalIsSide ? terminalPanel.width : 0;
-  const browserVisible = showBrowser && !terminalFills && !filesFill;
-  const browserPanel = useResizableWidth({
-    storageKey: "kana-browser-width",
-    min: 360,
-    max: 1100,
-    fallback: 640,
-    from: "right",
-    offsetRight: terminalWidth,
-  });
-  const browserWidth = browserVisible ? browserPanel.width : 0;
-  const diffVisible = showDiff && !terminalFills && !filesFill;
-  const diffPanel = useResizableWidth({
-    storageKey: "kana-diff-width",
-    min: 360,
-    max: 1000,
-    fallback: 560,
-    from: "right",
-    offsetRight: terminalWidth + browserWidth,
-  });
-  const filesPanel = useResizableWidth({
-    storageKey: "kana-files-width",
-    min: 420,
-    max: 1100,
-    fallback: 700,
-    from: "right",
-    offsetRight: terminalWidth + browserWidth + (diffVisible ? diffPanel.width : 0),
-  });
-  const artPanel = useResizableWidth({
-    storageKey: "kana-artifacts-width",
-    min: 420,
-    max: 1100,
-    fallback: 700,
-    from: "right",
-    offsetRight: terminalWidth + browserWidth + (diffVisible ? diffPanel.width : 0) + (showFiles && !terminalFills ? filesPanel.width : 0),
-  });
-  const toggleBrowser = () => {
-    setShowBrowser((v) => !v);
-    setBrowserOpened(true);
-  };
-  // Un agent qui veut naviguer ouvre le Globe, puis attend l'accord de l'utilisateur.
-  const browserAgent = useBrowserAgent(() => {
-    setShowBrowser(true);
-    setBrowserOpened(true);
-  });
-  // Un lien de la conversation s'ouvre dans le Globe, jamais dans le navigateur du système.
-  const [openRequest, setOpenRequest] = useState<{ id: number; url: string } | null>(null);
-  const openInGlobe = (url: string) => {
-    setOpenRequest((r) => ({ id: (r?.id ?? 0) + 1, url }));
-    setShowBrowser(true);
-    setBrowserOpened(true);
-  };
-  const toggleTerminal = () => {
-    setShowTerminal((v) => !v);
-    setTerminalOpened(true);
-  };
-
-  // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
-  const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
-  // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
-  const sessionSummary = useSessionSummary(showPlan && chat.messages.length > 0, workPath, chat.busy);
-  const artifactPaths = (sessionSummary.summary?.changed ?? [])
-    .filter((f) => isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path)))
-    .map((f) => f.path);
-
-
   const nav = {
-    onToggleSidebar: toggle(setShowSidebar),
+    onToggleSidebar: toggle(docks.setShowSidebar),
     canBack: history.canBack,
     canForward: history.canForward,
     onBack: history.back,
@@ -570,8 +371,8 @@ export default function App({ startup }: { startup: Startup }) {
   };
 
   const toggleSessionPanel = () => {
-    if (!showPlan && view !== "workspace") setView("workspace");
-    setShowPlan((v) => !v);
+    if (!docks.showPlan && view !== "workspace") setView("workspace");
+    docks.setShowPlan((v) => !v);
   };
 
   const runPaletteAction = (actionId: string) => {
@@ -581,15 +382,15 @@ export default function App({ startup }: { startup: Startup }) {
       case ACTION_SETTINGS:
         return setView("settings");
       case ACTION_TOGGLE_TERMINAL:
-        return toggleTerminal();
+        return docks.toggleTerminal();
       case ACTION_TOGGLE_DIFF:
-        return setShowDiff((v) => !v);
+        return docks.setShowDiff((v) => !v);
       case ACTION_TOGGLE_FILES:
-        return setShowFiles((v) => !v);
+        return docks.setShowFiles((v) => !v);
       case ACTION_TOGGLE_ARTIFACTS:
-        return setShowArtDock((v) => !v);
+        return docks.setShowArtDock((v) => !v);
       case ACTION_TOGGLE_BROWSER:
-        return toggleBrowser();
+        return docks.toggleBrowser();
       case ACTION_TOGGLE_SESSION:
         return toggleSessionPanel();
       case ACTION_CYCLE_MODE:
@@ -599,107 +400,43 @@ export default function App({ startup }: { startup: Startup }) {
     }
   };
 
-  const handleGlobalKeyDown = (event: KeyboardEvent) => {
-    if (event.isComposing || event.keyCode === 229) return;
-    const blockedByModal =
+  useGlobalShortcuts({
+    blockedByModal:
       deleting !== undefined ||
       artifactToDelete !== null ||
-      browserAgent.approval !== null ||
+      docks.browserAgent.approval !== null ||
       extensibility.open ||
       showInspector ||
-      advisorModal.open ||
-      document.querySelector('[role="alertdialog"]') !== null;
-    if (blockedByModal) return;
-
-    const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
-    const key = event.key.toLowerCase();
-
-    if (mod && !event.shiftKey && key === "k") {
-      event.preventDefault();
-      setSearchOpen((v) => !v);
-      return;
-    }
-
-    if (searchOpen) return;
-
-    if (mod && !event.shiftKey) {
-      if (key === "n") {
-        event.preventDefault();
-        createConversation();
-      } else if (key === "b") {
-        event.preventDefault();
-        setShowSidebar((v) => !v);
-      } else if (key === "j") {
-        event.preventDefault();
-        toggleTerminal();
-      } else if (event.key === ",") {
-        event.preventDefault();
-        setView("settings");
-      } else if (event.key === ";") {
-        event.preventDefault();
-        setShowSideChat((v) => {
-          if (!v && view !== "workspace") setView("workspace");
-          return !v;
-        });
-      }
-      return;
-    }
-
-    if (mod && event.shiftKey) {
-      if (key === "d") {
-        event.preventDefault();
-        setShowDiff((v) => !v);
-      } else if (key === "e") {
-        event.preventDefault();
-        setShowFiles((v) => !v);
-      } else if (key === "a") {
-        event.preventDefault();
-        setShowArtDock((v) => !v);
-      } else if (key === "g") {
-        event.preventDefault();
-        toggleBrowser();
-      } else if (key === "p") {
-        event.preventDefault();
-        toggleSessionPanel();
-      } else if (key === "m") {
-        event.preventDefault();
-        cycleMode();
-      }
-      return;
-    }
-
-    if (
-      event.altKey &&
-      !event.metaKey &&
-      !event.ctrlKey &&
-      !event.shiftKey &&
-      (event.key === "ArrowUp" || event.key === "ArrowDown")
-    ) {
-      if (editingId !== null) return;
-      const target = event.target as HTMLElement | null;
-      if (target && (target instanceof HTMLInputElement || target.closest(".cm-editor, .xterm"))) return;
-      const visible = orderedVisibleConversations(conversations.items, loadView(), selected.id);
-      if (visible.length <= 1) return;
-      event.preventDefault();
-      const currentIndex = visible.findIndex((c) => c.id === selected.id);
-      const delta = event.key === "ArrowDown" ? 1 : -1;
-      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + delta + visible.length) % visible.length;
-      openConversation(visible[nextIndex].id);
-    }
-  };
-
-  const globalKeyDownRef = useRef(handleGlobalKeyDown);
-  globalKeyDownRef.current = handleGlobalKeyDown;
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => globalKeyDownRef.current(event);
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+      crossReview.advisorModal.open,
+    searchOpen,
+    editingId,
+    view,
+    conversations: conversations.items,
+    selectedId: selected.id,
+    onToggleSearch: () => setSearchOpen((v) => !v),
+    onCreateConversation: createConversation,
+    onToggleSidebar: toggle(docks.setShowSidebar),
+    onToggleTerminal: docks.toggleTerminal,
+    onOpenSettings: () => setView("settings"),
+    onToggleSideChat: () => {
+      docks.setShowSideChat((v) => {
+        if (!v && view !== "workspace") setView("workspace");
+        return !v;
+      });
+    },
+    onToggleDiff: toggle(docks.setShowDiff),
+    onToggleFiles: toggle(docks.setShowFiles),
+    onToggleArtifacts: toggle(docks.setShowArtDock),
+    onToggleBrowser: docks.toggleBrowser,
+    onToggleSessionPanel: toggleSessionPanel,
+    onCycleMode: cycleMode,
+    onOpenConversation: openConversation,
+  });
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#181817] text-[#e6e5df] select-none">
       <Sidebar
-        open={showSidebar}
+        open={docks.showSidebar}
         conversations={conversations.items}
         actions={actions}
         selectedId={selected.id}
@@ -718,255 +455,205 @@ export default function App({ startup }: { startup: Startup }) {
       />
 
       <div className="flex min-w-0 flex-1 overflow-hidden bg-[#181817]">
-      <div
-        className={`flex min-w-0 flex-1 flex-col overflow-hidden ${
-          terminalFills || filesFill ? "hidden" : ""
-        }`}
-      >
-        <Header
-          leading={showSidebar ? undefined : <NavButtons {...nav} />}
-          toolbar={{
-            showPlan,
-            onPlan: toggle(setShowPlan),
-            showTerminal,
-            onTerminal: toggleTerminal,
-            showDiff,
-            onDiff: toggle(setShowDiff),
-            showBrowser,
-            onBrowser: toggleBrowser,
-            showFiles,
-            onFiles: toggle(setShowFiles),
-            more: {
-              showSideChat,
-              onSideChat: () => {
-                if (!showSideChat && view !== "workspace") setView("workspace");
-                setShowSideChat((v) => !v);
-              },
-              showArtifacts: showArtDock,
-              onArtifacts: toggle(setShowArtDock),
-              showInspector,
-              onInspector: () => setShowInspector(true),
-              keepAwake,
-              onKeepAwake: toggleKeepAwake,
-            },
-          }}
+        <div
+          className={`flex min-w-0 flex-1 flex-col overflow-hidden ${
+            docks.terminalFills || docks.filesFill ? "hidden" : ""
+          }`}
         >
-          {view === "settings" || view === "scheduled" || view === "artifacts" ? (
-            <span className="px-2 text-[14px] text-[#e6e5df]">
-              {view === "settings"
-                ? tr("Réglages", "Settings", locale)
-                : view === "artifacts"
-                  ? tr("Artéfacts", "Artifacts", locale)
-                  : tr("Tâches planifiées", "Scheduled tasks", locale)}
-            </span>
-          ) : (
-            <ConversationTitle
-              conversation={selected}
-              editing={editingId === selected.id && !showSidebar}
-              sections={sectionsOf(conversations.items)}
-              actions={actions}
-            />
-          )}
-        </Header>
+          <Header
+            leading={docks.showSidebar ? undefined : <NavButtons {...nav} />}
+            toolbar={{
+              showPlan: docks.showPlan,
+              onPlan: toggle(docks.setShowPlan),
+              showTerminal: docks.showTerminal,
+              onTerminal: docks.toggleTerminal,
+              showDiff: docks.showDiff,
+              onDiff: toggle(docks.setShowDiff),
+              showBrowser: docks.showBrowser,
+              onBrowser: docks.toggleBrowser,
+              showFiles: docks.showFiles,
+              onFiles: toggle(docks.setShowFiles),
+              more: {
+                showSideChat: docks.showSideChat,
+                onSideChat: () => {
+                  if (!docks.showSideChat && view !== "workspace") setView("workspace");
+                  docks.setShowSideChat((v) => !v);
+                },
+                showArtifacts: docks.showArtDock,
+                onArtifacts: toggle(docks.setShowArtDock),
+                showInspector,
+                onInspector: () => setShowInspector(true),
+                keepAwake,
+                onKeepAwake: toggleKeepAwake,
+              },
+            }}
+          >
+            {view === "settings" || view === "scheduled" || view === "artifacts" ? (
+              <span className="px-2 text-[14px] text-[#e6e5df]">
+                {view === "settings"
+                  ? tr("Réglages", "Settings", locale)
+                  : view === "artifacts"
+                    ? tr("Artéfacts", "Artifacts", locale)
+                    : tr("Tâches planifiées", "Scheduled tasks", locale)}
+              </span>
+            ) : (
+              <ConversationTitle
+                conversation={selected}
+                editing={editingId === selected.id && !docks.showSidebar}
+                sections={sectionsOf(conversations.items)}
+                actions={actions}
+              />
+            )}
+          </Header>
 
-        {view === "settings" ? (
-          <SettingsView
-            conversationIds={conversations.items.map((c) => c.id)}
-            projectPaths={projectList.projects.map((p) => p.path)}
-          />
-        ) : view === "scheduled" ? (
-          <ScheduledView projects={projectList.projects} defaultProjectPath={workPath ?? selected.projectPath} />
-        ) : view === "artifacts" ? (
-          <ArtifactsView items={allArtifacts.items} loading={allArtifacts.loading} onOpen={openArtifactEntry} onMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })} currentRoot={workPath ?? selected.projectPath} />
-        ) : view === "workspace" ? (
-          <div className="flex flex-1 overflow-hidden">
-            <OpenArtifactContext.Provider value={openFile}>
-            <OpenFileContext.Provider value={openLocalFile}>
-            <ChatView
-              agentLabel={agentLabel}
-              chat={chat}
-              onSend={sendMessage}
-              onStop={stop}
-              onRemoveQueued={removeQueued}
-              onSteerQueued={steerQueued}
-              workPath={workPath}
-              projectPath={selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined}
-              onAnswer={answer}
-              onOpenLink={openInGlobe}
-              onFork={forkFrom}
-              onRewind={(id) => void handleRewind(id)}
-              onOpenExtensibility={(tab) => setExtensibility({ open: true, tab })}
-              mode={permissionMode}
-              onModeChange={changeMode}
-              onApprovePlan={approvePlan}
-              newSession={newSession}
-              relayBanner={relayBanner}
-              modelPicker={
-                <>
-                <ModelPicker
-                  agents={AGENTS}
-                  agentId={selected.agentId}
-                  modelId={selected.modelId}
-                  canSwitchProvider={!chat.busy}
-                  onSelect={chooseModel}
+          {view === "settings" ? (
+            <SettingsView
+              conversationIds={conversations.items.map((c) => c.id)}
+              projectPaths={projectList.projects.map((p) => p.path)}
+            />
+          ) : view === "scheduled" ? (
+            <ScheduledView projects={projectList.projects} defaultProjectPath={workPath ?? selected.projectPath} />
+          ) : view === "artifacts" ? (
+            <ArtifactsView
+              items={allArtifacts.items}
+              loading={allArtifacts.loading}
+              onOpen={openArtifactEntry}
+              onMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })}
+              currentRoot={workPath ?? selected.projectPath}
+            />
+          ) : view === "workspace" ? (
+            <div className="flex flex-1 overflow-hidden">
+              <OpenArtifactContext.Provider value={openFile}>
+                <OpenFileContext.Provider value={openLocalFile}>
+                  <ChatView
+                    agentLabel={agentLabel}
+                    chat={chat}
+                    onSend={sendMessage}
+                    onStop={stop}
+                    onRemoveQueued={removeQueued}
+                    onSteerQueued={steerQueued}
+                    workPath={workPath}
+                    projectPath={selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined}
+                    onAnswer={answer}
+                    onOpenLink={docks.openInGlobe}
+                    onFork={forkFrom}
+                    onRewind={(id) => void handleRewind(id)}
+                    onOpenExtensibility={(tab) => setExtensibility({ open: true, tab })}
+                    mode={permissionMode}
+                    onModeChange={changeMode}
+                    onApprovePlan={approvePlan}
+                    newSession={newSession}
+                    relayBanner={relayBanner}
+                    modelPicker={
+                      <>
+                        <ModelPicker
+                          agents={AGENTS}
+                          agentId={selected.agentId}
+                          modelId={selected.modelId}
+                          canSwitchProvider={!chat.busy}
+                          onSelect={chooseModel}
+                        />
+                        <EffortPicker
+                          agentId={selected.agentId}
+                          onChange={(value) => {
+                            if (chat.messages.length > 0) setThreadEffort(selected.id, value).catch(() => {});
+                          }}
+                        />
+                      </>
+                    }
+                  />
+                </OpenFileContext.Provider>
+              </OpenArtifactContext.Provider>
+              {docks.showSideChat && (
+                <SideChatDock
+                  conversation={selected}
+                  mainMessages={chat.messages}
+                  workPath={workPath}
+                  onClose={() => docks.setShowSideChat(false)}
                 />
-                <EffortPicker
-                  agentId={selected.agentId}
-                  onChange={(value) => {
-                    if (chat.messages.length > 0) setThreadEffort(selected.id, value).catch(() => {});
+              )}
+              {docks.showPlan && (
+                <SessionPanel
+                  conversation={selected}
+                  messages={chat.messages}
+                  plan={chat.plan}
+                  summary={sessionSummary.summary}
+                  pulls={sessionSummary.pulls}
+                  workPath={workPath}
+                  onOpenDiff={(path) => {
+                    if (path) docks.setDiffFocus((f) => ({ id: (f?.id ?? 0) + 1, path }));
+                    docks.setShowDiff(true);
                   }}
+                  onOpenLink={docks.openInGlobe}
+                  onRefresh={() => void sessionSummary.refresh()}
+                  context={chat.context}
+                  agentId={selected.agentId}
+                  onOpenRelay={() => setView("relay")}
+                  started={chat.messages.length > 0}
+                  onCompact={compactSession}
+                  canCompact={!chat.busy && chat.messages.length > 0}
+                  onOpenFile={openFile}
+                  onOpenTerminal={() => docks.setShowTerminal(true)}
+                  onArtifactMenu={(path, x, y) => setArtifactMenu({ x, y, root: workPath, path })}
+                  canAddFolder={!chat.busy}
+                  onAddFolder={(path) => {
+                    conversations.addFolder(selected.id, path);
+                    void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`);
+                  }}
+                  onChangeEnvironment={(env) => {
+                    stopAgent(selected.id).catch(() => {});
+                    conversations.setEnvironment(selected.id, env);
+                  }}
+                  subagents={conversations.items
+                    .filter((c) => c.parentId === selected.id)
+                    .map((sub) => {
+                      const subChat = chats[sub.id];
+                      const lastRole = subChat?.messages[subChat.messages.length - 1]?.role;
+                      const status: "running" | "done" | "error" | "idle" = subChat?.busy
+                        ? "running"
+                        : lastRole === "error"
+                          ? "error"
+                          : subChat?.messages.some((m) => m.role === "agent")
+                            ? "done"
+                            : "idle";
+                      return { conversation: sub, status };
+                    })}
+                  onSpawnSubagent={(roleLabel, prompt, readOnly) => {
+                    const subId = conversations.spawnSubagent(selected.id, roleLabel, prompt, readOnly);
+                    if (!subId) return;
+                    const modeOverride: PermissionMode | undefined = readOnly ? "plan" : undefined;
+                    void sendToThread(subId, selected.agentId, prompt, modeOverride);
+                  }}
+                  onOpenSubagent={(id) => openConversation(id)}
+                  onDiscarded={worktreeHandoff.handleDiscarded}
+                  onResolveConflicts={worktreeHandoff.handleResolveConflicts}
+                  onImportPrFeedback={worktreeHandoff.handleImportPrFeedback}
+                  onOpenAdvisor={() => crossReview.openAdvisor("")}
+                  crossReview={crossReview.activeCrossReview}
+                  onHandoffToWorktree={worktreeHandoff.handleHandoffToWorktree}
+                  onHandoffToLocal={worktreeHandoff.handleHandoffToLocal}
                 />
-                </>
-              }
-            />
-            </OpenFileContext.Provider>
-            </OpenArtifactContext.Provider>
-            {showSideChat && (
-              <SideChatDock
-                conversation={selected}
-                mainMessages={chat.messages}
-                workPath={workPath}
-                onClose={() => setShowSideChat(false)}
-              />
-            )}
-            {showPlan && (
-              <SessionPanel
-                conversation={selected}
-                messages={chat.messages}
-                plan={chat.plan}
-                summary={sessionSummary.summary}
-                pulls={sessionSummary.pulls}
-                workPath={workPath}
-                onOpenDiff={(path) => {
-                  if (path) setDiffFocus((f) => ({ id: (f?.id ?? 0) + 1, path }));
-                  setShowDiff(true);
-                }}
-                onOpenLink={openInGlobe}
-                onRefresh={() => void sessionSummary.refresh()}
-                context={chat.context}
-                agentId={selected.agentId}
-                onOpenRelay={() => setView("relay")}
-                started={chat.messages.length > 0}
-                onCompact={compactSession}
-                canCompact={!chat.busy && chat.messages.length > 0}
-                onOpenFile={openFile}
-                onOpenTerminal={() => setShowTerminal(true)}
-                onArtifactMenu={(path, x, y) => setArtifactMenu({ x, y, root: workPath, path })}
-                canAddFolder={!chat.busy}
-                onAddFolder={(path) => {
-                  conversations.addFolder(selected.id, path);
-                  void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`);
-                }}
-                onChangeEnvironment={(env) => {
-                  stopAgent(selected.id).catch(() => {});
-                  conversations.setEnvironment(selected.id, env);
-                }}
-                subagents={conversations.items
-                  .filter((c) => c.parentId === selected.id)
-                  .map((sub) => {
-                    const subChat = chats[sub.id];
-                    const lastRole = subChat?.messages[subChat.messages.length - 1]?.role;
-                    const status: "running" | "done" | "error" | "idle" = subChat?.busy
-                      ? "running"
-                      : lastRole === "error"
-                        ? "error"
-                        : subChat?.messages.some((m) => m.role === "agent")
-                          ? "done"
-                          : "idle";
-                    return { conversation: sub, status };
-                  })}
-                onSpawnSubagent={(roleLabel, prompt, readOnly) => {
-                  const subId = conversations.spawnSubagent(selected.id, roleLabel, prompt, readOnly);
-                  if (!subId) return;
-                  const modeOverride: PermissionMode | undefined = readOnly ? "plan" : undefined;
-                  void sendToThread(subId, selected.agentId, prompt, modeOverride);
-                }}
-                onOpenSubagent={(id) => openConversation(id)}
-                onDiscarded={() => {
-                  stopAgent(selected.id).catch(() => {});
-                  conversations.clearWorktree(selected.id);
-                  void sessionSummary.refresh();
-                }}
-                onResolveConflicts={(branch, base, conflicts) => {
-                  const details = conflicts.length
-                    ? conflicts.map((c) => `### \`${c.path}\`\n\`\`\`\n${c.snippet}\n\`\`\``).join("\n\n")
-                    : "(Aucun détail disponible.)";
-                  void send(
-                    `La fusion de \`${branch}\` dans \`${base}\` a des conflits.\n\nFichiers concernés :\n\n${details}\n\nDans ton dossier de travail actuel, fusionne ou rebase \`${base}\` dans \`${branch}\`, résous proprement les conflits et vérifie les tests.`,
-                  );
-                }}
-                onImportPrFeedback={(feedback) => {
-                  const comments = feedback.reviewComments.length
-                    ? `Commentaires de review :\n${feedback.reviewComments.map((c) => `- ${c}`).join("\n")}`
-                    : "Aucun commentaire de review.";
-                  const checks = feedback.failedChecks.length
-                    ? `Vérifications CI en échec :\n${feedback.failedChecks.map((c) => `- ${c}`).join("\n")}`
-                    : "Aucune vérification CI en échec.";
-                  const logs = feedback.failedLogExcerpt
-                    ? `\n\nExtrait des logs CI en échec :\n\`\`\`\n${feedback.failedLogExcerpt}\n\`\`\``
-                    : "";
-                  void send(
-                    `Feedback importé depuis ${feedback.forge === "gitlab" ? "la MR" : "la PR"} #${feedback.prNumber} (« ${feedback.title} ») :\n\n${comments}\n\n${checks}${logs}\n\nCorrige les points signalés et vérifie les tests.`,
-                  );
-                }}
-                onOpenAdvisor={() => setAdvisorModal({ open: true, query: "" })}
-                crossReview={crossReviewMap[selected.id] ?? null}
-                onHandoffToWorktree={async () => {
-                  const projectPath = selected.projectPath;
-                  if (!projectPath || projectPath === NO_PROJECT) return;
-                  const report = await handoffToWorktree(selected.id, projectPath, true);
-                  await stopAgent(selected.id).catch(() => {});
-                  const branch = report.branch ?? `kana/${selected.id}`;
-                  conversations.attachWorktree(selected.id, report.target_path, branch);
-                  setUseWorktree(selected.id, true);
-                  if (chat.messages.length > 0) {
-                    const history = chat.messages.filter((m) => m.role !== "error");
-                    const from = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
-                    conversations.relayTo(selected.id, selected.agentId, history.length > 0 ? buildRelayContext(history, from) : "");
-                  }
-                  void sessionSummary.refresh();
-                  return report;
-                }}
-                onHandoffToLocal={async () => {
-                  const projectPath = selected.projectPath;
-                  const wt = selected.worktree;
-                  const branch = sessionSummary.summary?.branch ?? selected.branch;
-                  if (!projectPath || projectPath === NO_PROJECT || !wt || !branch) return;
-                  const report = await handoffToLocal(projectPath, wt, branch);
-                  await stopAgent(selected.id).catch(() => {});
-                  conversations.clearWorktree(selected.id);
-                  setUseWorktree(selected.id, false);
-                  if (chat.messages.length > 0) {
-                    const history = chat.messages.filter((m) => m.role !== "error");
-                    const from = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
-                    conversations.relayTo(selected.id, selected.agentId, history.length > 0 ? buildRelayContext(history, from) : "");
-                  }
-                  void sessionSummary.refresh();
-                  return report;
-                }}
-              />
-            )}
-          </div>
-        ) : (
-          <RelayView />
-        )}
-
-      </div>
+              )}
+            </div>
+          ) : (
+            <RelayView />
+          )}
+        </div>
 
         <FilesDock
           // Un autre dossier de travail repart d'un volet neuf : ses fichiers ouverts ne sont pas les mêmes.
           key={workPath ?? "depot"}
           root={workPath}
           openRequest={filesRequest}
-          visible={showFiles && !terminalFills}
-          maximized={filesMaximized}
-          width={filesPanel.width}
-          dragging={filesPanel.dragging}
-          onResizeStart={filesPanel.startDrag}
-          onToggleMaximize={() => setFilesMaximized((v) => !v)}
+          visible={docks.showFiles && !docks.terminalFills}
+          maximized={docks.filesMaximized}
+          width={docks.filesPanel.width}
+          dragging={docks.filesPanel.dragging}
+          onResizeStart={docks.filesPanel.startDrag}
+          onToggleMaximize={() => docks.setFilesMaximized((v) => !v)}
           onClose={() => {
-            setShowFiles(false);
-            setFilesMaximized(false);
+            docks.setShowFiles(false);
+            docks.setFilesMaximized(false);
           }}
           onSendDiagnostics={(report) => void sendMessage(report)}
         />
@@ -984,26 +671,26 @@ export default function App({ startup }: { startup: Startup }) {
             );
           }}
           openRequest={fileRequest}
-          visible={showArtDock && !terminalFills}
-          maximized={artMaximized}
-          width={artPanel.width}
-          dragging={artPanel.dragging}
-          onResizeStart={artPanel.startDrag}
-          onToggleMaximize={() => setArtMaximized((v) => !v)}
+          visible={docks.showArtDock && !docks.terminalFills}
+          maximized={docks.artMaximized}
+          width={docks.artPanel.width}
+          dragging={docks.artPanel.dragging}
+          onResizeStart={docks.artPanel.startDrag}
+          onToggleMaximize={() => docks.setArtMaximized((v) => !v)}
           onClose={() => {
-            setShowArtDock(false);
-            setArtMaximized(false);
+            docks.setShowArtDock(false);
+            docks.setArtMaximized(false);
           }}
         />
 
         <DiffDock
           path={workPath}
-          focusRequest={diffFocus}
-          visible={diffVisible}
-          width={diffPanel.width}
-          dragging={diffPanel.dragging}
-          onResizeStart={diffPanel.startDrag}
-          onClose={() => setShowDiff(false)}
+          focusRequest={docks.diffFocus}
+          visible={docks.diffVisible}
+          width={docks.diffPanel.width}
+          dragging={docks.diffPanel.dragging}
+          onResizeStart={docks.diffPanel.startDrag}
+          onClose={() => docks.setShowDiff(false)}
           onComment={(file, target, comment) => {
             const where = target.lineNo != null ? ` (ligne ${target.lineNo})` : "";
             void send(
@@ -1012,31 +699,31 @@ export default function App({ startup }: { startup: Startup }) {
           }}
         />
 
-        {browserOpened && (
+        {docks.browserOpened && (
           <BrowserDock
-            visible={browserVisible}
-            suspended={searchOpen || deletingId !== null || browserAgent.approval !== null || showInspector}
-            width={browserPanel.width}
-            dragging={browserPanel.dragging}
-            onResizeStart={browserPanel.startDrag}
-            onClose={() => setShowBrowser(false)}
-            driving={browserAgent.driving}
-            openRequest={openRequest}
+            visible={docks.browserVisible}
+            suspended={searchOpen || deletingId !== null || docks.browserAgent.approval !== null || showInspector}
+            width={docks.browserPanel.width}
+            dragging={docks.browserPanel.dragging}
+            onResizeStart={docks.browserPanel.startDrag}
+            onClose={() => docks.setShowBrowser(false)}
+            driving={docks.browserAgent.driving}
+            openRequest={docks.openRequest}
             onSendDiagnostics={(report) => void sendMessage(report)}
           />
         )}
 
-        {terminalOpened && (
+        {docks.terminalOpened && (
           <TerminalDock
-            visible={showTerminal}
-            maximized={terminalMaximized}
-            width={terminalPanel.width}
-            dragging={terminalPanel.dragging}
-            onResizeStart={terminalPanel.startDrag}
-            onToggleMaximize={() => setTerminalMaximized((v) => !v)}
+            visible={docks.showTerminal}
+            maximized={docks.terminalMaximized}
+            width={docks.terminalPanel.width}
+            dragging={docks.terminalPanel.dragging}
+            onResizeStart={docks.terminalPanel.startDrag}
+            onToggleMaximize={() => docks.setTerminalMaximized((v) => !v)}
             onClose={() => {
-              setShowTerminal(false);
-              setTerminalMaximized(false);
+              docks.setShowTerminal(false);
+              docks.setTerminalMaximized(false);
             }}
           />
         )}
@@ -1087,10 +774,10 @@ export default function App({ startup }: { startup: Startup }) {
         />
       )}
 
-      {browserAgent.approval && (
+      {docks.browserAgent.approval && (
         <BrowserApprovalDialog
-          approval={browserAgent.approval}
-          onAnswer={(allow) => browserAgent.answer(browserAgent.approval!.requestId, allow)}
+          approval={docks.browserAgent.approval}
+          onAnswer={(allow) => docks.browserAgent.answer(docks.browserAgent.approval!.requestId, allow)}
         />
       )}
 
@@ -1110,57 +797,11 @@ export default function App({ startup }: { startup: Startup }) {
       />
 
       <AdvisorModal
-        open={advisorModal.open}
-        initialQuery={advisorModal.query}
-        onClose={() => setAdvisorModal((prev) => ({ ...prev, open: false }))}
-        onApplySingle={({ agentId: nextAgent, mode: nextMode, sandbox, prompt }) => {
-          setAgent(selected.id, nextAgent, selected.modelId);
-          if (sandbox) {
-            conversations.setEnvironment(selected.id, { kind: "local", sandbox: true });
-          }
-          changeMode(nextMode);
-          void sendMessage(prompt, nextMode);
-        }}
-        onLaunchCrossReview={({ implementer, reviewer, verifier, mode: nextMode, sandbox, taskDescription }) => {
-          setAgent(selected.id, implementer, selected.modelId);
-          if (sandbox) {
-            conversations.setEnvironment(selected.id, { kind: "local", sandbox: true });
-          }
-          changeMode(nextMode);
-          setShowPlan(true);
-
-          const reviewPrompt = `[Cross-Review Étape 2/3 · Revue critique du Diff par ${reviewer}]\nRelis le diff produit par ${implementer} pour « ${taskDescription} », signale toute régression, faille ou angle mort et propose les correctifs.`;
-          const verifyPrompt = `[Cross-Review Étape 3/3 · Vérification & Tests par ${verifier}]\nVérifie la compilation, les tests unitaires/E2E et le rendu Globe pour « ${taskDescription} ».`;
-
-          const revId = conversations.spawnSubagent(selected.id, `Cross-Review (${reviewer})`, reviewPrompt, true);
-          if (revId) {
-            setAgent(revId, reviewer, undefined);
-            void sendToThread(revId, reviewer, reviewPrompt, "plan");
-          }
-
-          const verId = conversations.spawnSubagent(selected.id, `Vérification (${verifier})`, verifyPrompt, false);
-          if (verId) {
-            setAgent(verId, verifier, undefined);
-            void sendToThread(verId, verifier, verifyPrompt, nextMode);
-          }
-
-          setCrossReviewMap((prev) => ({
-            ...prev,
-            [selected.id]: {
-              taskSummary: taskDescription,
-              stages: [
-                { step: 1, role: "Implémentation", agentId: implementer, status: "running" },
-                { step: 2, role: "Cross-Review du Diff", agentId: reviewer, status: "running" },
-                { step: 3, role: "Vérification & Globe", agentId: verifier, status: "running" },
-              ],
-            },
-          }));
-
-          void sendMessage(
-            `[Pipeline Cross-Review Multi-Fournisseurs (${implementer} → ${reviewer} → ${verifier})]\nÉtape 1 · Implémentation principale : ${taskDescription}`,
-            nextMode,
-          );
-        }}
+        open={crossReview.advisorModal.open}
+        initialQuery={crossReview.advisorModal.query}
+        onClose={crossReview.closeAdvisor}
+        onApplySingle={crossReview.applySingleRecommendation}
+        onLaunchCrossReview={crossReview.launchCrossReview}
       />
 
       {deleting && (
