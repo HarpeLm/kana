@@ -113,3 +113,13 @@ pub async fn delete_repo_file(path: Option<String>, file: String) -> Result<(), 
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// La branche actuelle de chaque dossier (`None` : pas un dépôt, ou tête détachée), dans le même ordre.
+#[tauri::command]
+pub async fn git_current_branches(paths: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        paths.iter().map(|p| kana_git::current_branch(std::path::Path::new(p))).collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
