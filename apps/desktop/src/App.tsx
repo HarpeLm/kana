@@ -6,7 +6,7 @@ import type { Startup } from "./lib/startup";
 import { useProjects } from "./hooks/useProjects";
 import { setThreadEffort, setThreadModel } from "./lib/models";
 import { chosenEffort } from "./lib/effort";
-import { autoTitle } from "./lib/autoTitle";
+import { agentTitle, autoTitle } from "./lib/autoTitle";
 import EffortPicker from "./components/EffortPicker";
 import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
@@ -112,6 +112,7 @@ export default function App({ startup }: { startup: Startup }) {
   );
   // Ce que les agents consomment, et les limites qu'ils atteignent (voir « Relais »).
   const agentOf = (threadId: string) => itemsRef.current.find((c) => c.id === threadId)?.agentId;
+  const pendingTitles = useRef(new Map<string, { request: string; provisional: string }>());
   const observer = {
     onTurnUsage: (threadId: string, usage: { input: number; output: number; total: number }) => {
       const agent = agentOf(threadId);
@@ -120,6 +121,15 @@ export default function App({ startup }: { startup: Startup }) {
     onDone: (threadId: string) => {
       const agent = agentOf(threadId);
       if (!agent) return;
+      // Au premier tour fini, l'agent écrit un vrai titre (sauf si la conversation a été renommée entre-temps).
+      const pending = pendingTitles.current.get(threadId);
+      if (pending) {
+        pendingTitles.current.delete(threadId);
+        void agentTitle(agent, pending.request).then((title) => {
+          const now = itemsRef.current.find((c) => c.id === threadId);
+          if (title && now && now.title === pending.provisional) conversations.rename(threadId, title);
+        });
+      }
       recordTurn(agent);
       clearProblem(agent);
     },
@@ -176,7 +186,9 @@ export default function App({ startup }: { startup: Startup }) {
   // Le premier message donne son titre à la conversation et remet son projet en tête des récents.
   const sendMessage = (text: string) => {
     if (selected.title === "Nouvelle conversation") {
-      conversations.rename(selected.id, autoTitle(text));
+      const provisional = autoTitle(text);
+      conversations.rename(selected.id, provisional);
+      if (!text.trim().startsWith("/")) pendingTitles.current.set(selected.id, { request: text, provisional });
     }
     const project = projectList.projects.find((p) => p.path === selected.projectPath);
     if (project) projectList.use(project);
