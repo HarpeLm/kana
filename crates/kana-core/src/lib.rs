@@ -1,5 +1,6 @@
 //! Logique métier de Kana partagée entre les interfaces et le backend Tauri.
 
+pub mod bench;
 pub mod cli;
 pub mod limits;
 pub mod permission;
@@ -8,6 +9,10 @@ pub mod schedule;
 pub mod thread;
 pub mod usage;
 
+pub use bench::{
+    BenchDatasetTask, BenchPrediction, build_bench_prompt, build_docker_bench_args,
+    format_predictions_jsonl, parse_bench_dataset,
+};
 pub use cli::{
     BenchEvalReport, CliCommand, PublicBenchSuite, PublicBenchTask, advisor_recommendation,
     format_bench_report, format_cli_help, parse_cli_args, run_public_benchmark_harness,
