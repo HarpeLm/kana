@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Box, Cloud, Container, Laptop, Server, Shield } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Box, Check, ChevronDown, Cloud, Container, Laptop, Server, Shield } from "lucide-react";
+import { useClickOutside } from "../../hooks/useClickOutside";
 import type { Conversation, EnvironmentKind } from "../../lib/conversations";
 import {
   checkCloudHealth,
@@ -20,6 +21,18 @@ interface SessionEnvironmentCardProps {
   onChangeEnvironment: (environment: Conversation["environment"]) => void;
 }
 
+const ENV_OPTIONS: Array<{ kind: EnvironmentKind; label: string; icon: ReactNode }> = [
+  { kind: "local", label: "Cet ordinateur", icon: <Laptop className="h-4 w-4" strokeWidth={1.7} /> },
+  { kind: "ssh", label: "SSH distant", icon: <Server className="h-4 w-4" strokeWidth={1.7} /> },
+  { kind: "docker", label: "Conteneur Docker", icon: <Container className="h-4 w-4" strokeWidth={1.7} /> },
+  { kind: "devcontainer", label: "DevContainer", icon: <Box className="h-4 w-4" strokeWidth={1.7} /> },
+  {
+    kind: "cloud",
+    label: "Kana Cloud (Managé / Mobile)",
+    icon: <Cloud className="h-4 w-4 text-[#8ab4f8]" strokeWidth={1.7} />,
+  },
+];
+
 export default function SessionEnvironmentCard({
   conversation,
   agentId,
@@ -27,6 +40,19 @@ export default function SessionEnvironmentCard({
   projectPath,
   onChangeEnvironment,
 }: SessionEnvironmentCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(menuRef, menuOpen, () => setMenuOpen(false));
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
+
   const [cloudConfig, setCloudConfig] = useState(loadCloudConfig);
   const [cloudHealth, setCloudHealth] = useState<CloudHealth | null>(null);
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -38,20 +64,25 @@ export default function SessionEnvironmentCard({
 
   const env = conversation.environment ?? { kind: "local" as const, sandbox: false };
   const envKind: EnvironmentKind = env.kind ?? "local";
+  const currentOption = ENV_OPTIONS.find((opt) => opt.kind === envKind) ?? ENV_OPTIONS[0];
   const envIcon =
-    envKind === "cloud" ? (
-      <Cloud className="h-4 w-4 text-[#8ab4f8]" strokeWidth={1.7} />
-    ) : envKind === "ssh" ? (
-      <Server className="h-4 w-4" strokeWidth={1.7} />
-    ) : envKind === "docker" ? (
-      <Container className="h-4 w-4" strokeWidth={1.7} />
-    ) : envKind === "devcontainer" ? (
-      <Box className="h-4 w-4" strokeWidth={1.7} />
-    ) : env.sandbox ? (
+    envKind === "local" && env.sandbox ? (
       <Shield className="h-4 w-4 text-[#8ce09b]" strokeWidth={1.7} />
     ) : (
-      <Laptop className="h-4 w-4" strokeWidth={1.7} />
+      currentOption.icon
     );
+
+  const selectEnvironment = (nextKind: EnvironmentKind) => {
+    setMenuOpen(false);
+    if (nextKind === "local") {
+      onChangeEnvironment({ kind: "local", sandbox: env.sandbox ?? false });
+    } else if (nextKind === "cloud") {
+      const url = env.cloudUrl ?? cloudConfig.url;
+      onChangeEnvironment({ kind: "cloud", cloudUrl: url, target: url });
+    } else {
+      onChangeEnvironment({ kind: nextKind, target: envKind === nextKind ? env.target ?? "" : "" });
+    }
+  };
 
   const activeCloudUrl = env.cloudUrl ?? cloudConfig.url;
 
@@ -107,37 +138,60 @@ export default function SessionEnvironmentCard({
   };
 
   return (
-    <div className="space-y-2 px-1 pb-1.5">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[#9a9992]">
-          {envIcon}
-        </span>
-        <select
+    <div className="space-y-1.5 pb-1">
+      <div ref={menuRef} className="relative">
+        <button
+          type="button"
           aria-label="Environnement d'exécution"
-          value={envKind}
-          onChange={(e) => {
-            const nextKind = e.target.value as EnvironmentKind;
-            if (nextKind === "local") {
-              onChangeEnvironment({ kind: "local", sandbox: env.sandbox ?? false });
-            } else if (nextKind === "cloud") {
-              const url = env.cloudUrl ?? cloudConfig.url;
-              onChangeEnvironment({ kind: "cloud", cloudUrl: url, target: url });
-            } else {
-              onChangeEnvironment({ kind: nextKind, target: envKind === nextKind ? env.target ?? "" : "" });
-            }
-          }}
-          className="min-w-0 flex-1 rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[13px] text-[#ecebe4] outline-none focus:border-[#55554f]"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((v) => !v)}
+          className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left text-[14px] text-[#ecebe4] transition hover:bg-[#2a2a28]"
         >
-          <option value="local">Cet ordinateur</option>
-          <option value="cloud">Kana Cloud (Managé / Mobile)</option>
-          <option value="ssh">SSH distant</option>
-          <option value="docker">Conteneur Docker</option>
-          <option value="devcontainer">DevContainer</option>
-        </select>
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[#9a9992]">
+            {envIcon}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{currentOption.label}</span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-[#8c8b83] transition-transform ${menuOpen ? "rotate-180" : ""}`}
+            strokeWidth={1.8}
+          />
+        </button>
+
+        {menuOpen && (
+          <div
+            role="menu"
+            aria-label="Choisir un environnement d'exécution"
+            className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-[#343430] bg-[#21211f] p-1 shadow-xl"
+          >
+            {ENV_OPTIONS.map((opt) => {
+              const active = opt.kind === envKind;
+              return (
+                <button
+                  key={opt.kind}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => selectEnvironment(opt.kind)}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition ${
+                    active
+                      ? "bg-[#2b2b29] text-[#ecebe4]"
+                      : "text-[#cfcec6] hover:bg-[#2b2b29] hover:text-[#ecebe4]"
+                  }`}
+                >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[#8c8b83]">
+                    {opt.icon}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-[#ecebe4]" strokeWidth={2} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {envKind === "local" && (
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-1 text-[12.5px] text-[#cfcec6] hover:bg-[#2a2a28]">
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1 text-[12.5px] text-[#cfcec6] hover:bg-[#2a2a28]">
           <input
             type="checkbox"
             checked={!!env.sandbox}
