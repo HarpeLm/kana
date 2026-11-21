@@ -17,17 +17,40 @@ pub(crate) fn image_mime(path: &Path) -> Option<&'static str> {
     }
 }
 
-/// L'image sous forme d'adresse `data:` pour l'afficher, ou `None` si ce n'est pas une image
-/// connue ou si elle est trop lourde.
-#[tauri::command]
-pub fn image_preview(path: String) -> Option<String> {
-    let path = Path::new(&path);
+/// Au-delà, on n'essaie même pas de lire l'image pour la réduire.
+const MAX_THUMBNAIL_SOURCE_BYTES: u64 = 120 * 1024 * 1024;
+/// Côté maximal d'une miniature réduite.
+const THUMBNAIL_SIDE: u32 = 320;
+
+/// Une image lourde réduite en miniature (JPEG), pour l'afficher sans envoyer des dizaines de Mo à l'interface.
+fn thumbnail(path: &Path) -> Option<String> {
+    use image::ImageReader;
+    let mut reader = ImageReader::open(path).ok()?.with_guessed_format().ok()?;
+    // Une image aux dimensions démesurées est refusée plutôt que décodée en mémoire.
+    let mut limits = image::Limits::default();
+    limits.max_alloc = Some(512 * 1024 * 1024);
+    reader.limits(limits);
+    let small = reader.decode().ok()?.thumbnail(THUMBNAIL_SIDE, THUMBNAIL_SIDE).to_rgb8();
+    let mut out = std::io::Cursor::new(Vec::new());
+    small.write_to(&mut out, image::ImageFormat::Jpeg).ok()?;
+    Some(format!("data:image/jpeg;base64,{}", STANDARD.encode(out.into_inner())))
+}
+
+fn preview(path: &Path) -> Option<String> {
     let mime = image_mime(path)?;
-    if fs::metadata(path).ok()?.len() > MAX_PREVIEW_BYTES {
-        return None;
+    let size = fs::metadata(path).ok()?.len();
+    if size > MAX_PREVIEW_BYTES {
+        return if size <= MAX_THUMBNAIL_SOURCE_BYTES { thumbnail(path) } else { None };
     }
     let bytes = fs::read(path).ok()?;
     Some(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
+}
+
+/// L'image sous forme d'adresse `data:` pour l'afficher : telle quelle jusqu'à 10 Mo, sinon réduite en miniature.
+/// `None` si ce n'est pas une image connue, ou si elle est illisible ou démesurée.
+#[tauri::command]
+pub async fn image_preview(path: String) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || preview(Path::new(&path))).await.ok()?
 }
 
 #[cfg(test)]
@@ -42,8 +65,20 @@ mod tests {
         let text = dir.join("a.txt");
         fs::write(&png, [1u8, 2, 3]).unwrap();
         fs::write(&text, "x").unwrap();
-        assert_eq!(image_preview(png.to_string_lossy().into()), Some("data:image/png;base64,AQID".into()));
-        assert_eq!(image_preview(text.to_string_lossy().into()), None);
-        assert_eq!(image_preview("/nonexistent/x.png".into()), None);
+        assert_eq!(preview(&png), Some("data:image/png;base64,AQID".into()));
+        assert_eq!(preview(&text), None);
+        assert_eq!(preview(Path::new("/nonexistent/x.png")), None);
+    }
+
+    #[test]
+    fn heavy_images_are_shrunk_to_a_thumbnail() {
+        let dir = std::env::temp_dir().join("kana-thumb-test");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("big.png");
+        image::RgbImage::from_fn(1200, 900, |x, y| image::Rgb([(x % 256) as u8, (y % 256) as u8, 7])).save(&file).unwrap();
+        let url = thumbnail(&file).expect("miniature");
+        assert!(url.starts_with("data:image/jpeg;base64,"));
+        assert!(url.len() < 60_000);
+        assert_eq!(thumbnail(&dir.join("absent.png")), None);
     }
 }
