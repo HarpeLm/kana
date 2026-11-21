@@ -139,6 +139,13 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Ajoute un dossier à la session (retenu avec la conversation). */
+  const addFolder = useCallback(
+    (id: string, path: string) =>
+      patch(id, (c) => ({ ...c, extraFolders: [...new Set([...(c.extraFolders ?? []), path])] })),
+    [patch],
+  );
+
   /** Le relais : la conversation continue chez un autre fournisseur, avec le résumé de ce qui s'est dit. */
   const relayTo = useCallback(
     (id: string, agentId: string, context: string) =>
@@ -217,6 +224,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     select,
     create,
     rename,
+    addFolder,
     togglePin,
     toggleUnread,
     toggleArchive,
