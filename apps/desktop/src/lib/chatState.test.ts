@@ -256,4 +256,26 @@ describe("chatState", () => {
     expect(firstRewind.checkpoint).toBe("refs/kana/checkpoints/cp1");
     expect(firstRewind.chat.messages).toEqual([]);
   });
+
+  it("masque automatiquement les secrets dans les sorties et paramètres d'outils", () => {
+    const chat = run(
+      addUserMessage(EMPTY_CHAT, "check"),
+      {
+        kind: "tool_call",
+        id: "t-sec",
+        title: "curl -H 'Authorization: Bearer tok_secret123'",
+        status: "completed",
+        raw_input: { command: "echo sk-proj-abc1234567890", api_key: "raw_secret_key" },
+        output: "OPENAI_API_KEY=sk-proj-abc1234567890\nstatus=ok",
+      },
+    );
+    const tool = chat.messages[1].tools[0];
+    expect(tool.title).toContain("Bearer [SECRET MASQUÉ]");
+    expect(tool.title).not.toContain("tok_secret123");
+    expect(tool.input).toEqual({
+      command: "echo [SECRET MASQUÉ]",
+      api_key: "[SECRET MASQUÉ]",
+    });
+    expect(tool.output).toBe("OPENAI_API_KEY=[SECRET MASQUÉ]\nstatus=ok");
+  });
 });
