@@ -1,16 +1,16 @@
-## Ce que fait ce changement
+## What this change does
 
-<!-- Une ou deux phrases. Le lien vers l'issue, s'il y en a une : Closes #123 -->
+<!-- One or two sentences. The link to the issue, if there is one: Closes #123 -->
 
-## Pourquoi
+## Why
 
-## Comment je l'ai vérifié
+## How I checked it
 
 - [ ] `cargo test --workspace`
-- [ ] `npx tsc --noEmit`, `npm test` et `npm run test:e2e` (dans `apps/desktop`)
-- [ ] J'ai ajouté ou adapté des tests
-- [ ] Essayé à la main dans l'application (si le changement se voit à l'écran)
+- [ ] `npx tsc --noEmit`, `npm test` and `npm run test:e2e` (in `apps/desktop`)
+- [ ] I added or adapted tests
+- [ ] Tried by hand in the app (if the change is visible on screen)
 
-## Capture d'écran
+## Screenshot
 
-<!-- Pour un changement visible. Sinon, supprimez cette section. -->
+<!-- For a visible change. Otherwise, delete this section. -->
