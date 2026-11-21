@@ -4,6 +4,7 @@ import {
   cancelPrompt,
   onAgentEvent,
   sendPrompt,
+  setPlanMode,
   startAgent,
 } from "../lib/acp";
 import {
@@ -156,6 +157,8 @@ export function useChat(
         const intro = carried || !introduced.current.has(key) ? preface : undefined;
         introduced.current.add(key);
         await startAgent(threadId, agentId, cwd, model, effort);
+        // En plan, l'agent passe dans son propre mode lecture seule quand il en a un ; sinon Kana refuse les modifications (voir autoAnswer).
+        await setPlanMode(threadId, modeRef.current === "plan").catch(() => false);
         await sendPrompt(threadId, promptFor(modeRef.current, intro ? `${intro}${text}` : text), imagePathsIn(text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
