@@ -8,11 +8,19 @@ export interface ChangedFile {
   status: ChangeStatus;
 }
 
+export interface RepoSymbol {
+  name: string;
+  kind: string;
+  path: string;
+  line: number;
+}
+
 export interface FileList {
   root: string;
   files: string[];
   truncated: boolean;
   changes: ChangedFile[];
+  symbols?: RepoSymbol[];
 }
 
 export interface FilePreview {
@@ -50,6 +58,12 @@ const SAMPLE_HTML = `<!DOCTYPE html>
 <script>document.body.insertAdjacentHTML('beforeend','<p>Ajouté par un script</p>')</script>
 </body></html>
 `;
+const SAMPLE_SYMBOLS: RepoSymbol[] = [
+  { name: "AcpClient", kind: "struct", path: "crates/kana-acp/src/client.rs", line: 54 },
+  { name: "list_files", kind: "fn", path: "crates/kana-git/src/lib.rs", line: 50 },
+  { name: "App", kind: "fn", path: "apps/desktop/src/App.tsx", line: 60 },
+  { name: "Sidebar", kind: "fn", path: "apps/desktop/src/components/Sidebar.tsx", line: 20 },
+];
 const sampleTexts = new Map<string, { text: string; modified: number }>();
 
 function sampleOf(path: string) {
@@ -74,7 +88,134 @@ export function loadFileList(root?: string): Promise<FileList> {
     files: SAMPLE_FILES,
     truncated: false,
     changes: [{ path: "README.md", status: "modified" }],
+    symbols: SAMPLE_SYMBOLS,
   });
+}
+
+export type MentionKind = "file" | "folder" | "symbol" | "artifact";
+
+export interface MentionItem {
+  id: string;
+  kind: MentionKind;
+  label: string;
+  detail: string;
+  insert: string;
+}
+
+const ARTIFACT_FILE = /(^|\/)artefacts\/[^/]+$/i;
+const MENTION_PREFIX: Array<[RegExp, MentionKind]> = [
+  [/^(?:fichier|file):(.*)$/i, "file"],
+  [/^(?:dossier|folder):(.*)$/i, "folder"],
+  [/^(?:symbole|symbol):(.*)$/i, "symbol"],
+  [/^(?:art[eé]fact|artifact):(.*)$/i, "artifact"],
+];
+
+function artifactLabel(path: string): string {
+  const name = (path.split("/").pop() ?? path).replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : path;
+}
+
+/** Construit les suggestions d'autocomplétion `@fichier`, `@dossier`, `@symbole` et `@artéfact`. */
+export function buildMentionItems(
+  list: FileList | null,
+  query: string,
+  filterKind: MentionKind | "all" = "all",
+): MentionItem[] {
+  if (!list) return [];
+  let activeFilter = filterKind;
+  let search = query.trim();
+  for (const [pattern, kind] of MENTION_PREFIX) {
+    const match = search.match(pattern);
+    if (match) {
+      activeFilter = kind;
+      search = match[1].trim();
+      break;
+    }
+  }
+  const needle = search.toLowerCase();
+
+  const artifacts: MentionItem[] = list.files
+    .filter((f) => ARTIFACT_FILE.test(f))
+    .map((path) => ({
+      id: `artifact:${path}`,
+      kind: "artifact",
+      label: artifactLabel(path),
+      detail: path,
+      insert: path,
+    }));
+
+  const files: MentionItem[] = list.files
+    .filter((f) => !ARTIFACT_FILE.test(f))
+    .map((path) => ({
+      id: `file:${path}`,
+      kind: "file",
+      label: path.split("/").pop() ?? path,
+      detail: path,
+      insert: path,
+    }));
+
+  const dirSet = new Set<string>();
+  for (const path of list.files) {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      dirSet.add(`${parts.slice(0, i).join("/")}/`);
+    }
+  }
+  const folders: MentionItem[] = [...dirSet].sort().map((dir) => {
+    const trimmed = dir.slice(0, -1);
+    const name = `${trimmed.split("/").pop() ?? trimmed}/`;
+    return {
+      id: `folder:${dir}`,
+      kind: "folder",
+      label: name,
+      detail: dir,
+      insert: dir,
+    };
+  });
+
+  const symbols: MentionItem[] = (list.symbols ?? []).map((s) => ({
+    id: `symbol:${s.path}:${s.line}:${s.name}`,
+    kind: "symbol",
+    label: s.name,
+    detail: `${s.kind} · ${s.path}:${s.line}`,
+    insert: `${s.name} (${s.path}:${s.line})`,
+  }));
+
+  if (!needle && activeFilter === "all") {
+    return [
+      ...artifacts.slice(0, 2),
+      ...files.slice(0, 4),
+      ...folders.slice(0, 2),
+      ...symbols.slice(0, 2),
+    ];
+  }
+
+  const pool =
+    activeFilter === "artifact"
+      ? artifacts
+      : activeFilter === "file"
+        ? files
+        : activeFilter === "folder"
+          ? folders
+          : activeFilter === "symbol"
+            ? symbols
+            : [...artifacts, ...symbols, ...folders, ...files];
+
+  if (!needle) return pool.slice(0, 10);
+
+  const score = (item: MentionItem) => {
+    const label = item.label.toLowerCase();
+    if (label.startsWith(needle)) return 0;
+    if (label.includes(needle)) return 1;
+    if (item.detail.toLowerCase().includes(needle)) return 2;
+    return 99;
+  };
+  return pool
+    .map((item) => ({ item, rank: score(item) }))
+    .filter((x) => x.rank < 99)
+    .sort((a, b) => a.rank - b.rank || a.item.label.length - b.item.label.length)
+    .slice(0, 10)
+    .map((x) => x.item);
 }
 
 /** Le début d'un fichier du dépôt. */
