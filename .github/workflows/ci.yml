@@ -1,0 +1,44 @@
+name: Tests
+
+# À chaque push et à chaque pull request : les tests Rust, puis ceux de l'interface.
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests
+        run: cargo test --workspace
+
+  interface:
+    name: Interface
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+      - name: Types
+        run: npx tsc --noEmit
+      - name: Tests de la logique (Vitest)
+        run: npm test
+      - name: Navigateur de test
+        run: npx playwright install --with-deps chromium
+      - name: Tests de l'écran (Playwright)
+        run: npm run test:e2e
