@@ -5,6 +5,7 @@ import type { AvailableCommand } from "../lib/acp";
 import { pickFiles, readClipboardImages, withAttachments } from "../lib/attachments";
 import { applyTrigger, detectTrigger, mergeCommands } from "../lib/chatState";
 import { buildMentionItems, loadFileList, type FileList, type MentionItem, type MentionKind } from "../lib/files";
+import { tr, useLocale } from "../lib/i18n";
 import type { PermissionMode } from "../lib/permissionMode";
 import AttachmentList from "./AttachmentList";
 import ModeMenu from "./ModeMenu";
@@ -70,6 +71,7 @@ export default function Composer({
   placeholder,
   onOpenExtensibility,
 }: ComposerProps) {
+  const locale = useLocale();
   const [text, setText] = useState("");
   const [cursor, setCursor] = useState(0);
   const [files, setFiles] = useState<string[]>([]);
@@ -166,7 +168,7 @@ export default function Composer({
   const submit = () => {
     const value = text.trim();
     if (!value && files.length === 0) return;
-    onSend(withAttachments(value || "Analyse ces fichiers joints.", files));
+    onSend(withAttachments(value || tr("Analyse ces fichiers joints.", "Analyze these attached files.", locale), files));
     setText("");
     setCursor(0);
     setFiles([]);
@@ -252,7 +254,7 @@ export default function Composer({
             {queued.map((item, index) => (
               <div key={`${index}-${item.slice(0, 16)}`} className="flex items-center gap-2 rounded-xl bg-[#252523] px-2.5 py-1.5 text-[12.5px]">
                 <span className="shrink-0 rounded-full bg-[#2f6bd8]/20 px-2 py-0.5 text-[11px] font-medium text-[#7db4ff]">
-                  En attente
+                  {tr("En attente", "Queued", locale)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[#dcdbd3]">{item}</span>
                 {onSteerQueued && (
@@ -260,17 +262,17 @@ export default function Composer({
                     type="button"
                     onClick={() => onSteerQueued(index)}
                     className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 text-[11.5px] text-[#e6e5df] transition hover:bg-[#333331]"
-                    title="Interrompre le tour actuel et envoyer ce message maintenant"
+                    title={tr("Interrompre le tour actuel et envoyer ce message maintenant", "Interrupt current turn and send this message now", locale)}
                   >
                     <CornerDownRight className="h-3 w-3" strokeWidth={1.8} />
-                    Envoyer maintenant
+                    {tr("Envoyer maintenant", "Send now", locale)}
                   </button>
                 )}
                 {onRemoveQueued && (
                   <button
                     type="button"
                     onClick={() => onRemoveQueued(index)}
-                    aria-label="Retirer de la file"
+                    aria-label={tr("Retirer de la file", "Remove from queue", locale)}
                     className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[#8c8b83] transition hover:bg-[#333331] hover:text-[#ecebe4]"
                   >
                     <X className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -388,10 +390,15 @@ export default function Composer({
             onKeyDown={handleKeyDown}
             placeholder={
               dragging
-                ? "Dépose les fichiers ici"
+                ? tr("Dépose les fichiers ici", "Drop files here", locale)
                 : busy
-                  ? "Ajouter un message à la file d'attente..."
-                  : (placeholder ?? "Demander à Kana d'écrire, refactorer ou déboguer... (@ pour citer, / pour commander)")
+                  ? tr("Ajouter un message à la file d'attente...", "Add a message to the queue...", locale)
+                  : (placeholder ??
+                      tr(
+                        "Demander à Kana d'écrire, refactorer ou déboguer... (@ pour citer, / pour commander)",
+                        "Ask Kana to write, refactor, or debug... (@ to mention, / for commands)",
+                        locale,
+                      ))
             }
             className="[field-sizing:content] my-1 h-auto min-h-[24px] max-h-[10lh] w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-[1.45] text-[#ecebe4] placeholder-[#7e7d76] outline-none"
           />
@@ -401,8 +408,8 @@ export default function Composer({
                 <button
                   type="button"
                   onClick={submit}
-                  aria-label="Mettre en file d'attente"
-                  title="Mettre en file d'attente (Entrée)"
+                  aria-label={tr("Mettre en file d'attente", "Queue message", locale)}
+                  title={tr("Mettre en file d'attente (Entrée)", "Queue message (Enter)", locale)}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2f6bd8] text-white transition hover:bg-[#4079e0]"
                 >
                   <ListPlus className="h-4 w-4" strokeWidth={2} />
@@ -411,7 +418,7 @@ export default function Composer({
               <button
                 type="button"
                 onClick={onStop}
-                aria-label="Arrêter"
+                aria-label={tr("Arrêter", "Stop", locale)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#ecebe4] transition hover:bg-white"
               >
                 <Square className="h-3 w-3 fill-[#181817] text-[#181817]" />
@@ -422,7 +429,7 @@ export default function Composer({
               type="button"
               onClick={submit}
               disabled={!text.trim() && files.length === 0}
-              aria-label="Envoyer"
+              aria-label={tr("Envoyer", "Send", locale)}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2f6bd8] text-white transition hover:bg-[#4079e0] disabled:opacity-35"
             >
               <ArrowUp className="h-4 w-4" strokeWidth={2.2} />
