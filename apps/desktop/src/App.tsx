@@ -481,6 +481,10 @@ export default function App({ startup }: { startup: Startup }) {
                 canCompact={!chat.busy && chat.messages.length > 0}
                 onOpenFile={openFile}
                 onOpenTerminal={() => setShowTerminal(true)}
+                canAddFolder={!chat.busy}
+                onAddFolder={(path) =>
+                  void send(`Tu as aussi accès à ce dossier, en plus du dossier de travail : ${path}\nLis-le quand c'est utile, sans rien y modifier sauf si je te le demande.`)
+                }
                 onDiscarded={() => {
                   stopAgent(selected.id).catch(() => {});
                   conversations.clearWorktree(selected.id);
