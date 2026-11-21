@@ -235,8 +235,10 @@ describe("chatState", () => {
     expect(extractStructuredQuestion(answered, false)).toBeNull();
   });
 
-  it("propose /rewind dans les commandes de base et ramène le fil au tour ciblé", () => {
+  it("propose /rewind, /advisor et /cross-review dans les commandes de base et ramène le fil au tour ciblé", () => {
     expect(mergeCommands([], "rew").map((c) => c.name)).toEqual(["rewind"]);
+    expect(mergeCommands([], "adv").map((c) => c.name)).toEqual(["advisor"]);
+    expect(mergeCommands([], "cross-rev").map((c) => c.name)).toEqual(["cross-review"]);
 
     let chat = addUserMessage(EMPTY_CHAT, "Tour 1");
     const m1 = chat.messages[0].id;
