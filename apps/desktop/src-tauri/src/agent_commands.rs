@@ -38,6 +38,7 @@ pub async fn start_agent(
     agent: String,
     cwd: Option<String>,
     model: Option<String>,
+    effort: Option<String>,
 ) -> Result<(), String> {
     if sessions.get(&thread_id).await.is_some() {
         return Ok(());
@@ -65,6 +66,12 @@ pub async fn start_agent(
         let known = client.models();
         if known.current.as_deref() != Some(model.as_str()) && known.available.iter().any(|m| m.id == model) {
             let _ = client.set_model(&model).await;
+        }
+    }
+    // Le niveau d'effort choisi, s'il diffère de celui de l'agent.
+    if let (Some(value), Some(known)) = (effort, client.models().effort.as_ref()) {
+        if known.current.as_deref() != Some(value.as_str()) && known.options.iter().any(|o| o.id == value) {
+            let _ = client.set_effort(&value).await;
         }
     }
     sessions.insert(thread_id.clone(), Arc::new(client)).await;
@@ -114,6 +121,17 @@ pub async fn set_model(
 ) -> Result<(), String> {
     let client = client_of(&sessions, &thread_id).await?;
     client.set_model(&model).await.map_err(|e| e.to_string())
+}
+
+/// Change le niveau d'effort d'un agent déjà lancé.
+#[tauri::command]
+pub async fn set_effort(
+    sessions: State<'_, AgentSessions>,
+    thread_id: String,
+    value: String,
+) -> Result<(), String> {
+    let client = client_of(&sessions, &thread_id).await?;
+    client.set_effort(&value).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
