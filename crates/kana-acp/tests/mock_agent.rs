@@ -253,3 +253,200 @@ case "$line" in *'"method":"session/new"'*) echo '{"jsonrpc":"2.0","id":2,"resul
     assert!(!client.resumed());
     assert_eq!(client.session_id(), "neuve");
 }
+
+#[tokio::test]
+async fn quota_relay_switches_from_rate_limited_agent_to_healthy_backup_with_100_percent_success() {
+    // Le premier agent renvoie une erreur de quota (429 Too Many Requests - usage limit reached).
+    let failing_quota_script = format!(
+        r#"{HANDSHAKE}
+echo '{{"jsonrpc":"2.0","id":3,"error":{{"code":-32001,"message":"429 Too Many Requests - usage limit reached"}}}}'
+cat > /dev/null
+"#
+    );
+    // Le second agent (relais) reprend le contexte transmis et achève le tour avec succès.
+    let backup_relay_script = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+read line; echo '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"relay-codex-s2"}}'
+read line
+case "$line" in *"[Relais Quota]"*)
+  echo '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"relay-codex-s2","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Reprise Quota Relay OK"}}}}'
+  ;;
+esac
+echo '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}'
+cat > /dev/null
+"#;
+
+    let trials = 5usize;
+    let mut successes = 0usize;
+    for _ in 0..trials {
+        let (primary, _primary_events) =
+            AcpClient::spawn(&shell_agent(&failing_quota_script), &std::env::temp_dir())
+                .await
+                .unwrap();
+        let err = primary.prompt("Implémente la fonctionnalité").await.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(err_msg.contains("429") && err_msg.contains("usage limit reached"), "{err_msg}");
+
+        // Bascule automatique vers l'agent de secours du relais avec résumé de contexte
+        let (backup, mut backup_events) =
+            AcpClient::spawn(&shell_agent(backup_relay_script), &std::env::temp_dir())
+                .await
+                .unwrap();
+        assert_eq!(backup.session_id(), "relay-codex-s2");
+        backup
+            .prompt("[Relais Quota] Reprise après 429 sur claude : Implémente la fonctionnalité")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            next(&mut backup_events).await,
+            AcpEvent::Message {
+                text: "Reprise Quota Relay OK".into()
+            }
+        );
+        assert_eq!(
+            next(&mut backup_events).await,
+            AcpEvent::Done {
+                stop_reason: "end_turn".into()
+            }
+        );
+        successes += 1;
+    }
+    assert_eq!(successes, trials);
+}
+
+#[tokio::test]
+async fn stress_session_load_and_fallback_reliability_across_multi_sessions() {
+    for idx in 0..8usize {
+        if idx % 2 == 0 {
+            // Cas nominal : reprise via session/load + suppression du replay d'historique
+            let sid = format!("resumed-s{idx}");
+            let script = format!(
+                r#"
+read line; echo '{{"jsonrpc":"2.0","id":1,"result":{{"protocolVersion":1,"agentCapabilities":{{"loadSession":true}}}}}}'
+read line
+echo '{{"jsonrpc":"2.0","method":"session/update","params":{{"sessionId":"{sid}","update":{{"sessionUpdate":"agent_message_chunk","content":{{"type":"text","text":"Replay ignoré {idx}"}}}}}}}}'
+echo '{{"jsonrpc":"2.0","id":2,"result":{{}}}}'
+read line
+echo '{{"jsonrpc":"2.0","method":"session/update","params":{{"sessionId":"{sid}","update":{{"sessionUpdate":"agent_message_chunk","content":{{"type":"text","text":"Actif {idx}"}}}}}}}}'
+echo '{{"jsonrpc":"2.0","id":3,"result":{{"stopReason":"end_turn"}}}}'
+cat > /dev/null
+"#
+            );
+            let (client, mut events) = AcpClient::spawn_or_resume(
+                &shell_agent(&script),
+                &std::env::temp_dir(),
+                &[],
+                Some(&sid),
+            )
+            .await
+            .unwrap();
+            assert!(client.resumed());
+            assert_eq!(client.session_id(), sid);
+            client.prompt("go").await.unwrap();
+            assert_eq!(
+                next(&mut events).await,
+                AcpEvent::Message {
+                    text: format!("Actif {idx}")
+                }
+            );
+            assert_eq!(
+                next(&mut events).await,
+                AcpEvent::Done {
+                    stop_reason: "end_turn".into()
+                }
+            );
+        } else {
+            // Cas d'expiration (-32002) : repli transparent sur session/new
+            let fallback_sid = format!("fallback-s{idx}");
+            let script = format!(
+                r#"
+read line; echo '{{"jsonrpc":"2.0","id":1,"result":{{"protocolVersion":1,"agentCapabilities":{{"loadSession":true}}}}}}'
+read line; echo '{{"jsonrpc":"2.0","id":2,"error":{{"code":-32002,"message":"Session not found"}}}}'
+read line; echo '{{"jsonrpc":"2.0","id":3,"result":{{"sessionId":"{fallback_sid}"}}}}'
+read line
+echo '{{"jsonrpc":"2.0","method":"session/update","params":{{"sessionId":"{fallback_sid}","update":{{"sessionUpdate":"agent_message_chunk","content":{{"type":"text","text":"Neuf {idx}"}}}}}}}}'
+echo '{{"jsonrpc":"2.0","id":4,"result":{{"stopReason":"end_turn"}}}}'
+cat > /dev/null
+"#
+            );
+            let (client, mut events) = AcpClient::spawn_or_resume(
+                &shell_agent(&script),
+                &std::env::temp_dir(),
+                &[],
+                Some("expired-id"),
+            )
+            .await
+            .unwrap();
+            assert!(!client.resumed());
+            assert_eq!(client.session_id(), fallback_sid);
+            client.prompt("[Contexte repris] go").await.unwrap();
+            assert_eq!(
+                next(&mut events).await,
+                AcpEvent::Message {
+                    text: format!("Neuf {idx}")
+                }
+            );
+            assert_eq!(
+                next(&mut events).await,
+                AcpEvent::Done {
+                    stop_reason: "end_turn".into()
+                }
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn stress_ten_parallel_worktrees_run_concurrently_without_collision_or_deadlock() {
+    let mut set = tokio::task::JoinSet::new();
+    for worker_id in 0..10usize {
+        set.spawn(async move {
+            let worktree_dir = std::env::temp_dir().join(format!(
+                "kana-stress-wt-{}-{worker_id}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&worktree_dir).unwrap();
+            let sid = format!("wt-session-{worker_id}");
+            let script = format!(
+                r#"
+read line; echo '{{"jsonrpc":"2.0","id":1,"result":{{"protocolVersion":1}}}}'
+read line; echo '{{"jsonrpc":"2.0","id":2,"result":{{"sessionId":"{sid}"}}}}'
+read line
+echo '{{"jsonrpc":"2.0","method":"session/update","params":{{"sessionId":"{sid}","update":{{"sessionUpdate":"agent_message_chunk","content":{{"type":"text","text":"Worktree #{worker_id} isolé"}}}}}}}}'
+echo '{{"jsonrpc":"2.0","id":3,"result":{{"stopReason":"end_turn"}}}}'
+cat > /dev/null
+"#
+            );
+            let (client, mut events) = AcpClient::spawn(&shell_agent(&script), &worktree_dir)
+                .await
+                .unwrap();
+            assert_eq!(client.session_id(), sid);
+            client.prompt(&format!("Tâche parallèle {worker_id}")).await.unwrap();
+            let msg = next(&mut events).await;
+            let done = next(&mut events).await;
+            let _ = std::fs::remove_dir_all(&worktree_dir);
+            (worker_id, msg, done)
+        });
+    }
+
+    let mut completed = Vec::new();
+    while let Some(res) = set.join_next().await {
+        let (worker_id, msg, done) = res.expect("tâche worktree parallèle");
+        assert_eq!(
+            msg,
+            AcpEvent::Message {
+                text: format!("Worktree #{worker_id} isolé")
+            }
+        );
+        assert_eq!(
+            done,
+            AcpEvent::Done {
+                stop_reason: "end_turn".into()
+            }
+        );
+        completed.push(worker_id);
+    }
+    completed.sort_unstable();
+    assert_eq!(completed, (0..10).collect::<Vec<_>>());
+}
