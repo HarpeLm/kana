@@ -164,7 +164,11 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   );
   const links = linksIn(messages).slice(0, 6);
 
-  const changed = summary?.changed ?? [];
+  // Les artéfacts ont leur section : ils ne comptent pas parmi les modifications, ni dans les chiffres.
+  const artifactPaths = new Set(created.map((f) => f.path));
+  const changed = (summary?.changed ?? []).filter((f) => !artifactPaths.has(f.path));
+  const additions = changed.reduce((sum, f) => sum + f.additions, 0);
+  const deletions = changed.reduce((sum, f) => sum + f.deletions, 0);
   // Rien de rempli : la carte ne prend que la place de son contenu, comme une petite carte.
   const anyFilled = started && (plan.length > 0 || recent.length > 0 || created.length + links.length > 0 || changed.length > 0 || pulls.length > 0);
   const commits = summary?.commits ?? [];
@@ -418,7 +422,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
               </span>
             }
           >
-            <span className="text-[#3fb950]">+{summary?.additions ?? 0}</span> <span className="text-[#f85149]">−{summary?.deletions ?? 0}</span>
+            <span className="text-[#3fb950]">+{additions}</span> <span className="text-[#f85149]">−{deletions}</span>
           </Row>
           {changed.length === 0 && <Empty>Aucun fichier modifié pour l'instant.</Empty>}
           {(allFiles ? changed : changed.slice(0, SHOWN)).map((file) => (
