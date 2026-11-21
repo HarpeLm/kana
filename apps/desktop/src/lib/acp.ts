@@ -53,8 +53,9 @@ export interface StartedSession {
 }
 
 export interface AgentEnvironment {
-  kind: "local" | "ssh" | "docker" | "devcontainer";
+  kind: "local" | "ssh" | "docker" | "devcontainer" | "cloud";
   target?: string;
+  cloudUrl?: string;
   sandbox?: boolean;
   readOnly?: boolean;
 }
