@@ -69,6 +69,7 @@ import SearchPalette from "./components/SearchPalette";
 import SideChatDock from "./components/SideChatDock";
 import TerminalDock from "./components/TerminalDock";
 import SettingsView from "./components/SettingsView";
+import CustomizationsView from "./components/CustomizationsView";
 import Sidebar from "./components/Sidebar";
 
 const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
@@ -455,6 +456,7 @@ export default function App({ startup }: { startup: Startup }) {
         onOpenSearch={() => setSearchOpen(true)}
         onArtifacts={() => setView("artifacts")}
         onOpenScheduled={() => setView("scheduled")}
+        onOpenCustomizations={() => setView("customizations")}
         onOpenSettings={() => setView("settings")}
       />
 
@@ -492,13 +494,15 @@ export default function App({ startup }: { startup: Startup }) {
               },
             }}
           >
-            {view === "settings" || view === "scheduled" || view === "artifacts" ? (
+            {view === "settings" || view === "scheduled" || view === "artifacts" || view === "customizations" ? (
               <span className="px-2 text-[14px] text-[#e6e5df]">
                 {view === "settings"
                   ? tr("Réglages", "Settings", locale)
-                  : view === "artifacts"
-                    ? tr("Artéfacts", "Artifacts", locale)
-                    : tr("Tâches planifiées", "Scheduled tasks", locale)}
+                  : view === "customizations"
+                    ? tr("Personnalisation", "Customize", locale)
+                    : view === "artifacts"
+                      ? tr("Artéfacts", "Artifacts", locale)
+                      : tr("Tâches planifiées", "Scheduled tasks", locale)}
               </span>
             ) : (
               <ConversationTitle
@@ -515,6 +519,8 @@ export default function App({ startup }: { startup: Startup }) {
               conversationIds={conversations.items.map((c) => c.id)}
               projectPaths={projectList.projects.map((p) => p.path)}
             />
+          ) : view === "customizations" ? (
+            <CustomizationsView projectPath={workPath} />
           ) : view === "scheduled" ? (
             <ScheduledView projects={projectList.projects} defaultProjectPath={workPath ?? selected.projectPath} />
           ) : view === "artifacts" ? (
@@ -599,6 +605,7 @@ export default function App({ startup }: { startup: Startup }) {
                   onOpenFile={openFile}
                   onOpenTerminal={() => docks.setShowTerminal(true)}
                   onArtifactMenu={(path, x, y) => setArtifactMenu({ x, y, root: workPath, path })}
+                  onOpenFolder={() => void openFolder()}
                   canAddFolder={!chat.busy}
                   onAddFolder={(path) => {
                     conversations.addFolder(selected.id, path);
