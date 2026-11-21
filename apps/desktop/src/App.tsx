@@ -116,7 +116,14 @@ export default function App({ startup }: { startup: Startup }) {
         ? `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`
         : "";
       const preface = `${ARTIFACT_GUIDE}${folders}${carried ?? ""}`;
-      return { cwd, preface, carried: !!carried, model: conversation.modelId, effort: chosenEffort(conversation.agentId) };
+      return {
+        cwd,
+        preface,
+        carried: !!carried,
+        model: conversation.modelId,
+        effort: chosenEffort(conversation.agentId),
+        acpSessionId: conversation.acpSessionId,
+      };
     },
     [attachWorktree, clearForkContext],
   );
@@ -124,6 +131,9 @@ export default function App({ startup }: { startup: Startup }) {
   const agentOf = (threadId: string) => itemsRef.current.find((c) => c.id === threadId)?.agentId;
   const pendingTitles = useRef(new Map<string, { request: string; provisional: string }>());
   const observer = {
+    onSession: (threadId: string, sessionId: string) => {
+      conversations.setAcpSessionId(threadId, sessionId);
+    },
     onTurnUsage: (threadId: string, usage: { input: number; output: number; total: number }) => {
       const agent = agentOf(threadId);
       if (agent) recordTokens(agent, usage.input, usage.output, usage.total);
