@@ -1,3 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
+import { inTauri } from "./env";
+
 /** Formules d'introduction qu'on retire du début d'une demande pour garder l'essentiel. */
 const LEAD =
   /^(?:(?:bonjour|salut|hello|hey|coucou|s'il (?:te|vous) pla[iî]t|stp|svp|merci|ok|alors|du coup|et|donc|bon)[\s,!.:;-]+)*(?:(?:est-ce que|est ce que)\s+)?(?:(?:tu|vous)\s+(?:peux|pouvez|pourrais|pourriez|veux|voudrais)(?:-tu|-vous)?|(?:peux|pouvez|pourrais|pourriez)[- ](?:tu|vous)|(?:je|j')\s*(?:voudrais|veux|aimerais|souhaite|aurais besoin|dois|cherche à|essaie de|essaye de)|on (?:peut|pourrait|doit)|il faut|il faudrait|comment|can you|could you|please|i (?:want|need|would like) to|help me)\s*(?:me |m'|nous |de |d')?/i;
@@ -20,4 +23,18 @@ export function autoTitle(message: string): string {
     title = `${cut.slice(0, space > 20 ? space : MAX).replace(/[,;:\s-]+$/, "")}…`;
   }
   return title ? title[0].toUpperCase() + title.slice(1) : "Nouvelle conversation";
+}
+
+/** Un titre écrit par l'agent (session à part, rien n'apparaît dans la conversation) ; `null` s'il échoue. */
+export async function agentTitle(agentId: string, request: string): Promise<string | null> {
+  if (!inTauri) return null;
+  try {
+    const raw = await invoke<string>("suggest_title", { agent: agentId, request });
+    const line = raw.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+    const clean = line.replace(/^["«»'`*#\s]+|["«»'`*\s.]+$/g, "").replace(/^titre\s*:\s*/i, "").trim();
+    if (clean.length < 3) return null;
+    return (clean.length > 60 ? `${clean.slice(0, 59).trimEnd()}…` : clean).replace(/^./, (c) => c.toUpperCase());
+  } catch {
+    return null;
+  }
 }
