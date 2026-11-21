@@ -169,11 +169,16 @@ export function useChat(
     [threadId, update],
   );
 
+  /** Efface l'occupation du contexte d'un fil (l'agent repart de zéro après un compactage). */
+  const clearContext = useCallback((id: string) => {
+    setChats((all) => (all[id] ? { ...all, [id]: { ...all[id], context: null } } : all));
+  }, []);
+
   /** Donne à un fil neuf un début d'historique (la copie faite par « bifurquer »). */
   const seed = useCallback((id: string, messages: ChatMessage[]) => {
     loaded.current.add(id);
     setChats((all) => ({ ...all, [id]: { ...EMPTY_CHAT, messages } }));
   }, []);
 
-  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer, seed };
+  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer, seed, clearContext };
 }
