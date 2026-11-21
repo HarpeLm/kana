@@ -57,7 +57,10 @@ export const EDITOR_SCRIPT = String.raw`
     + '[data-kana-text]:hover{background:rgba(74,155,255,.10)}'
     + '[data-kana-text]:focus{background:rgba(74,155,255,.14);box-shadow:0 0 0 2px rgba(74,155,255,.55)}'
     + '#kana-trash{position:fixed;z-index:2147483647;display:none;width:26px;height:26px;border:0;border-radius:8px;background:#2a2a28;color:#f87171;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);align-items:center;justify-content:center;padding:0}'
-    + '#kana-trash:hover{background:#3a2422}';
+    + '#kana-trash:hover{background:#3a2422}'
+    + '#kana-grab{position:fixed;z-index:2147483647;display:none;width:20px;height:26px;border:0;border-radius:6px;background:#2a2a28;color:#a8a79f;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.35);align-items:center;justify-content:center;padding:0;touch-action:none}'
+    + '#kana-grab:hover{background:#3a3a37;color:#fff}'
+    + '#kana-line{position:fixed;z-index:2147483646;display:none;height:3px;border-radius:2px;background:#4a9bff;pointer-events:none}';
   document.head.appendChild(style);
 
   // Changement de texte : envoyé un court instant après la dernière frappe.
@@ -109,19 +112,77 @@ export const EDITOR_SCRIPT = String.raw`
   trash.title = 'Supprimer cette ligne';
   trash.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>';
   document.body.appendChild(trash);
+  // La poignée : on attrape une ligne pour la déplacer parmi ses voisines ; les numéros d'une liste suivent tout seuls.
+  var grab = document.createElement('button');
+  grab.id = 'kana-grab';
+  grab.title = 'Glisser pour déplacer';
+  grab.innerHTML = '<svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><circle cx="3.5" cy="2.5" r="1.3"/><circle cx="8.5" cy="2.5" r="1.3"/><circle cx="3.5" cy="7" r="1.3"/><circle cx="8.5" cy="7" r="1.3"/><circle cx="3.5" cy="11.5" r="1.3"/><circle cx="8.5" cy="11.5" r="1.3"/></svg>';
+  document.body.appendChild(grab);
+  var line = document.createElement('div');
+  line.id = 'kana-line';
+  document.body.appendChild(line);
+  var drag = null;
+  function visible(el) { var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+  grab.addEventListener('pointerdown', function (e) {
+    if (!current || !current.parentElement) return;
+    e.preventDefault();
+    grab.setPointerCapture(e.pointerId);
+    drag = { el: current, from: pathOf(current), before: undefined };
+    current.style.opacity = '.4';
+    trash.style.display = 'none';
+  });
+  grab.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var sibs = Array.prototype.filter.call(drag.el.parentElement.children, function (c) { return c !== drag.el && visible(c); });
+    var before = null;
+    for (var i = 0; i < sibs.length; i++) {
+      var r = sibs[i].getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) { before = sibs[i]; break; }
+    }
+    drag.before = before;
+    if (!sibs.length) return;
+    var ref = before ? before.getBoundingClientRect() : sibs[sibs.length - 1].getBoundingClientRect();
+    var first = sibs[0].getBoundingClientRect();
+    line.style.display = 'block';
+    line.style.top = (before ? ref.top - 2 : ref.bottom + 1) + 'px';
+    line.style.left = first.left + 'px';
+    line.style.width = first.width + 'px';
+  });
+  function endDrag(e, drop) {
+    if (!drag) return;
+    var d = drag; drag = null;
+    d.el.style.opacity = '';
+    line.style.display = 'none';
+    grab.style.display = 'none';
+    if (!drop || d.before === undefined || !d.el.parentElement) return;
+    var parent = d.el.parentElement;
+    var others = Array.prototype.filter.call(parent.children, function (c) { return c !== d.el; });
+    var to = d.before ? others.indexOf(d.before) : others.length;
+    var from = Array.prototype.indexOf.call(parent.children, d.el);
+    if (to < 0 || to === from) return;
+    parent.insertBefore(d.el, others[to] || null);
+    send({ kind: 'move', from: d.from, to: to });
+  }
+  grab.addEventListener('pointerup', function (e) { endDrag(e, true); });
+  grab.addEventListener('pointercancel', function (e) { endDrag(e, false); });
+
   var current = null, hideTimer = null;
   function place(el) {
     var r = el.getBoundingClientRect();
+    var movable = el.parentElement && el.parentElement.children.length > 1;
+    grab.style.display = movable ? 'flex' : 'none';
+    grab.style.top = Math.max(2, r.top + 1) + 'px';
+    grab.style.left = Math.max(2, r.left - 24) + 'px';
     trash.style.display = 'flex';
     trash.style.top = Math.max(2, r.top + 2) + 'px';
     trash.style.left = Math.min(window.innerWidth - 30, r.right - 28) + 'px';
   }
   document.addEventListener('mouseover', function (e) {
     var t = e.target;
-    if (t === trash || (trash.contains && trash.contains(t))) { clearTimeout(hideTimer); return; }
+    if (drag || t === trash || t === grab || (trash.contains && trash.contains(t)) || (grab.contains && grab.contains(t))) { clearTimeout(hideTimer); return; }
     var el = t.closest && t.closest('li,tr,p,h1,h2,h3,h4,h5,h6,blockquote,figure,img,pre,dt,dd');
     while (el && !DELETABLE[el.tagName]) el = el.parentElement;
-    if (!el || el === document.body) { hideTimer = setTimeout(function () { trash.style.display = 'none'; current = null; }, 250); return; }
+    if (!el || el === document.body) { hideTimer = setTimeout(function () { trash.style.display = 'none'; grab.style.display = 'none'; current = null; }, 250); return; }
     clearTimeout(hideTimer);
     current = el;
     place(el);
@@ -133,12 +194,12 @@ export const EDITOR_SCRIPT = String.raw`
     trash.style.display = 'none';
     current = null;
   });
-  document.addEventListener('scroll', function () { trash.style.display = 'none'; }, true);
+  document.addEventListener('scroll', function () { trash.style.display = 'none'; if (!drag) grab.style.display = 'none'; }, true);
 
   // Les liens et boutons de la page ne naviguent pas pendant l'édition.
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a,button,form');
-    if (a && a.id !== 'kana-trash') e.preventDefault();
+    if (a && a.id !== 'kana-trash' && a.id !== 'kana-grab') e.preventDefault();
   }, true);
 
   // Commandes de l'app : annuler, rétablir (appliquées au cadre).
@@ -148,6 +209,13 @@ export const EDITOR_SCRIPT = String.raw`
     var el, tpl;
     if (m.cmd === 'set') { el = nodeAt(m.path); if (el) el.innerHTML = m.html; }
     else if (m.cmd === 'remove') { el = nodeAt(m.path); if (el) el.remove(); }
+    else if (m.cmd === 'move') {
+      el = nodeAt(m.from);
+      if (el && el.parentElement) {
+        var rest = Array.prototype.filter.call(el.parentElement.children, function (c) { return c !== el; });
+        el.parentElement.insertBefore(el, rest[m.to] || null);
+      }
+    }
     else if (m.cmd === 'insert') {
       var par = nodeAt(m.parent);
       if (par) {
