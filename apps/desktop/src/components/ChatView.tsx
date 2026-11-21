@@ -5,7 +5,7 @@ import { skillsAsCommands, useExtensibilityVersion } from "../lib/extensibility"
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
-import { EnvironmentRow, NewSessionCenter, type NewSessionProps } from "./NewSession";
+import { EnvironmentRow, NewSessionCenter, NewSessionQuickActions, type NewSessionProps } from "./NewSession";
 import PermissionPrompt from "./PermissionPrompt";
 import RelayBanner, { type RelayBannerProps } from "./RelayBanner";
 
@@ -208,12 +208,11 @@ export default function ChatView({
     onSend(PLAN_APPROVAL_PROMPT);
   };
 
-  // Une conversation vide s'ouvre sur l'écran de nouvelle session : les projets au centre,
-  // et sous la saisie, l'endroit où l'agent travaillera.
+  // Une conversation vide centre l'accroche et le Composer au milieu de l'écran (style Codex / Antigravity).
   if (chat.messages.length === 0 && !chat.busy) {
     return (
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <NewSessionCenter session={newSession} onSend={onSend} />
+      <main className="flex flex-1 flex-col justify-center overflow-y-auto pb-14">
+        <NewSessionCenter session={newSession} />
         {relayBanner && <RelayBanner {...relayBanner} />}
         <Composer
           agentLabel={agentLabel}
@@ -232,6 +231,7 @@ export default function ChatView({
           placeholder="Décrivez une tâche ou posez une question."
           onOpenExtensibility={onOpenExtensibility}
         />
+        <NewSessionQuickActions session={newSession} onSend={onSend} />
       </main>
     );
   }
