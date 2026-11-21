@@ -69,15 +69,23 @@ import SearchPalette from "./components/SearchPalette";
 import SideChatDock from "./components/SideChatDock";
 import TerminalDock from "./components/TerminalDock";
 import SettingsView from "./components/SettingsView";
+import SettingsModal from "./components/SettingsModal";
 import CustomizationsView from "./components/CustomizationsView";
 import Sidebar from "./components/Sidebar";
+import WelcomeProfileModal from "./components/WelcomeProfileModal";
+import { dismissOnboarding, saveUserProfile, useUserProfile } from "./lib/profile";
 
 const toggle = (set: (fn: (v: boolean) => boolean) => void) => () => set((v) => !v);
 
 export default function App({ startup }: { startup: Startup }) {
   useNativeContextMenu();
   const locale = useLocale();
+  const profile = useUserProfile();
   const [view, setView] = useState<View>("workspace");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(
+    () => !profile.onboarded && !(typeof navigator !== "undefined" && navigator.webdriver),
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   /** Conversation dont le dossier de travail est gardé car il contient du travail non enregistré. */
@@ -385,7 +393,7 @@ export default function App({ startup }: { startup: Startup }) {
       case ACTION_NEW:
         return createConversation();
       case ACTION_SETTINGS:
-        return setView("settings");
+        return setSettingsOpen(true);
       case ACTION_TOGGLE_TERMINAL:
         return docks.toggleTerminal();
       case ACTION_TOGGLE_DIFF:
@@ -412,6 +420,8 @@ export default function App({ startup }: { startup: Startup }) {
       docks.browserAgent.approval !== null ||
       extensibility.open ||
       showInspector ||
+      settingsOpen ||
+      welcomeOpen ||
       crossReview.advisorModal.open,
     searchOpen,
     editingId,
@@ -422,7 +432,7 @@ export default function App({ startup }: { startup: Startup }) {
     onCreateConversation: createConversation,
     onToggleSidebar: toggle(docks.setShowSidebar),
     onToggleTerminal: docks.toggleTerminal,
-    onOpenSettings: () => setView("settings"),
+    onOpenSettings: () => setSettingsOpen(true),
     onToggleSideChat: () => {
       docks.setShowSideChat((v) => {
         if (!v && view !== "workspace") setView("workspace");
@@ -447,6 +457,7 @@ export default function App({ startup }: { startup: Startup }) {
         selectedId={selected.id}
         editingId={editingId}
         view={view}
+        settingsOpen={settingsOpen}
         width={sidebar.width}
         dragging={sidebar.dragging}
         onResizeStart={sidebar.startDrag}
@@ -457,7 +468,8 @@ export default function App({ startup }: { startup: Startup }) {
         onArtifacts={() => setView("artifacts")}
         onOpenScheduled={() => setView("scheduled")}
         onOpenCustomizations={() => setView("customizations")}
-        onOpenSettings={() => setView("settings")}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSignIn={() => setWelcomeOpen(true)}
       />
 
       <div className="flex min-w-0 flex-1 overflow-hidden bg-[#181817]">
@@ -713,7 +725,14 @@ export default function App({ startup }: { startup: Startup }) {
         {docks.browserOpened && (
           <BrowserDock
             visible={docks.browserVisible}
-            suspended={searchOpen || deletingId !== null || docks.browserAgent.approval !== null || showInspector}
+            suspended={
+              searchOpen ||
+              deletingId !== null ||
+              docks.browserAgent.approval !== null ||
+              showInspector ||
+              settingsOpen ||
+              welcomeOpen
+            }
             width={docks.browserPanel.width}
             dragging={docks.browserPanel.dragging}
             onResizeStart={docks.browserPanel.startDrag}
@@ -813,6 +832,29 @@ export default function App({ startup }: { startup: Startup }) {
         onClose={crossReview.closeAdvisor}
         onApplySingle={crossReview.applySingleRecommendation}
         onLaunchCrossReview={crossReview.launchCrossReview}
+      />
+
+      <SettingsModal
+        open={settingsOpen}
+        conversationIds={conversations.items.map((c) => c.id)}
+        projectPaths={projectList.projects.map((p) => p.path)}
+        keepAwake={keepAwake}
+        onToggleKeepAwake={toggleKeepAwake}
+        onOpenRelay={() => setView("relay")}
+        onClose={() => setSettingsOpen(false)}
+      />
+
+      <WelcomeProfileModal
+        open={welcomeOpen}
+        initialName={profile.name}
+        onSave={(name) => {
+          saveUserProfile(name);
+          setWelcomeOpen(false);
+        }}
+        onLater={() => {
+          dismissOnboarding();
+          setWelcomeOpen(false);
+        }}
       />
 
       {deleting && (
