@@ -1060,3 +1060,76 @@ test("daemon macOS launchctl en 1 clic et cible Kana Cloud (Managé / Mobile)", 
 
   expect(errors).toEqual([]);
 });
+
+test("compositeur : dictée vocale temps réel (micro, transcription et envoi)", async ({ page }) => {
+  const errors = watchErrors(page);
+
+  await page.addInitScript(() => {
+    class MockSpeechRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = "fr-FR";
+      onstart: (() => void) | null = null;
+      onend: (() => void) | null = null;
+      onerror: ((ev: { error: string }) => void) | null = null;
+      onresult: ((ev: unknown) => void) | null = null;
+      start() {
+        (window as unknown as { __kanaMockRecognition?: MockSpeechRecognition }).__kanaMockRecognition = this;
+        this.onstart?.();
+      }
+      stop() {
+        this.onend?.();
+      }
+      abort() {
+        this.onend?.();
+      }
+      emitResult(transcript: string, isFinal: boolean) {
+        const result = Object.assign([{ transcript }], { isFinal });
+        this.onresult?.({
+          resultIndex: 0,
+          results: Object.assign([result], { length: 1 }),
+        });
+      }
+    }
+    (window as unknown as { SpeechRecognition?: typeof MockSpeechRecognition }).SpeechRecognition = MockSpeechRecognition;
+  });
+
+  await page.reload();
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+
+  const micBtn = page.getByRole("button", { name: "Dictée vocale" });
+  await expect(micBtn).toBeVisible();
+  await micBtn.click();
+
+  const statusBar = page.getByRole("status");
+  await expect(statusBar).toBeVisible();
+  await expect(statusBar.getByText("Écoute en cours...")).toBeVisible();
+
+  // Résultat intermédiaire en temps réel
+  await page.evaluate(() => {
+    const rec = (window as unknown as { __kanaMockRecognition?: { emitResult: (t: string, f: boolean) => void } })
+      .__kanaMockRecognition;
+    rec?.emitResult("Bonjour", false);
+  });
+  await expect(statusBar.getByText("Bonjour")).toBeVisible();
+
+  // Résultat final inséré dans le champ Message
+  await page.evaluate(() => {
+    const rec = (window as unknown as { __kanaMockRecognition?: { emitResult: (t: string, f: boolean) => void } })
+      .__kanaMockRecognition;
+    rec?.emitResult("Bonjour Kana lance les tests", true);
+  });
+
+  const messageBox = page.getByRole("textbox", { name: "Message" });
+  await expect(messageBox).toHaveValue("Bonjour Kana lance les tests");
+
+  // Arrêt de la dictée et envoi du message
+  await statusBar.getByRole("button", { name: "Arrêter" }).click();
+  await expect(statusBar).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Envoyer" }).click();
+  await expect(page.getByText("Bonjour Kana lance les tests").first()).toBeVisible();
+  await expect(page.getByText(/Tu as écrit « Bonjour Kana lance les tests »\./)).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
