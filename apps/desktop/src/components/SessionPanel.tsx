@@ -127,10 +127,14 @@ interface SessionPanelProps {
   onOpenRelay: () => void;
   /** La conversation a commencé : avant, il n'y a encore rien à montrer du travail de l'agent. */
   started: boolean;
+  /** Compacter : l'agent repart avec un résumé de la conversation. */
+  onCompact: () => void;
+  canCompact: boolean;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started, onCompact, canCompact }: SessionPanelProps) {
+  const [compacted, setCompacted] = useState(false);
   useUsageVersion();
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -218,6 +222,27 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
                 style={{ width: `${context ? Math.min(100, Math.max(1, (context.used / context.size) * 100)) : 0}%` }}
               />
             </div>
+          </div>
+          <div className="flex items-center gap-3 px-1 pb-2">
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-[#8c8b83]">
+              {compacted
+                ? "Compactée ✓"
+                : context
+                  ? `${formatTokens(Math.max(0, context.size - context.used))} jetons avant saturation`
+                  : "Libère la mémoire de l'agent"}
+            </span>
+            <button
+              onClick={() => {
+                onCompact();
+                setCompacted(true);
+                setTimeout(() => setCompacted(false), 4000);
+              }}
+              disabled={!canCompact}
+              title="Éteint l'agent et le relance avec un résumé de la conversation : tes messages restent affichés"
+              className="shrink-0 rounded-lg bg-[#333331] px-3 py-1 text-[12.5px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]"
+            >
+              Compacter la session
+            </button>
           </div>
           {AGENTS.map((agent) => {
             const usage = usageToday(agent.id);
