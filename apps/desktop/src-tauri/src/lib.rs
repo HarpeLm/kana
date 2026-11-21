@@ -66,6 +66,7 @@ pub fn run() {
             settings_commands::set_api_key,
             settings_commands::delete_api_key,
             settings_commands::set_keep_awake,
+            settings_commands::notify_user,
             settings_commands::core_detect_problem,
             settings_commands::core_pick_relay_target,
             settings_commands::core_auto_answer,
