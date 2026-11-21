@@ -1,4 +1,4 @@
-import { useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { useOpenFiles } from "../hooks/useOpenFiles";
 import { useRepoFiles } from "../hooks/useRepoFiles";
@@ -12,6 +12,8 @@ import SidePane from "./SidePane";
 import ToolbarButton from "./ToolbarButton";
 
 interface FilesDockProps {
+  /** Un fichier à ouvrir (depuis le panneau de la session) ; `id` change à chaque demande. */
+  openRequest?: { id: number; path: string } | null;
   /** Dossier de travail de la conversation ; sans lui, le dépôt où l'app a été lancée. */
   root?: string;
   visible: boolean;
@@ -28,6 +30,7 @@ interface FilesDockProps {
  * Un clic sur un fichier l'ouvre en aperçu, un double clic le garde ; ⌘S enregistre.
  */
 export default function FilesDock({
+  openRequest,
   root,
   visible,
   maximized,
@@ -39,6 +42,13 @@ export default function FilesDock({
 }: FilesDockProps) {
   const { list, error, refresh } = useRepoFiles(visible, root);
   const files = useOpenFiles(root);
+  const handledRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openRequest || handledRequest.current === openRequest.id) return;
+    handledRequest.current = openRequest.id;
+    files.open(openRequest.path, true);
+    void refresh();
+  }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showTree, setShowTree] = useState(true);
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [sourcePaths, setSourcePaths] = useState<Set<string>>(new Set());
