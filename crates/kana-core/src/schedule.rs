@@ -131,6 +131,49 @@ fn escape_xml(raw: &str) -> String {
     out
 }
 
+/// Étiquette système macOS `launchd` du daemon Kana exécutant les tâches planifiées en arrière-plan.
+pub const LAUNCHD_DAEMON_LABEL: &str = "dev.kana.daemon";
+
+/// Génère un fichier `.plist` macOS `LaunchAgents` complet pour le daemon Kana (`kana daemon --once`).
+pub fn launchd_daemon_plist(binary_path: &str, home_dir: &str, interval_secs: u32) -> String {
+    let label = escape_xml(LAUNCHD_DAEMON_LABEL);
+    let binary = escape_xml(binary_path);
+    let home = home_dir.trim_end_matches('/');
+    let stdout_path = escape_xml(&format!("{home}/.kana/daemon.log"));
+    let stderr_path = escape_xml(&format!("{home}/.kana/daemon.err.log"));
+    let interval = interval_secs.max(60);
+    let path_env = escape_xml("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin");
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+         <plist version=\"1.0\">\n\
+         <dict>\n\
+         \t<key>Label</key>\n\
+         \t<string>{label}</string>\n\
+         \t<key>ProgramArguments</key>\n\
+         \t<array>\n\
+         \t\t<string>{binary}</string>\n\
+         \t\t<string>daemon</string>\n\
+         \t\t<string>--once</string>\n\
+         \t</array>\n\
+         \t<key>StartInterval</key>\n\
+         \t<integer>{interval}</integer>\n\
+         \t<key>RunAtLoad</key>\n\
+         \t<true/>\n\
+         \t<key>StandardOutPath</key>\n\
+         \t<string>{stdout_path}</string>\n\
+         \t<key>StandardErrorPath</key>\n\
+         \t<string>{stderr_path}</string>\n\
+         \t<key>EnvironmentVariables</key>\n\
+         \t<dict>\n\
+         \t\t<key>PATH</key>\n\
+         \t\t<string>{path_env}</string>\n\
+         \t</dict>\n\
+         </dict>\n\
+         </plist>\n"
+    )
+}
+
 /// Génère un fichier `.plist` macOS `LaunchAgents` valide avec échappement XML propre.
 pub fn launchd_plist(label: &str, program: &str, interval_secs: u32) -> String {
     let label = escape_xml(label);
@@ -240,6 +283,28 @@ mod tests {
         assert!(plist.contains("<string>/Applications/Kana &amp; Co/bin/kana &quot;cli&quot; &apos;v1&apos;</string>"));
         assert!(plist.contains("<integer>900</integer>"));
         assert!(plist.contains("<key>RunAtLoad</key>"));
+    }
+
+    #[test]
+    fn generates_launchd_daemon_plist_with_logs_env_and_min_interval() {
+        let plist = launchd_daemon_plist(
+            "/Applications/Kana & Dev.app/Contents/MacOS/Kana",
+            "/Users/alice&bob/",
+            15,
+        );
+        assert!(plist.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assert!(plist.contains("<key>Label</key>\n\t<string>dev.kana.daemon</string>"));
+        assert!(plist.contains("<string>/Applications/Kana &amp; Dev.app/Contents/MacOS/Kana</string>"));
+        assert!(plist.contains("<string>daemon</string>\n\t\t<string>--once</string>"));
+        assert!(plist.contains("<key>StartInterval</key>\n\t<integer>60</integer>"));
+        assert!(plist.contains("<key>RunAtLoad</key>\n\t<true/>"));
+        assert!(plist.contains("<string>/Users/alice&amp;bob/.kana/daemon.log</string>"));
+        assert!(plist.contains("<string>/Users/alice&amp;bob/.kana/daemon.err.log</string>"));
+        assert!(plist.contains("<key>EnvironmentVariables</key>"));
+        assert!(plist.contains("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"));
+
+        let plist_300 = launchd_daemon_plist("/usr/local/bin/kana", "/Users/alice", 300);
+        assert!(plist_300.contains("<integer>300</integer>"));
     }
 
     #[test]
