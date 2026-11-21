@@ -86,3 +86,20 @@ pub async fn git_create_pull_request(path: Option<String>, branch: String, title
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// L'adresse du dépôt distant `origin` (vide s'il n'y en a pas).
+#[tauri::command]
+pub async fn git_remote_url(path: Option<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = start_dir(path)?;
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(["remote", "get-url", "origin"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
