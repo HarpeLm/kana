@@ -7,7 +7,7 @@ const pillMeta: Record<AccountPhase, { fr: string; en: string; style: string }> 
   idle: { fr: "Non vérifié", en: "Not checked", style: "bg-[#2e2e2b] text-[#a3a29a]" },
   checking: { fr: "Vérification…", en: "Checking…", style: "bg-[#2e2e2b] text-[#a3a29a]" },
   ready: { fr: "Connecté", en: "Connected", style: "bg-emerald-500/15 text-emerald-400" },
-  needs_login: { fr: "Connexion requise", en: "Sign-in required", style: "bg-[#d97757]/15 text-[#e69b80]" },
+  needs_login: { fr: "Connexion requise", en: "Sign-in required", style: "bg-[#1e3a8a]/35 text-[#93c5fd]" },
   logging_in: { fr: "Connexion en cours…", en: "Signing in…", style: "bg-[#2e2e2b] text-[#a3a29a]" },
   error: { fr: "Erreur", en: "Error", style: "bg-red-500/15 text-red-300" },
 };
@@ -48,7 +48,7 @@ export default function AccountCard({ agent }: { agent: AgentInfo }) {
             <li key={method.id}>
               <button
                 onClick={() => login(method.id)}
-                className="w-full rounded-lg bg-[#d97757] px-3 py-2 text-left text-[13px] font-medium text-[#181817] transition hover:bg-[#e38768]"
+                className="w-full rounded-lg bg-[#1e40af] px-3 py-2 text-left text-[13px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
               >
                 {method.name}
                 {method.description && (
@@ -63,7 +63,7 @@ export default function AccountCard({ agent }: { agent: AgentInfo }) {
       )}
 
       {state.phase === "needs_login" && state.methods.length === 0 && (
-        <p className="text-[12px] text-[#e69b80]">
+        <p className="text-[12px] text-[#93c5fd]">
           {tr(
             "Cet agent demande une connexion mais n'annonce aucune méthode : connecte-le depuis son propre terminal, puis vérifie à nouveau.",
             "This agent requires authentication but exposes no sign-in method: sign in from its own terminal, then check again.",
