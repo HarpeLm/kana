@@ -115,6 +115,7 @@ export default function HtmlVisualEditor({ text, readOnly, onChange, onSave }: H
       if (m.kind === "text") record({ kind: "set", path: m.path, html: m.html }, true);
       else if (m.kind === "remove") record({ kind: "remove", path: m.path }, false);
       else if (m.kind === "insert") record({ kind: "insert", parent: m.parent, index: m.index, html: m.html }, false);
+      else if (m.kind === "move") record({ kind: "move", from: m.from, to: m.to }, false);
       else if (m.kind === "undo") step("undo");
       else if (m.kind === "redo") step("redo");
       else if (m.kind === "save") callbacks.current.onSave();
