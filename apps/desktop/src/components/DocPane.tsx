@@ -1,5 +1,6 @@
 import type { OpenDoc } from "../hooks/useOpenFiles";
-import { isMarkdown } from "../lib/fileKinds";
+import { isHtml, isMarkdown, showsRendered } from "../lib/fileKinds";
+import HtmlVisualEditor from "./HtmlVisualEditor";
 import CodeEditor from "./CodeEditor";
 import MarkdownView from "./MarkdownView";
 
@@ -24,7 +25,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-/** Contenu d'un onglet : éditeur, rendu markdown, ou le message qui explique pourquoi il n'y en a pas. */
+/** Contenu d'un onglet : éditeur, rendu markdown ou page HTML modifiable à même la page, ou le message qui explique pourquoi il n'y en a pas. */
 export default function DocPane({ path, doc, active, source, onChange, onSave, onOverwrite, onReload }: DocPaneProps) {
   if (doc.status === "loading") return <p className="p-4 text-[13px] text-[#8c8b83]">Chargement…</p>;
   if (doc.status === "error") {
@@ -42,7 +43,7 @@ export default function DocPane({ path, doc, active, source, onChange, onSave, o
     );
   }
 
-  const rendered = isMarkdown(path) && !source;
+  const rendered = showsRendered(path, source);
 
   return (
     <div className="flex h-full flex-col">
@@ -72,6 +73,9 @@ export default function DocPane({ path, doc, active, source, onChange, onSave, o
           <div className={rendered ? "h-full" : "hidden"}>
             <MarkdownView source={doc.text} />
           </div>
+        )}
+        {isHtml(path) && rendered && (
+          <HtmlVisualEditor text={doc.text} readOnly={doc.truncated} onChange={onChange} onSave={onSave} />
         )}
         <div className={rendered ? "hidden" : "h-full"}>
           <CodeEditor
