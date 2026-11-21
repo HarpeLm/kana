@@ -46,8 +46,8 @@ export function stopAgent(threadId: string): Promise<void> {
   return inTauri ? invoke("stop_agent", { threadId }) : Promise.resolve();
 }
 
-export function sendPrompt(threadId: string, text: string): Promise<void> {
-  return inTauri ? invoke("send_prompt", { threadId, text }) : mock.sendPrompt(threadId, text);
+export function sendPrompt(threadId: string, text: string, images: string[] = []): Promise<void> {
+  return inTauri ? invoke("send_prompt", { threadId, text, images }) : mock.sendPrompt(threadId, text);
 }
 
 export function cancelPrompt(threadId: string): Promise<void> {
