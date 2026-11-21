@@ -31,9 +31,15 @@ function parseFolders(raw: string | null | undefined): string[] | undefined {
 /** Les conversations enregistrées dans la base (liste vide si rien n'y a encore été rangé). */
 export async function loadStoredConversations(): Promise<Conversation[]> {
   if (!inTauri) return loadLocalConversations() ?? [];
-  const rows = await invoke<Array<Omit<Conversation, "openedAt" | "extraFolders"> & { openedAt: number | null; extraFolders: string | null }>>(
-    "db_load_conversations",
-  );
+  const rows = await invoke<
+    Array<
+      Omit<Conversation, "openedAt" | "extraFolders" | "acpSessionId"> & {
+        openedAt: number | null;
+        extraFolders: string | null;
+        acpSessionId?: string | null;
+      }
+    >
+  >("db_load_conversations");
   return rows.map((row) => ({
     ...row,
     openedAt: row.openedAt ?? undefined,
@@ -45,6 +51,7 @@ export async function loadStoredConversations(): Promise<Conversation[]> {
     useWorktree: row.useWorktree ?? true,
     modelId: row.modelId ?? undefined,
     extraFolders: parseFolders(row.extraFolders),
+    acpSessionId: row.acpSessionId ?? undefined,
   }));
 }
 
@@ -71,6 +78,7 @@ export async function saveStoredConversations(items: Conversation[]): Promise<vo
       useWorktree: c.useWorktree ?? true,
       modelId: c.modelId ?? null,
       extraFolders: c.extraFolders?.length ? JSON.stringify(c.extraFolders) : null,
+      acpSessionId: c.acpSessionId ?? null,
     })),
   });
 }
