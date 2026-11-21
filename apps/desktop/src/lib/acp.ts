@@ -51,6 +51,17 @@ export interface AgentEnvironment {
   readOnly?: boolean;
 }
 
+export interface UserMcpServerParam {
+  name: string;
+  transport: "stdio" | "http" | "sse";
+  url?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  oauthToken?: string;
+  headers?: Record<string, string>;
+}
+
 // Dans un navigateur simple (sans Tauri), on bascule sur un agent simulé.
 const mockSessions = new Set<string>();
 
@@ -63,6 +74,7 @@ export function startAgent(
   effort?: string,
   resumeSessionId?: string,
   environment?: AgentEnvironment,
+  mcpServers?: UserMcpServerParam[],
 ): Promise<StartedSession> {
   if (inTauri) {
     return invoke<StartedSession>("start_agent", {
@@ -73,6 +85,7 @@ export function startAgent(
       effort: effort ?? null,
       resumeSessionId: resumeSessionId ?? null,
       environment: environment ?? null,
+      mcpServers: mcpServers?.length ? mcpServers : null,
     });
   }
   const resumed = mockSessions.has(threadId) || !!resumeSessionId;
