@@ -3,7 +3,7 @@ import { AlertCircle, AlertTriangle, Maximize2, Minimize2, RefreshCw, Send, X } 
 import { useOpenFiles } from "../hooks/useOpenFiles";
 import { useRepoFiles } from "../hooks/useRepoFiles";
 import { baseName, hasRenderedView, showsRendered } from "../lib/fileKinds";
-import { loadDiagnostics, type CodeDiagnostic } from "../lib/files";
+import { analyzeBufferDiagnostics, loadDiagnostics, type CodeDiagnostic } from "../lib/files";
 import ConfirmDialog from "./ConfirmDialog";
 import FileToolbar from "./FileToolbar";
 import FileTabs from "./FileTabs";
@@ -82,6 +82,14 @@ export default function FilesDock({
 
   const path = files.activePath;
   const doc = path ? files.docs[path] : undefined;
+  const liveBufferDiags = path && doc?.text !== undefined ? analyzeBufferDiagnostics(path, doc.text) : [];
+  const mergedDiagnostics = [
+    ...liveBufferDiags,
+    ...diagnostics.filter(
+      (d) => !liveBufferDiags.some((live) => live.file === d.file && live.line === d.line && live.code === d.code),
+    ),
+  ];
+  const activeFileDiagnostics = path ? mergedDiagnostics.filter((d) => d.file === path) : [];
 
   const requestClose = (target: string) => {
     if (files.isDirty(target)) setClosing(target);
@@ -89,7 +97,10 @@ export default function FilesDock({
   };
 
   const save = async (target: string, force = false) => {
-    if (await files.save(target, force)) void refresh();
+    if (await files.save(target, force)) {
+      void refresh();
+      void refreshDiagnostics();
+    }
   };
 
   const toggleSource = (target: string) =>
@@ -144,7 +155,7 @@ export default function FilesDock({
           treeVisible={showTree}
           onToggleTree={() => setShowTree((v) => !v)}
           diagnosticsVisible={showDiagnostics}
-          diagnosticsCount={diagnostics.length}
+          diagnosticsCount={mergedDiagnostics.length}
           onToggleDiagnostics={() => {
             setShowDiagnostics((v) => {
               const next = !v;
@@ -160,6 +171,36 @@ export default function FilesDock({
             void refreshDiagnostics();
           }}
         />
+
+        {activeFileDiagnostics.length > 0 && !showDiagnostics && (
+          <div className="flex items-center justify-between gap-2 border-b border-[#3a2a24] bg-[#261c19] px-3 py-1 text-[12px] text-[#f4c6b8]">
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(true)}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-[#f85149]" />
+              <span className="truncate">
+                Ligne {activeFileDiagnostics[0].line} : {activeFileDiagnostics[0].message}
+                {activeFileDiagnostics.length > 1 ? ` (+${activeFileDiagnostics.length - 1})` : ""}
+              </span>
+            </button>
+            {onSendDiagnostics && (
+              <button
+                type="button"
+                onClick={() => {
+                  const lines = activeFileDiagnostics
+                    .map((d) => `- [${d.severity.toUpperCase()}] \`${d.file}:${d.line}:${d.column}\` — ${d.message}`)
+                    .join("\n");
+                  onSendDiagnostics(`Corrige ces erreurs dans \`${path}\` :\n\n${lines}`);
+                }}
+                className="shrink-0 rounded bg-[#d97757] px-2 py-0.5 text-[11px] font-medium text-[#181817] hover:bg-[#e38768]"
+              >
+                Envoyer à l'agent
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1">
@@ -209,7 +250,7 @@ export default function FilesDock({
             <div className="flex items-center justify-between gap-2 border-b border-[#262623] px-3 py-1.5 text-[12px]">
               <div className="flex items-center gap-2 font-medium text-[#ecebe4]">
                 <AlertTriangle className="h-3.5 w-3.5 text-[#f0883e]" strokeWidth={1.8} />
-                <span>Diagnostics LSP & Compilateur ({diagnostics.length})</span>
+                <span>Diagnostics LSP & Compilateur ({mergedDiagnostics.length})</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
@@ -222,11 +263,11 @@ export default function FilesDock({
                   <RefreshCw className={`h-3 w-3 ${loadingDiagnostics ? "animate-spin" : ""}`} />
                   <span>Actualiser</span>
                 </button>
-                {onSendDiagnostics && diagnostics.length > 0 && (
+                {onSendDiagnostics && mergedDiagnostics.length > 0 && (
                   <button
                     type="button"
                     onClick={() => {
-                      const lines = diagnostics
+                      const lines = mergedDiagnostics
                         .map(
                           (d) =>
                             `- [${d.severity.toUpperCase()}${d.code ? ` ${d.code}` : ""} · ${d.source}] \`${d.file}:${d.line}:${d.column}\` — ${d.message}`,
@@ -245,13 +286,13 @@ export default function FilesDock({
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
-              {diagnostics.length === 0 ? (
+              {mergedDiagnostics.length === 0 ? (
                 <p className="px-2 py-2 text-[12px] text-[#8c8b83]">
                   Aucune erreur compilateur ou LSP détectée.
                 </p>
               ) : (
                 <ul className="space-y-1">
-                  {diagnostics.map((d, idx) => (
+                  {mergedDiagnostics.map((d, idx) => (
                     <li key={`${d.file}:${d.line}:${d.column}:${idx}`}>
                       <button
                         type="button"
