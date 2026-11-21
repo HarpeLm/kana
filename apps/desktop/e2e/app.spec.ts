@@ -814,3 +814,54 @@ test("inspecteur ACP/MCP en direct et export Markdown / JSON", async ({ page }) 
   await expect(dialog).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test("volet Globe : bascule de viewport responsive, tiroir DevTools (Console & Réseau) envoyé à l'agent et trace HTML", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  // Ouvrir le volet Navigateur (Globe)
+  await page.getByRole("banner").getByRole("button", { name: "Aperçu Web" }).click();
+  const globePane = page.getByRole("region", { name: "Navigateur" });
+  await expect(globePane).toHaveCSS("opacity", "1");
+
+  // 1. Bascule de viewport responsive : Bureau -> Tablette 768px -> Mobile 390px
+  await expect(globePane.getByTestId("globe-viewport-label")).toContainText("Bureau · Responsive");
+  await globePane.getByRole("button", { name: "Viewport Tablette 768px" }).click();
+  await expect(globePane.getByTestId("globe-viewport-label")).toContainText("Tablette · 768 × 1024 px");
+  await globePane.getByRole("button", { name: "Viewport Mobile 390px" }).click();
+  await expect(globePane.getByTestId("globe-viewport-label")).toContainText("Mobile · 390 × 844 px");
+
+  // 2. Tiroir DevTools (Console & Réseau) + envoi du rapport à l'agent
+  await globePane.getByRole("button", { name: "DevTools (Console & Réseau)" }).click();
+  const devTools = globePane.getByRole("region", { name: "Tiroir DevTools Console & Réseau" });
+  await expect(devTools).toBeVisible();
+  await expect(devTools.getByText(/Cannot read properties of undefined/)).toBeVisible();
+  await expect(devTools.getByText(/502/)).toBeVisible();
+
+  await devTools.getByRole("button", { name: "Envoyer à l'agent" }).click();
+  await expect(page.locator("main").getByText(/Diagnostic DevTools Globe/).first()).toBeVisible();
+  await expect(page.locator("main").getByText(/Cannot read properties of undefined/).first()).toBeVisible();
+
+  // 3. Enregistrement et export de la trace de session Globe
+  await globePane.getByRole("button", { name: "Trace de session Globe" }).click();
+  const traceSection = globePane.getByRole("region", { name: "Trace de vérification Globe" });
+  await expect(traceSection).toBeVisible();
+  await traceSection.getByRole("button", { name: "Démarrer la trace" }).click();
+  await expect(traceSection.getByRole("button", { name: "Arrêter la trace" })).toBeVisible();
+
+  await globePane.getByRole("button", { name: "Viewport Bureau" }).click();
+  await expect(traceSection.getByText(/browser_set_viewport → desktop/)).toBeVisible();
+
+  await traceSection.getByRole("button", { name: "Exporter preuve HTML" }).click();
+  await expect(traceSection.getByText(/Preuve HTML générée/)).toBeVisible();
+  const traceExport = await page.evaluate(
+    () => (window as unknown as { __kanaLastGlobeTrace?: { filename: string; content: string } }).__kanaLastGlobeTrace,
+  );
+  expect(traceExport?.filename).toBe("globe-verification-trace.html");
+  expect(traceExport?.content).toContain("Preuve de vérification Globe — Kana");
+  expect(traceExport?.content).toContain("browser_set_viewport");
+
+  expect(errors).toEqual([]);
+});
