@@ -8,7 +8,7 @@ interface ModelPickerProps {
   agents: AgentInfo[];
   agentId: string;
   modelId: string | undefined;
-  /** Le fournisseur ne se change que dans une conversation encore vide : l'agent d'une conversation commencée garde sa mémoire. */
+  /** Le fournisseur peut changer en cours de conversation (le nouvel agent reçoit un résumé), mais pas pendant une réponse. */
   canSwitchProvider: boolean;
   onSelect: (agentId: string, modelId: string | undefined) => void;
 }
@@ -96,7 +96,7 @@ export default function ModelPicker({ agents, agentId, modelId, canSwitchProvide
                   key={agent.id}
                   disabled={disabled}
                   onClick={() => view(agent.id)}
-                  title={disabled ? "Ouvre une nouvelle conversation pour changer de fournisseur" : undefined}
+                  title={disabled ? "Attends la fin de la réponse pour changer de fournisseur" : undefined}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] transition ${
                     viewing === agent.id ? "bg-[#333331] text-[#ecebe4]" : "text-[#c4c3bc] hover:bg-[#30302e]"
                   } disabled:cursor-default disabled:text-[#6f6e68] disabled:hover:bg-transparent`}
