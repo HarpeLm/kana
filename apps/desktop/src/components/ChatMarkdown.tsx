@@ -65,7 +65,11 @@ export default function ChatMarkdown({ source, onOpenLink }: { source: string; o
     event.preventDefault();
     const href = link.getAttribute("href") ?? "";
     if (href.startsWith("#artifact/")) return openArtifact(decodeURI(href.slice("#artifact/".length)));
-    if (href.startsWith("#file/")) return openLocalFile(decodeURI(href.slice("#file/".length)).replace(/\?line=\d+$/, ""));
+    if (href.startsWith("#file/")) {
+      const target = decodeURI(href.slice("#file/".length));
+      const line = target.match(/\?line=(\d+)$/);
+      return openLocalFile(target.replace(/\?line=\d+$/, ""), line ? Number(line[1]) : undefined);
+    }
     if (/^https?:\/\//i.test(href)) onOpenLink(href);
   };
 
