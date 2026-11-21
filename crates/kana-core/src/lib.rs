@@ -1,5 +1,6 @@
 //! Logique métier de Kana partagée entre les interfaces et le backend Tauri.
 
+pub mod cli;
 pub mod limits;
 pub mod permission;
 pub mod relay;
@@ -7,6 +8,7 @@ pub mod schedule;
 pub mod thread;
 pub mod usage;
 
+pub use cli::{CliCommand, advisor_recommendation, format_cli_help, parse_cli_args};
 pub use limits::{Problem, ProblemKind, detect_problem, reset_time};
 pub use permission::{
     PermissionAuditEntry, PermissionChoice, PermissionEvaluation, PermissionMode, PermissionPolicy,
