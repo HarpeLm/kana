@@ -104,7 +104,7 @@ export default function MoreMenu(props: MoreMenuProps) {
             </span>
             <span
               className={`ml-3 flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition ${
-                props.keepAwake ? "justify-end bg-[#d97757]" : "justify-start bg-[#4a4a46]"
+                props.keepAwake ? "justify-end bg-[#2563eb]" : "justify-start bg-[#4a4a46]"
               }`}
             >
               <span className="h-3 w-3 rounded-full bg-[#f2f1eb]" />
