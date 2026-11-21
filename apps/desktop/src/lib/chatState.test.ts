@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_CHAT, addError, addUserMessage, applyEvent, type ChatState } from "./chatState";
+import {
+  EMPTY_CHAT,
+  addError,
+  addUserMessage,
+  applyEvent,
+  applyTrigger,
+  detectTrigger,
+  enqueueMessage,
+  mergeCommands,
+  prioritizeQueuedMessage,
+  removeQueuedMessage,
+  type ChatState,
+} from "./chatState";
+import { buildMentionItems, type FileList } from "./files";
 
 const run = (chat: ChatState, ...events: Parameters<typeof applyEvent>[1][]) => events.reduce(applyEvent, chat);
 
@@ -93,5 +106,61 @@ describe("chatState", () => {
     const chat = addError(addUserMessage(EMPTY_CHAT, "x"), "boom");
     expect(chat.busy).toBe(false);
     expect(chat.messages[1]).toMatchObject({ role: "error", text: "boom" });
+  });
+
+  it("met à jour les commandes dynamiques ACP et les fusionne avec les commandes de base", () => {
+    const chat = run(EMPTY_CHAT, {
+      kind: "available_commands",
+      commands: [
+        { name: "web", description: "Chercher sur le web", hint: "requête" },
+        { name: "compact", description: "Compacter via l'agent" },
+      ],
+    });
+    expect(chat.commands).toHaveLength(2);
+    const merged = mergeCommands(chat.commands, "we");
+    expect(merged.map((c) => c.name)).toEqual(["web"]);
+    const overridden = mergeCommands(chat.commands, "compact");
+    expect(overridden[0].description).toBe("Compacter via l'agent");
+  });
+
+  it("gère la file d'attente et le steering des messages", () => {
+    let chat = enqueueMessage(EMPTY_CHAT, "deuxième");
+    chat = enqueueMessage(chat, "troisième");
+    chat = enqueueMessage(chat, "   ");
+    expect(chat.queued).toEqual(["deuxième", "troisième"]);
+    chat = prioritizeQueuedMessage(chat, 1);
+    expect(chat.queued).toEqual(["troisième", "deuxième"]);
+    chat = removeQueuedMessage(chat, 1);
+    expect(chat.queued).toEqual(["troisième"]);
+  });
+
+  it("détecte et applique les déclencheurs /commande et @mention", () => {
+    const slash = detectTrigger("/co", 3);
+    expect(slash).toEqual({ kind: "slash", query: "co", start: 0, end: 3 });
+    expect(applyTrigger("/co", slash!, "/compact")).toEqual({ text: "/compact ", cursor: 9 });
+
+    const mention = detectTrigger("Regarde @cli", 12);
+    expect(mention).toEqual({ kind: "mention", query: "cli", start: 8, end: 12 });
+    expect(applyTrigger("Regarde @cli vite", mention!, "@client.rs")).toEqual({
+      text: "Regarde @client.rs vite",
+      cursor: 18,
+    });
+  });
+
+  it("construit les suggestions @fichier, @dossier, @symbole et @artéfact", () => {
+    const list: FileList = {
+      root: "/repo",
+      files: ["artefacts/plan.html", "crates/kana-acp/src/client.rs"],
+      truncated: false,
+      changes: [],
+      symbols: [{ name: "AcpClient", kind: "struct", path: "crates/kana-acp/src/client.rs", line: 54 }],
+    };
+    const all = buildMentionItems(list, "");
+    expect(all.map((i) => i.kind)).toEqual(["artifact", "file", "folder", "folder", "symbol"]);
+    expect(buildMentionItems(list, "symbole:Acp").map((i) => i.insert)).toEqual([
+      "AcpClient (crates/kana-acp/src/client.rs:54)",
+    ]);
+    expect(buildMentionItems(list, "dossier:src").map((i) => i.insert)).toEqual(["crates/kana-acp/src/"]);
+    expect(buildMentionItems(list, "artefact:plan").map((i) => i.insert)).toEqual(["artefacts/plan.html"]);
   });
 });
