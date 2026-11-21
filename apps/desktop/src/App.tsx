@@ -159,7 +159,7 @@ export default function App({ startup }: { startup: Startup }) {
       if (agent && problem) markProblem(agent, problem, message);
     },
   };
-  const { chat, send, stop, answer, seed } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
+  const { chat, send, stop, answer, seed, removeQueued, steerQueued } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
 
   // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
   const { setProject, setUseWorktree, setAgent } = conversations;
@@ -522,6 +522,9 @@ export default function App({ startup }: { startup: Startup }) {
               chat={chat}
               onSend={sendMessage}
               onStop={stop}
+              onRemoveQueued={removeQueued}
+              onSteerQueued={steerQueued}
+              workPath={workPath}
               onAnswer={answer}
               onOpenLink={openInGlobe}
               onFork={forkFrom}
