@@ -44,6 +44,15 @@ pub struct StoredConversation {
     /// Identifiant de la session ACP en cours, pour reprendre avec `session/load` après un redémarrage.
     #[serde(default)]
     pub acp_session_id: Option<String>,
+    /// Environnement d'exécution sérialisé en JSON (`local`, `ssh`, `docker`, `devcontainer` + `sandbox`).
+    #[serde(default)]
+    pub environment: Option<String>,
+    /// Identifiant de la conversation parente (pour un sous-agent parallèle).
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    /// Libellé de rôle du sous-agent.
+    #[serde(default)]
+    pub role_label: Option<String>,
 }
 
 fn default_true() -> bool {
