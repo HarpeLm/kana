@@ -158,6 +158,11 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
             println!("{}", kana_core::advisor_recommendation(subject));
             0
         }
+        kana_core::CliCommand::Bench { suite, mode, json } => {
+            let report = kana_core::run_public_benchmark_harness(&suite, &mode);
+            println!("{}", kana_core::format_bench_report(&report, json));
+            0
+        }
         kana_core::CliCommand::Run {
             prompt,
             agent,
