@@ -69,6 +69,7 @@ async function scan(conversations: Conversation[]): Promise<ArtifactEntry[]> {
 export function useAllArtifacts(conversations: Conversation[], active: boolean) {
   const [items, setItems] = useState<ArtifactEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!active) return;
     let live = true;
@@ -80,6 +81,6 @@ export function useAllArtifacts(conversations: Conversation[], active: boolean) 
       live = false;
     };
     // les conversations changent souvent (titres) : seul le moment où on ouvre compte
-  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { items, loading };
+  }, [active, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { items, loading, refresh: () => setTick((n) => n + 1) };
 }
