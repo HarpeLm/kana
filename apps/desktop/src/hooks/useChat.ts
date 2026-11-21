@@ -6,6 +6,7 @@ import {
   sendPrompt,
   setPlanMode,
   startAgent,
+  type AgentEnvironment,
 } from "../lib/acp";
 import {
   EMPTY_CHAT,
@@ -46,6 +47,8 @@ export interface PreparedThread {
   effort?: string;
   /** Session ACP précédente à tenter de reprendre via `session/load`. */
   acpSessionId?: string;
+  /** Environnement d'exécution (local, sandbox OS, SSH, Docker, DevContainer). */
+  environment?: AgentEnvironment;
 }
 
 /** Un outil resté « en cours » quand l'app s'est arrêtée n'a jamais fini : on le montre comme interrompu. */
@@ -169,35 +172,57 @@ export function useChat(
     };
   }, [update]);
 
-  const send = useCallback(
-    async (text: string, fromQueue = false, modeOverride?: PermissionMode) => {
-      if (modeOverride) modeRef.current = modeOverride;
-      if (!fromQueue && chatsRef.current[threadId]?.busy) {
-        update(threadId, (chat) => enqueueMessage(chat, text));
+  const sendToThread = useCallback(
+    async (
+      targetThreadId: string,
+      targetAgentId: string,
+      text: string,
+      modeOverride?: PermissionMode,
+      fromQueue = false,
+    ) => {
+      if (modeOverride && targetThreadId === threadId) modeRef.current = modeOverride;
+      if (!fromQueue && chatsRef.current[targetThreadId]?.busy) {
+        update(targetThreadId, (chat) => enqueueMessage(chat, text));
         return;
       }
-      let priorMessages = chatsRef.current[threadId]?.messages ?? [];
+      loaded.current.add(targetThreadId);
+      let priorMessages = chatsRef.current[targetThreadId]?.messages ?? [];
       if (priorMessages.length === 0) {
-        const pending = loading.current.get(threadId);
+        const pending = loading.current.get(targetThreadId);
         if (pending) priorMessages = await pending;
       }
-      update(threadId, (chat) => addUserMessage(chat, text));
+      update(targetThreadId, (chat) => addUserMessage(chat, text));
       try {
-        const { cwd, preface, carried, model, effort, acpSessionId } = await prepareRef.current(threadId);
-        const started = await startAgent(threadId, agentId, cwd, model, effort, acpSessionId);
-        observerRef.current?.onSession?.(threadId, started.sessionId);
+        const { cwd, preface, carried, model, effort, acpSessionId, environment } =
+          await prepareRef.current(targetThreadId);
+        const started = await startAgent(
+          targetThreadId,
+          targetAgentId,
+          cwd,
+          model,
+          effort,
+          acpSessionId,
+          environment,
+        );
+        observerRef.current?.onSession?.(targetThreadId, started.sessionId);
         const activeMode = modeOverride ?? modeRef.current;
         // En plan, l'agent passe dans son propre mode lecture seule quand il en a un ; sinon Kana refuse les modifications (voir autoAnswer).
-        await setPlanMode(threadId, activeMode === "plan").catch(() => false);
+        await setPlanMode(targetThreadId, activeMode === "plan").catch(() => false);
         const resume = !started.resumed && !carried ? buildResumeContext(priorMessages) : "";
         const prefix = !started.resumed ? `${preface ?? ""}${resume}` : carried ? (preface ?? "") : "";
-        await sendPrompt(threadId, promptFor(activeMode, `${prefix}${text}`), imagePathsIn(text));
+        await sendPrompt(targetThreadId, promptFor(activeMode, `${prefix}${text}`), imagePathsIn(text));
       } catch (error) {
-        update(threadId, (chat) => addError(chat, String(error)));
-        observerRef.current?.onError?.(threadId, String(error));
+        update(targetThreadId, (chat) => addError(chat, String(error)));
+        observerRef.current?.onError?.(targetThreadId, String(error));
       }
     },
-    [threadId, agentId, update],
+    [threadId, update],
+  );
+
+  const send = useCallback(
+    (text: string, fromQueue = false, modeOverride?: PermissionMode) =>
+      sendToThread(threadId, agentId, text, modeOverride, fromQueue),
+    [sendToThread, threadId, agentId],
   );
 
   const removeQueued = useCallback(
@@ -268,5 +293,5 @@ export function useChat(
     });
   }, []);
 
-  return { chat: chats[threadId] ?? EMPTY_CHAT, send, stop, answer, seed, clearContext, removeQueued, steerQueued };
+  return { chat: chats[threadId] ?? EMPTY_CHAT, chats, send, sendToThread, stop, answer, seed, clearContext, removeQueued, steerQueued };
 }
