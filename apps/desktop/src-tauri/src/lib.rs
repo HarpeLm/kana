@@ -52,6 +52,7 @@ pub fn run() {
             agent_commands::send_prompt,
             agent_commands::cancel_prompt,
             agent_commands::set_model,
+            agent_commands::set_effort,
             agent_commands::stop_agent,
             settings_commands::list_models,
             agent_commands::answer_permission,
