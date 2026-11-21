@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { getArtifactGuide } from "./agentGuide";
 import type { ChatMessage } from "./chatState";
-import { buildCompactContext, buildRelayContext, buildResumeContext } from "./fork";
+import { buildCompactContext, buildForkContext, buildRelayContext, buildResumeContext } from "./fork";
 
 const msg = (role: ChatMessage["role"], text: string): ChatMessage => ({ id: text.slice(0, 4), role, text, thought: "", tools: [] });
 
@@ -36,5 +37,24 @@ describe("contexte transmis à un autre agent", () => {
     expect(context).toContain("…");
     expect(context).not.toContain(old);
     expect(context.endsWith("voici mon nouveau message :\n\n")).toBe(true);
+  });
+
+  it("injecte les prompts et consignes en anglais quand la locale est en", () => {
+    expect(getArtifactGuide("fr")).toContain("Consigne de l'application Kana");
+    expect(getArtifactGuide("en")).toContain("Kana application instruction");
+
+    const forkEn = buildForkContext([msg("user", "hello")], undefined, "en");
+    expect(forkEn).toContain("fork of a previous conversation");
+    expect(forkEn).toContain("User: hello");
+    expect(forkEn.endsWith("here is my new message:\n\n")).toBe(true);
+
+    const relayEn = buildRelayContext([msg("user", "hi")], "Claude Code", "en");
+    expect(relayEn).toContain("continues with another provider");
+
+    const compactEn = buildCompactContext([msg("user", "hi")], "en");
+    expect(compactEn).toContain("session was compacted");
+
+    const resumeEn = buildResumeContext([msg("user", "hi")], "en");
+    expect(resumeEn).toContain("resuming after an application or agent restart");
   });
 });
