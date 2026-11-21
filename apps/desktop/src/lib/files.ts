@@ -28,6 +28,7 @@ export interface FilePreview {
 
 // Dans un navigateur sans Tauri : quelques fichiers d'exemple, modifiables en mémoire.
 const SAMPLE_FILES = [
+  "artefacts/plan.html",
   "README.md",
   "Cargo.toml",
   "Cargo.lock",
@@ -39,11 +40,23 @@ const SAMPLE_FILES = [
   "apps/desktop/src/components/Sidebar.tsx",
   "apps/desktop/package.json",
 ];
+const SAMPLE_HTML = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Plan</title>
+<style>body{font-family:Georgia,serif;max-width:620px;margin:40px auto;color:#222;line-height:1.6}h1{font-size:28px}li{margin:6px 0}.note{background:#f4efe4;padding:10px 14px;border-radius:8px}</style></head>
+<body><h1>Plan de la refonte</h1>
+<p>Ce document décrit les étapes pour <b>refondre</b> la page d'accueil avant la fin du mois.</p>
+<ul><li>Auditer la page actuelle et lister les problèmes</li><li>Dessiner trois maquettes différentes</li><li>Choisir une maquette avec l'équipe</li><li>Livrer la version finale</li></ul>
+<p class="note">Une note à relire avant de commencer.</p>
+<script>document.body.insertAdjacentHTML('beforeend','<p>Ajouté par un script</p>')</script>
+</body></html>
+`;
 const sampleTexts = new Map<string, { text: string; modified: number }>();
 
 function sampleOf(path: string) {
   if (!sampleTexts.has(path)) {
-    const text = path.endsWith(".md")
+    const text = path.endsWith(".html")
+      ? SAMPLE_HTML
+      : path.endsWith(".md")
       ? `# Exemple\n\nAperçu de **${path}**.\n\n- un\n- deux\n\n\`\`\`rust\nfn main() {}\n\`\`\`\n`
       : path.endsWith(".toml") || path.endsWith(".lock")
         ? `# Exemple\nversion = 4\n\n[[package]]\nname = "kana"\nversion = "0.1.0"\ndependencies = [\n "serde",\n]\nactive = true\n`
