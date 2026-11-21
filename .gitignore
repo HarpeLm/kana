@@ -21,3 +21,7 @@ apps/desktop/src-tauri/gen/
 
 # Réglages locaux de Claude Code (propres à chaque poste)
 .claude/
+
+# Résultats des tests de l'écran
+apps/desktop/test-results/
+apps/desktop/playwright-report/
