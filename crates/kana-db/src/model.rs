@@ -41,6 +41,9 @@ pub struct StoredConversation {
     /// La conversation travaille dans son propre dossier de travail git (par défaut oui).
     #[serde(default = "default_true")]
     pub use_worktree: bool,
+    /// Identifiant de la session ACP en cours, pour reprendre avec `session/load` après un redémarrage.
+    #[serde(default)]
+    pub acp_session_id: Option<String>,
 }
 
 fn default_true() -> bool {
