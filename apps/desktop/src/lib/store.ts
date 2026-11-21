@@ -25,6 +25,7 @@ export const SHARED_SETTING_KEYS = [
   "kana-cloud-config",
   "kana-usage",
   "kana-locale",
+  "kana-user-profile",
 ] as const;
 
 /** Persiste un réglage partagé dans `localStorage` et, dans Tauri, le synchronise vers SQLite + `~/.kana/config.json`. */
