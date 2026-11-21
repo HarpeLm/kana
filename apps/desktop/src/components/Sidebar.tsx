@@ -37,6 +37,7 @@ interface SidebarProps {
   onOpenSearch: () => void;
   onArtifacts: () => void;
   onOpenScheduled: () => void;
+  onOpenCustomizations: () => void;
   onOpenSettings: () => void;
 }
 
@@ -56,6 +57,7 @@ export default function Sidebar({
   onOpenSearch,
   onArtifacts,
   onOpenScheduled,
+  onOpenCustomizations,
   onOpenSettings,
 }: SidebarProps) {
   const locale = useLocale();
@@ -102,7 +104,7 @@ export default function Sidebar({
           onToggleSearch={onOpenSearch}
           onArtifacts={onArtifacts}
           onScheduled={onOpenScheduled}
-          onCustomize={onOpenSettings}
+          onCustomize={onOpenCustomizations}
         />
 
         <div ref={listArea} className="relative flex-1 overflow-y-auto px-2 pb-3">
