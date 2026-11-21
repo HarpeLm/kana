@@ -40,6 +40,7 @@ pub fn run() {
             db_commands::db_save_messages,
             db_commands::db_load_projects,
             db_commands::db_save_projects,
+            db_commands::db_search_messages,
             project_commands::launch_project,
             project_commands::create_project,
             project_commands::scratch_dir,
