@@ -614,4 +614,36 @@ mod tests {
         assert_eq!(hits[0].conversation_id, "c1");
         let _ = std::fs::remove_file(&path);
     }
+
+    #[test]
+    fn fts5_bulk_corpus_query_latency_stays_within_budget() {
+        let store = Store::open_in_memory().unwrap();
+        store.save_conversations(&[conversation("bulk")]).unwrap();
+        let messages: Vec<StoredMessage> = (0..1_200)
+            .map(|i| StoredMessage {
+                id: format!("m-{i}"),
+                role: "agent".into(),
+                text: format!("Message indexé numéro {i} avec jeton_perf_{}", i % 53),
+                thought: format!("Réflexion architecture lot4_{}", i % 17),
+                tools: json!([]),
+                started_at: Some(1),
+                ended_at: Some(2),
+            })
+            .collect();
+        store.save_messages("bulk", &messages).unwrap();
+
+        let start = std::time::Instant::now();
+        let mut total_hits = 0usize;
+        for i in 0..50 {
+            let q = format!("jeton_perf_{}", i % 53);
+            let hits = store.search_messages(&q, 15).unwrap();
+            total_hits += hits.len();
+        }
+        let elapsed = start.elapsed();
+        assert!(total_hits >= 50);
+        assert!(
+            elapsed < std::time::Duration::from_millis(750),
+            "50 requêtes FTS5 sur 1 200 messages ont dépassé le budget : {elapsed:?}"
+        );
+    }
 }
