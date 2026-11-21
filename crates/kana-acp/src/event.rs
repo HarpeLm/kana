@@ -35,6 +35,10 @@ pub enum AcpEvent {
         /// Résultat de l'outil, en texte, quand l'agent le donne.
         output: Option<String>,
     },
+    /// Les jetons que le dernier tour a consommés (annoncés avec la fin du tour).
+    TurnUsage { input_tokens: u64, output_tokens: u64, total_tokens: u64 },
+    /// L'occupation de la fenêtre de contexte de l'agent : `used` jetons sur `size`.
+    Context { used: u64, size: u64 },
     /// Le plan complet de l'agent : chaque mise à jour remplace la précédente.
     Plan { entries: Vec<PlanEntry> },
     /// L'agent demande l'autorisation d'agir ; répondre avec `resolve_permission`.
@@ -88,6 +92,10 @@ impl AcpEvent {
                 raw_input: update.get("rawInput").filter(|v| !v.is_null()).cloned(),
                 output: tool_output(update),
             }),
+            "usage_update" => Some(Self::Context {
+                used: update["used"].as_u64()?,
+                size: update["size"].as_u64()?,
+            }),
             "plan" => Some(Self::Plan {
                 entries: update["entries"]
                     .as_array()?
@@ -102,6 +110,15 @@ impl AcpEvent {
             }),
             _ => None,
         }
+    }
+
+    /// La consommation d'un tour, lue dans le résultat de `session/prompt` (`usage`), si l'agent la donne.
+    pub fn turn_usage(result: &Value) -> Option<Self> {
+        let usage = result.get("usage")?;
+        let input = usage["inputTokens"].as_u64().unwrap_or(0);
+        let output = usage["outputTokens"].as_u64().unwrap_or(0);
+        let total = usage["totalTokens"].as_u64().unwrap_or(input + output);
+        (total > 0).then_some(Self::TurnUsage { input_tokens: input, output_tokens: output, total_tokens: total })
     }
 
     /// Convertit les paramètres d'une requête `session/request_permission`.
@@ -202,8 +219,20 @@ mod tests {
     }
 
     #[test]
+    fn usage_is_read_from_updates_and_turn_results() {
+        let update = json!({ "sessionUpdate": "usage_update", "used": 29598, "size": 1048576 });
+        assert_eq!(AcpEvent::from_update(&update), Some(AcpEvent::Context { used: 29598, size: 1048576 }));
+        let result = json!({ "stopReason": "end_turn", "usage": { "inputTokens": 100, "outputTokens": 20 } });
+        assert_eq!(
+            AcpEvent::turn_usage(&result),
+            Some(AcpEvent::TurnUsage { input_tokens: 100, output_tokens: 20, total_tokens: 120 })
+        );
+        assert_eq!(AcpEvent::turn_usage(&json!({ "stopReason": "end_turn" })), None);
+    }
+
+    #[test]
     fn unknown_updates_are_ignored() {
-        assert_eq!(AcpEvent::from_update(&json!({ "sessionUpdate": "usage_update" })), None);
+        assert_eq!(AcpEvent::from_update(&json!({ "sessionUpdate": "available_commands_update" })), None);
         assert_eq!(AcpEvent::from_update(&json!({})), None);
     }
 
