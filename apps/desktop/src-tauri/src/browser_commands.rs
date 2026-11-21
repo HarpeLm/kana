@@ -12,7 +12,7 @@ use tauri::{
 
 use crate::{
     browser::{is_allowed_navigation, parse_web_url, webview_label},
-    browser_agent::AgentState,
+    browser_agent::{AgentState, BrowserAgent, GlobeTraceStatus, build_trace_html},
 };
 
 /// Script qui trouve l'icône de la page ; à défaut, `/favicon.ico` à la racine du site.
@@ -77,7 +77,8 @@ pub fn browser_open(app: AppHandle, id: String, url: String, bounds: Bounds) -> 
     if app.get_webview(&label).is_some() {
         return Ok(());
     }
-    let url = parse_web_url(&url)?;
+    let parsed_url = parse_web_url(&url)?;
+    app.state::<AgentState>().upsert_tab(id.clone(), parsed_url.to_string(), None);
     let window = app
         .get_window("main")
         .ok_or_else(|| "fenêtre principale introuvable".to_string())?;
@@ -85,13 +86,14 @@ pub fn browser_open(app: AppHandle, id: String, url: String, bounds: Bounds) -> 
     let (navigated, loaded, titled, popup) = (app.clone(), app.clone(), app.clone(), app.clone());
     let (nav_id, load_id, title_id, popup_id) = (id.clone(), id.clone(), id.clone(), id);
 
-    let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+    let builder = WebviewBuilder::new(&label, WebviewUrl::External(parsed_url))
         // Outils de lecture et d'action sur la page, pour les agents.
         .initialization_script(include_str!("agent_page.js"))
         .on_navigation(move |target| {
             if !is_allowed_navigation(target) {
                 return false;
             }
+            navigated.state::<AgentState>().upsert_tab(nav_id.clone(), target.to_string(), None);
             let _ = navigated.emit("browser-navigated", UrlEvent { id: nav_id.clone(), url: target.to_string() });
             true
         })
@@ -100,10 +102,12 @@ pub fn browser_open(app: AppHandle, id: String, url: String, bounds: Bounds) -> 
             if !loading {
                 report_favicon(&webview, loaded.clone(), payload.url().to_string());
             }
+            loaded.state::<AgentState>().upsert_tab(load_id.clone(), payload.url().to_string(), None);
             let _ = loaded.emit("browser-loading", LoadingEvent { id: load_id.clone(), loading });
             let _ = loaded.emit("browser-navigated", UrlEvent { id: load_id.clone(), url: payload.url().to_string() });
         })
         .on_document_title_changed(move |_, title| {
+            titled.state::<AgentState>().upsert_tab(title_id.clone(), String::new(), Some(title.clone()));
             let _ = titled.emit("browser-title", TitleEvent { id: title_id.clone(), title });
         })
         // Un lien qui voudrait ouvrir une nouvelle fenêtre ouvre un nouvel onglet de Kana.
@@ -166,6 +170,7 @@ pub fn browser_reload(app: AppHandle, id: String) -> Result<(), String> {
 /// Ferme la vue d'un onglet. Sans effet si elle n'existe plus.
 #[tauri::command]
 pub fn browser_close(app: AppHandle, id: String) -> Result<(), String> {
+    app.state::<AgentState>().remove_tab(&id);
     match app.get_webview(&webview_label(&id)) {
         Some(webview) => webview.close().map_err(|e| e.to_string()),
         None => Ok(()),
@@ -182,4 +187,74 @@ pub fn browser_set_active(state: State<'_, AgentState>, id: String) {
 #[tauri::command]
 pub fn browser_agent_answer(state: State<'_, AgentState>, request_id: String, allow: bool) {
     state.answer(&request_id, allow);
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserDiagnosticsReport {
+    pub console_errors: Vec<serde_json::Value>,
+    pub network_errors: Vec<serde_json::Value>,
+}
+
+/// Lit les erreurs console JS et requêtes réseau 4xx/5xx de l'onglet actif.
+#[tauri::command]
+pub fn browser_get_diagnostics(app: AppHandle, clear: bool) -> Result<BrowserDiagnosticsReport, String> {
+    let agent = BrowserAgent::new(app);
+    let Ok(webview) = agent.webview() else {
+        return Ok(BrowserDiagnosticsReport {
+            console_errors: Vec::new(),
+            network_errors: Vec::new(),
+        });
+    };
+    let console = agent
+        .helper(&webview, &format!("consoleErrors(true, {clear})"))
+        .ok()
+        .and_then(|v| v["entries"].as_array().cloned())
+        .unwrap_or_default();
+    let network = agent
+        .helper(&webview, &format!("networkErrors({clear})"))
+        .ok()
+        .and_then(|v| v["entries"].as_array().cloned())
+        .unwrap_or_default();
+    Ok(BrowserDiagnosticsReport {
+        console_errors: console,
+        network_errors: network,
+    })
+}
+
+/// État actuel de la trace de session Globe.
+#[tauri::command]
+pub fn browser_trace_status(state: State<'_, AgentState>) -> GlobeTraceStatus {
+    state.trace_status()
+}
+
+/// Démarre ou arrête l'enregistrement de la trace Globe.
+#[tauri::command]
+pub fn browser_trace_toggle(state: State<'_, AgentState>, active: bool, reset: bool) -> GlobeTraceStatus {
+    if active {
+        state.trace_start(reset)
+    } else {
+        state.trace_stop()
+    }
+}
+
+/// Exporte un rapport HTML autonome de preuve de vérification de la session Globe.
+#[tauri::command]
+pub fn browser_trace_export(app: AppHandle, state: State<'_, AgentState>) -> Result<String, String> {
+    let status = state.trace_status();
+    let diag = browser_get_diagnostics(app, false).unwrap_or(BrowserDiagnosticsReport {
+        console_errors: Vec::new(),
+        network_errors: Vec::new(),
+    });
+    let console_text = if diag.console_errors.is_empty() {
+        "Aucune erreur console JS.".to_owned()
+    } else {
+        serde_json::to_string_pretty(&diag.console_errors).unwrap_or_default()
+    };
+    let network_text = if diag.network_errors.is_empty() {
+        "Aucune erreur réseau 4xx/5xx.".to_owned()
+    } else {
+        serde_json::to_string_pretty(&diag.network_errors).unwrap_or_default()
+    };
+    Ok(build_trace_html(&status.entries, &console_text, &network_text))
 }
