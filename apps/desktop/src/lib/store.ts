@@ -10,6 +10,67 @@ import type { ChatMessage } from "./chatState";
 
 const LOCAL_CONVERSATIONS = "kana-conversations";
 
+/** Clés de réglages partagées entre `localStorage`, SQLite (`settings`) et `~/.kana/config.json`. */
+export const SHARED_SETTING_KEYS = [
+  "kana-mcp-servers",
+  "kana-skills",
+  "kana-hooks",
+  "kana-rules-fallback",
+  "kana-permission-mode",
+  "kana-permission-rules",
+  "kana-permission-audit",
+  "kana-project-memory",
+  "kana-scheduled-tasks",
+  "kana-scheduled-runs",
+  "kana-usage",
+  "kana-locale",
+] as const;
+
+/** Persiste un réglage partagé dans `localStorage` et, dans Tauri, le synchronise vers SQLite + `~/.kana/config.json`. */
+export function persistSharedSetting(key: string, value: string): void {
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // stockage local indisponible
+    }
+  }
+  if (inTauri) {
+    void invoke("db_set_setting", { key, value }).catch(() => {});
+  }
+}
+
+/**
+ * Au démarrage de l'app Desktop, migre sans perte les réglages locaux absents de SQLite
+ * via `db_sync_settings` puis réhydrate `localStorage` depuis l'état unifié.
+ */
+export async function hydrateSharedSettings(): Promise<void> {
+  if (!inTauri) return;
+  const entries: Record<string, string> = {};
+  if (typeof localStorage !== "undefined") {
+    const keysToSync = [...SHARED_SETTING_KEYS, "kana-rule-files"];
+    for (const key of keysToSync) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw !== null) entries[key] = raw;
+      } catch {
+        // stockage local illisible
+      }
+    }
+  }
+  const merged = await invoke<Record<string, string>>("db_sync_settings", { entries });
+  if (typeof localStorage !== "undefined" && merged && typeof merged === "object") {
+    for (const [key, value] of Object.entries(merged)) {
+      if (typeof value !== "string") continue;
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // stockage local indisponible
+      }
+    }
+  }
+}
+
 export function loadLocalConversations(): Conversation[] | null {
   try {
     const parsed = JSON.parse(localStorage.getItem(LOCAL_CONVERSATIONS) ?? "null");
