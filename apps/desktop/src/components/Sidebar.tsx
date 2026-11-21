@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { Settings } from "lucide-react";
+import { tr, useLocale } from "../lib/i18n";
 import { loadView } from "../lib/sidebarView";
 import type { View } from "../data";
 import {
@@ -57,6 +58,7 @@ export default function Sidebar({
   onOpenScheduled,
   onOpenSettings,
 }: SidebarProps) {
+  const locale = useLocale();
   const [listView, setListView] = useState<SidebarView>(loadView);
   const [menuFor, setMenuFor] = useState<{ name: string; anchor: DOMRect } | null>(null);
   const [expandSignal, setExpandSignal] = useState(0);
@@ -172,7 +174,7 @@ export default function Sidebar({
           }`}
         >
           <Settings className="h-[16px] w-[16px]" strokeWidth={1.6} />
-          Réglages
+          {tr("Réglages", "Settings", locale)}
         </button>
 
         <SidebarResizer dragging={dragging} onPointerDown={onResizeStart} />
