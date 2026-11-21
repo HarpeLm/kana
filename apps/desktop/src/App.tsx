@@ -26,10 +26,23 @@ import { OpenArtifactContext } from "./lib/artifactRefs";
 import { buildRelayContext } from "./lib/fork";
 import { OpenFileContext } from "./lib/fileRefs";
 import { buildForkContext } from "./lib/fork";
-import { stopAgent } from "./lib/acp";
-import { setKeepAwake } from "./lib/settings";
+import { setPlanMode, stopAgent } from "./lib/acp";
+import { notifyOs, setKeepAwake } from "./lib/settings";
 import { createWorktree, removeWorktree } from "./lib/worktree";
-import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
+import { MODES, loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
+import {
+  ACTION_CYCLE_MODE,
+  ACTION_NEW,
+  ACTION_OPEN_RELAY,
+  ACTION_SETTINGS,
+  ACTION_TOGGLE_ARTIFACTS,
+  ACTION_TOGGLE_BROWSER,
+  ACTION_TOGGLE_DIFF,
+  ACTION_TOGGLE_FILES,
+  ACTION_TOGGLE_SESSION,
+  ACTION_TOGGLE_TERMINAL,
+} from "./lib/searchItems";
+import { loadView, orderedVisibleConversations } from "./lib/sidebarView";
 import { useConversations } from "./hooks/useConversations";
 import { useNativeContextMenu } from "./hooks/useNativeContextMenu";
 import { useResizableWidth } from "./hooks/useResizableWidth";
@@ -77,10 +90,6 @@ export default function App({ startup }: { startup: Startup }) {
   };
   const history = useNavHistory(selected.id, openConversation);
   const [permissionMode, setPermissionMode] = useState(loadMode);
-  const changeMode = (mode: PermissionMode) => {
-    setPermissionMode(mode);
-    saveMode(mode);
-  };
   // Avant le premier message d'une conversation : son dossier de travail (worktree) et, pour une
   // bifurcation, le résumé de la conversation d'origine.
   const itemsRef = useRef(conversations.items);
@@ -130,6 +139,10 @@ export default function App({ startup }: { startup: Startup }) {
   );
   // Ce que les agents consomment, et les limites qu'ils atteignent (voir « Relais »).
   const agentOf = (threadId: string) => itemsRef.current.find((c) => c.id === threadId)?.agentId;
+  const selectedIdRef = useRef(selected.id);
+  useEffect(() => {
+    selectedIdRef.current = selected.id;
+  });
   const pendingTitles = useRef(new Map<string, { request: string; provisional: string }>());
   const observer = {
     onSession: (threadId: string, sessionId: string) => {
@@ -153,6 +166,25 @@ export default function App({ startup }: { startup: Startup }) {
       }
       recordTurn(agent);
       clearProblem(agent);
+
+      const convTitle = itemsRef.current.find((c) => c.id === threadId)?.title || "Kana";
+      const inBackground = threadId !== selectedIdRef.current;
+      if (inBackground || (typeof document !== "undefined" && document.hidden)) {
+        notifyOs(convTitle, "L'agent a terminé sa réponse.");
+      }
+      if (inBackground) {
+        conversations.markUnread(threadId);
+      }
+    },
+    onPermission: (threadId: string, title: string) => {
+      const convTitle = itemsRef.current.find((c) => c.id === threadId)?.title || "Kana";
+      const inBackground = threadId !== selectedIdRef.current;
+      if (inBackground || (typeof document !== "undefined" && document.hidden)) {
+        notifyOs(convTitle, `Autorisation demandée : ${title}`);
+      }
+      if (inBackground) {
+        conversations.markUnread(threadId);
+      }
     },
     onError: (threadId: string, message: string) => {
       const agent = agentOf(threadId);
@@ -161,6 +193,13 @@ export default function App({ startup }: { startup: Startup }) {
     },
   };
   const { chat, send, stop, answer, seed, removeQueued, steerQueued } = useChat(selected.id, selected.agentId, permissionMode, prepareThread, observer);
+  const changeMode = (mode: PermissionMode) => {
+    setPermissionMode(mode);
+    saveMode(mode);
+    if (chat.messages.length > 0) {
+      void setPlanMode(selected.id, mode === "plan").catch(() => false);
+    }
+  };
 
   // Projet et dossier de travail de la session ouverte (écran de nouvelle session).
   const { setProject, setUseWorktree, setAgent } = conversations;
@@ -212,7 +251,7 @@ export default function App({ startup }: { startup: Startup }) {
   };
 
   // Le premier message donne son titre à la conversation et remet son projet en tête des récents.
-  const sendMessage = (text: string) => {
+  const sendMessage = (text: string, modeOverride?: PermissionMode) => {
     if (selected.title === "Nouvelle conversation") {
       const provisional = autoTitle(text);
       conversations.rename(selected.id, provisional);
@@ -221,7 +260,13 @@ export default function App({ startup }: { startup: Startup }) {
     const project = projectList.projects.find((p) => p.path === selected.projectPath);
     if (project) projectList.use(project);
     conversations.touch(selected.id);
-    return send(text);
+    return send(text, false, modeOverride);
+  };
+
+  const approvePlan = (targetMode: PermissionMode) => {
+    changeMode(targetMode);
+    void setPlanMode(selected.id, false).catch(() => false);
+    void sendMessage("Le plan est approuvé : passe en exécution et applique les modifications.", targetMode);
   };
 
   /** Compacte la session : l'agent s'éteint et repart avec un résumé ; l'historique reste affiché. */
@@ -445,6 +490,130 @@ export default function App({ startup }: { startup: Startup }) {
   };
   const deleting = conversations.items.find((c) => c.id === deletingId);
 
+  const cycleMode = () => {
+    const currentIndex = MODES.findIndex((m) => m.id === permissionMode);
+    const next = MODES[(currentIndex + 1) % MODES.length];
+    changeMode(next.id);
+  };
+
+  const toggleSessionPanel = () => {
+    if (!showPlan && view !== "workspace") setView("workspace");
+    setShowPlan((v) => !v);
+  };
+
+  const runPaletteAction = (actionId: string) => {
+    switch (actionId) {
+      case ACTION_NEW:
+        return createConversation();
+      case ACTION_SETTINGS:
+        return setView("settings");
+      case ACTION_TOGGLE_TERMINAL:
+        return toggleTerminal();
+      case ACTION_TOGGLE_DIFF:
+        return setShowDiff((v) => !v);
+      case ACTION_TOGGLE_FILES:
+        return setShowFiles((v) => !v);
+      case ACTION_TOGGLE_ARTIFACTS:
+        return setShowArtDock((v) => !v);
+      case ACTION_TOGGLE_BROWSER:
+        return toggleBrowser();
+      case ACTION_TOGGLE_SESSION:
+        return toggleSessionPanel();
+      case ACTION_CYCLE_MODE:
+        return cycleMode();
+      case ACTION_OPEN_RELAY:
+        return setView("relay");
+    }
+  };
+
+  const handleGlobalKeyDown = (event: KeyboardEvent) => {
+    if (event.isComposing || event.keyCode === 229) return;
+    const blockedByModal =
+      deleting !== undefined ||
+      artifactToDelete !== null ||
+      browserAgent.approval !== null ||
+      document.querySelector('[role="alertdialog"]') !== null;
+    if (blockedByModal) return;
+
+    const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
+    const key = event.key.toLowerCase();
+
+    if (mod && !event.shiftKey && key === "k") {
+      event.preventDefault();
+      setSearchOpen((v) => !v);
+      return;
+    }
+
+    if (searchOpen) return;
+
+    if (mod && !event.shiftKey) {
+      if (key === "n") {
+        event.preventDefault();
+        createConversation();
+      } else if (key === "b") {
+        event.preventDefault();
+        setShowSidebar((v) => !v);
+      } else if (key === "j") {
+        event.preventDefault();
+        toggleTerminal();
+      } else if (event.key === ",") {
+        event.preventDefault();
+        setView("settings");
+      }
+      return;
+    }
+
+    if (mod && event.shiftKey) {
+      if (key === "d") {
+        event.preventDefault();
+        setShowDiff((v) => !v);
+      } else if (key === "e") {
+        event.preventDefault();
+        setShowFiles((v) => !v);
+      } else if (key === "a") {
+        event.preventDefault();
+        setShowArtDock((v) => !v);
+      } else if (key === "g") {
+        event.preventDefault();
+        toggleBrowser();
+      } else if (key === "p") {
+        event.preventDefault();
+        toggleSessionPanel();
+      } else if (key === "m") {
+        event.preventDefault();
+        cycleMode();
+      }
+      return;
+    }
+
+    if (
+      event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      (event.key === "ArrowUp" || event.key === "ArrowDown")
+    ) {
+      if (editingId !== null) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target instanceof HTMLInputElement || target.closest(".cm-editor, .xterm"))) return;
+      const visible = orderedVisibleConversations(conversations.items, loadView(), selected.id);
+      if (visible.length <= 1) return;
+      event.preventDefault();
+      const currentIndex = visible.findIndex((c) => c.id === selected.id);
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + delta + visible.length) % visible.length;
+      openConversation(visible[nextIndex].id);
+    }
+  };
+
+  const globalKeyDownRef = useRef(handleGlobalKeyDown);
+  globalKeyDownRef.current = handleGlobalKeyDown;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => globalKeyDownRef.current(event);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#181817] text-[#e6e5df] select-none">
       <Sidebar
@@ -533,6 +702,7 @@ export default function App({ startup }: { startup: Startup }) {
               onFork={forkFrom}
               mode={permissionMode}
               onModeChange={changeMode}
+              onApprovePlan={approvePlan}
               newSession={newSession}
               relayBanner={relayBanner}
               modelPicker={
@@ -715,8 +885,7 @@ export default function App({ startup }: { startup: Startup }) {
           onOpenArtifact={openArtifactEntry}
           onArtifactMenu={(entry, x, y) => setArtifactMenu({ x, y, root: entry.root, path: entry.path, entry })}
           onOpenConversation={openConversation}
-          onCreate={createConversation}
-          onOpenSettings={() => setView("settings")}
+          onAction={runPaletteAction}
           onClose={() => setSearchOpen(false)}
         />
       )}
