@@ -8,6 +8,7 @@ import {
   Check,
   Circle,
   CircleDot,
+  Compass,
   Container,
   FileDiff,
   FolderPlus,
@@ -16,6 +17,7 @@ import {
   FolderClosed,
   GitBranch,
   GitCommitHorizontal,
+  GitCompare,
   GitMerge,
   GitPullRequest,
   GitPullRequestClosed,
@@ -27,6 +29,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import type { CrossReviewPipelineState } from "./AdvisorModal";
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation, EnvironmentKind } from "../lib/conversations";
 import {
@@ -200,6 +203,10 @@ interface SessionPanelProps {
   onResolveConflicts?: (branch: string, base: string, conflicts: ConflictFile[]) => void;
   /** Injecte les commentaires de review et logs CI en échec d'une PR/MR dans la conversation. */
   onImportPrFeedback?: (feedback: PrFeedback) => void;
+  /** Ouvre le conseiller interactif `/advisor`. */
+  onOpenAdvisor?: () => void;
+  /** État courant du pipeline Cross-Review multi-fournisseurs. */
+  crossReview?: CrossReviewPipelineState | null;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
@@ -231,6 +238,8 @@ export default function SessionPanel({
   onOpenSubagent,
   onResolveConflicts,
   onImportPrFeedback,
+  onOpenAdvisor,
+  crossReview,
 }: SessionPanelProps) {
   const [folderMenu, setFolderMenu] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
@@ -821,6 +830,51 @@ export default function SessionPanel({
                   );
                 })}
               </div>
+            )}
+          </div>
+        </Section>
+
+        <Section title="Cross-Review & /advisor" count={crossReview?.stages.length} compact>
+          <div className="space-y-2 px-1">
+            {onOpenAdvisor && (
+              <button
+                type="button"
+                onClick={onOpenAdvisor}
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#3a3a35] bg-[#1c1c1a] px-3 py-2 text-left text-[12.5px] text-[#ecebe4] transition hover:border-[#d97757]/60 hover:bg-[#262623]"
+              >
+                <span className="flex items-center gap-2 font-medium">
+                  <Compass className="h-4 w-4 text-[#d97757]" strokeWidth={1.8} />
+                  <span>/advisor · Conseiller & Cross-Review</span>
+                </span>
+                <span className="text-[11px] text-[#8c8b83]">Quoi · Pour quoi · Pourquoi</span>
+              </button>
+            )}
+            {crossReview ? (
+              <div className="space-y-1.5 rounded-xl border border-[#2f2f2c] bg-[#1a1a18] p-2.5 text-[12px]">
+                <div className="flex items-center gap-1.5 font-medium text-[#dcdbd3]">
+                  <GitCompare className="h-3.5 w-3.5 text-[#8ab4f8]" />
+                  <span className="truncate">{crossReview.taskSummary}</span>
+                </div>
+                <ul className="space-y-1">
+                  {crossReview.stages.map((st) => (
+                    <li
+                      key={st.step}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-[#222220] px-2 py-1"
+                    >
+                      <span className="truncate text-[#ecebe4]">
+                        Étape {st.step} · {st.role}
+                      </span>
+                      <span className="shrink-0 font-mono text-[11px] text-[#8ce09b]">
+                        {st.agentId} ({st.status === "done" ? "Terminé" : st.status === "running" ? "En cours" : "Prêt"})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#6f6e68]">
+                Ouvre <code>/advisor</code> pour choisir la stratégie ou lancer un pipeline multi-fournisseurs (Implémentation → Revue Diff → Vérification).
+              </p>
             )}
           </div>
         </Section>
