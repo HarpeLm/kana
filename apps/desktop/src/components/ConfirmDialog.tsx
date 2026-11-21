@@ -6,7 +6,7 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   /** Texte du bouton d'annulation. */
   cancelLabel?: string;
-  /** `danger` : bouton rouge (suppression) ; `accent` : bouton orange (autorisation). */
+  /** `danger` : bouton rouge (suppression) ; `accent` : bouton bleu marine (autorisation). */
   confirmTone?: "danger" | "accent";
   /** Bouton qui a le focus à l'ouverture : Entrée le valide. Pour une autorisation, c'est l'annulation. */
   initialFocus?: "confirm" | "cancel";
@@ -62,7 +62,7 @@ export default function ConfirmDialog({
             className={`rounded-lg border px-3 py-1.5 text-[14px] outline-none transition focus-visible:ring-2 ${
               confirmTone === "danger"
                 ? "border-[#c9594a] bg-[#4a2622] text-[#f4a99b] hover:bg-[#5a2e29] focus-visible:ring-[#c9594a]/60"
-                : "border-[#d97757] bg-[#d97757] font-medium text-[#181817] hover:bg-[#e38768] focus-visible:ring-[#d97757]/60"
+                : "border-[#1e40af] bg-[#1e40af] font-medium text-[#f8fafc] hover:bg-[#2563eb] focus-visible:ring-[#3b82f6]/60"
             }`}
           >
             {confirmLabel}
