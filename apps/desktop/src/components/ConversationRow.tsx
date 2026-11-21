@@ -67,7 +67,7 @@ export default function ConversationRow({
       {conversation.unread && !menuOpen && (
         <span
           aria-label="Non lue"
-          className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#d97757] group-hover:hidden"
+          className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#3b82f6] group-hover:hidden"
         />
       )}
 
