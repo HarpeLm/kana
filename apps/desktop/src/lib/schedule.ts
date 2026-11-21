@@ -1,4 +1,96 @@
+import { invoke } from "@tauri-apps/api/core";
+import { inTauri } from "./env";
 import { persistSharedSetting } from "./store";
+
+export interface DaemonStatus {
+  installed: boolean;
+  loaded: boolean;
+  label: string;
+  plistPath: string;
+  logPath: string;
+  binaryPath: string;
+  platformSupported: boolean;
+  message: string;
+}
+
+export const DAEMON_INTERVAL_OPTIONS = [
+  { secs: 300, label: "Toutes les 5 min" },
+  { secs: 900, label: "Toutes les 15 min" },
+  { secs: 3600, label: "Toutes les heures" },
+] as const;
+
+const DAEMON_FALLBACK_KEY = "kana-daemon-fallback";
+
+function defaultDaemonStatus(installed: boolean, intervalSecs = 300): DaemonStatus {
+  return {
+    installed,
+    loaded: installed,
+    label: "dev.kana.daemon",
+    plistPath: "~/Library/LaunchAgents/dev.kana.daemon.plist",
+    logPath: "~/.kana/daemon.log",
+    binaryPath: "/Applications/Kana.app/Contents/MacOS/Kana",
+    platformSupported: true,
+    message: installed
+      ? `Daemon système activé (vérification toutes les ${Math.max(1, Math.round(intervalSecs / 60))} min, app fermée incluse).`
+      : "Daemon système non installé.",
+  };
+}
+
+export async function getScheduledDaemonStatus(): Promise<DaemonStatus> {
+  if (inTauri) {
+    return invoke<DaemonStatus>("scheduled_daemon_status");
+  }
+  try {
+    const raw = readStorage(DAEMON_FALLBACK_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<DaemonStatus>;
+      if (typeof parsed.installed === "boolean") {
+        return { ...defaultDaemonStatus(parsed.installed), ...parsed };
+      }
+    }
+  } catch {
+    // ignore malformed fallback state
+  }
+  return defaultDaemonStatus(false);
+}
+
+export async function installScheduledDaemon(intervalSecs = 300): Promise<DaemonStatus> {
+  const safeInterval = Math.max(60, Math.floor(intervalSecs));
+  if (inTauri) {
+    return invoke<DaemonStatus>("scheduled_daemon_install", { intervalSecs: safeInterval });
+  }
+  const next = defaultDaemonStatus(true, safeInterval);
+  if (hasBrowserStorage()) {
+    try {
+      localStorage.setItem(DAEMON_FALLBACK_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+  } else {
+    memoryStore.set(DAEMON_FALLBACK_KEY, JSON.stringify(next));
+  }
+  return next;
+}
+
+export async function uninstallScheduledDaemon(): Promise<DaemonStatus> {
+  if (inTauri) {
+    return invoke<DaemonStatus>("scheduled_daemon_uninstall");
+  }
+  const next: DaemonStatus = {
+    ...defaultDaemonStatus(false),
+    message: "Daemon système désactivé et supprimé.",
+  };
+  if (hasBrowserStorage()) {
+    try {
+      localStorage.setItem(DAEMON_FALLBACK_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+  } else {
+    memoryStore.set(DAEMON_FALLBACK_KEY, JSON.stringify(next));
+  }
+  return next;
+}
 
 export interface ScheduledTask {
   id: string;
