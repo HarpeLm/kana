@@ -1,6 +1,6 @@
 //! Commandes Tauri du stockage : conversations et messages dans la base SQLite de Kana.
 
-use kana_db::{Store, StoredConversation, StoredMessage, StoredProject};
+use kana_db::{Store, StoredConversation, StoredMessage, StoredMessageHit, StoredProject};
 use tauri::{AppHandle, Manager, State};
 
 /// Ouvre la base dans le dossier de données de l'app (`~/Library/Application Support/...`).
@@ -41,4 +41,13 @@ pub fn db_load_projects(store: State<'_, Store>) -> Result<Vec<StoredProject>, S
 #[tauri::command]
 pub fn db_save_projects(store: State<'_, Store>, items: Vec<StoredProject>) -> Result<(), String> {
     store.save_projects(&items).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn db_search_messages(
+    store: State<'_, Store>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<StoredMessageHit>, String> {
+    store.search_messages(&query, limit.unwrap_or(20)).map_err(|e| e.to_string())
 }
