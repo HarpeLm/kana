@@ -127,6 +127,45 @@ pub async fn discard_worktree(project_path: String, worktree: String, branch: St
     .map_err(|e| e.to_string())?
 }
 
+/// Transfère à chaud les changements locaux en cours vers un worktree isolé sous `~/.kana/worktrees/<repo>/<safe_id>`.
+#[tauri::command]
+pub async fn handoff_to_worktree(
+    conversation_id: String,
+    project_path: String,
+    clean_local: Option<bool>,
+) -> Result<kana_git::HandoffReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = kana_git::repo_root(Path::new(&project_path)).map_err(|e| e.to_string())?;
+        let name = safe_name(&conversation_id);
+        let repo_name = repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "repo".into());
+        let path = root().join(safe_name(&repo_name)).join(&name);
+        let branch = format!("kana/{name}");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        kana_git::handoff_local_to_worktree(&repo, &path, &branch, clean_local.unwrap_or(true))
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Rapatrie à chaud les changements d'un worktree Kana vers le dépôt local sans commit ni fusion définitive.
+#[tauri::command]
+pub async fn handoff_to_local(
+    project_path: String,
+    worktree: String,
+    branch: String,
+) -> Result<kana_git::HandoffReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_work(&worktree, &branch)?;
+        let repo = kana_git::repo_root(Path::new(&project_path)).map_err(|e| e.to_string())?;
+        kana_git::handoff_worktree_to_local(&repo, Path::new(&worktree)).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Serialize)]
 pub struct Orphan {
     pub(crate) repo: String,
