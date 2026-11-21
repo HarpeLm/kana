@@ -301,6 +301,112 @@ pub fn write_text(
     modified_ms(&full)
 }
 
+/// Les fichiers de règles projet autorisés pour la lecture et la synchronisation.
+pub const RULE_FILE_PATHS: [&str; 4] = ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".kana/rules.md"];
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleFile {
+    pub path: String,
+    pub exists: bool,
+    pub content: String,
+}
+
+fn validate_rule_path(relative: &str) -> Result<&'static str, GitError> {
+    RULE_FILE_PATHS
+        .iter()
+        .copied()
+        .find(|&allowed| allowed == relative)
+        .ok_or_else(|| GitError::InvalidPath(relative.to_owned()))
+}
+
+fn resolve_rule_target(root: &Path, relative: &str) -> Result<(&'static str, PathBuf), GitError> {
+    let allowed = validate_rule_path(relative)?;
+    let root_real = fs::canonicalize(root).map_err(|e| GitError::Read(e.to_string()))?;
+    let full = root_real.join(allowed);
+    if let Some(parent) = full.parent()
+        && parent.exists()
+    {
+        let parent_real = fs::canonicalize(parent).map_err(|e| GitError::Read(e.to_string()))?;
+        if !parent_real.starts_with(&root_real) {
+            return Err(GitError::InvalidPath(relative.to_owned()));
+        }
+    }
+    if let Ok(meta) = fs::symlink_metadata(&full)
+        && meta.file_type().is_symlink()
+    {
+        let full_real = fs::canonicalize(&full).map_err(|_| GitError::InvalidPath(relative.to_owned()))?;
+        if !full_real.starts_with(&root_real) {
+            return Err(GitError::InvalidPath(relative.to_owned()));
+        }
+    }
+    Ok((allowed, full))
+}
+
+/// Lit les fichiers de règles du dépôt (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.kana/rules.md`).
+pub fn read_rule_files(repo: &Path) -> Result<Vec<RuleFile>, GitError> {
+    let root = repo_root(repo)?;
+    let mut files = Vec::with_capacity(RULE_FILE_PATHS.len());
+    for allowed in RULE_FILE_PATHS {
+        let (_, full) = resolve_rule_target(&root, allowed)?;
+        if full.is_file() {
+            let content = fs::read_to_string(&full).map_err(|e| GitError::Read(e.to_string()))?;
+            files.push(RuleFile { path: allowed.to_owned(), exists: true, content });
+        } else {
+            files.push(RuleFile { path: allowed.to_owned(), exists: false, content: String::new() });
+        }
+    }
+    Ok(files)
+}
+
+/// Écrit (ou crée, y compris `.kana/`) l'un des fichiers de règles projet autorisés.
+pub fn write_rule_file(repo: &Path, path: &str, content: &str) -> Result<RuleFile, GitError> {
+    if content.len() > MAX_WRITE_BYTES {
+        return Err(GitError::Write(format!(
+            "fichier trop volumineux (max {} Mo)",
+            MAX_WRITE_BYTES / 1024 / 1024
+        )));
+    }
+    let root = repo_root(repo)?;
+    let (allowed, full) = resolve_rule_target(&root, path)?;
+    if let Some(parent) = full.parent() {
+        fs::create_dir_all(parent).map_err(|e| GitError::Write(e.to_string()))?;
+    }
+    let name = full.file_name().and_then(|n| n.to_str()).unwrap_or("rules");
+    let temp = full.with_file_name(format!(".{name}.kana-tmp"));
+    let write = || -> std::io::Result<()> {
+        let mut file = File::create(&temp)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        fs::rename(&temp, &full)
+    };
+    write().map_err(|e| {
+        let _ = fs::remove_file(&temp);
+        GitError::Write(e.to_string())
+    })?;
+    Ok(RuleFile {
+        path: allowed.to_owned(),
+        exists: true,
+        content: content.to_owned(),
+    })
+}
+
+/// Synchronise le même contenu de règles vers plusieurs cibles autorisées.
+pub fn sync_rule_files(repo: &Path, content: &str, targets: &[String]) -> Result<Vec<RuleFile>, GitError> {
+    let selected: Vec<&str> = if targets.is_empty() {
+        RULE_FILE_PATHS.to_vec()
+    } else {
+        targets
+            .iter()
+            .map(|t| validate_rule_path(t))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let mut updated = Vec::with_capacity(selected.len());
+    for target in selected {
+        updated.push(write_rule_file(repo, target, content)?);
+    }
+    Ok(updated)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{env, process::Command, thread, time::Duration};
@@ -461,6 +567,47 @@ mod tests {
         assert!(names.contains(&("sendMessage", "fn", "src/ui.ts")));
         assert!(names.contains(&("MAX_ITEMS", "const", "src/ui.ts")));
         assert!(!names.iter().any(|(n, _, _)| *n == "ignored_comment"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reads_writes_and_syncs_project_rule_files() {
+        let dir = scratch_repo("rules");
+        let initial = read_rule_files(&dir).unwrap();
+        assert_eq!(initial.len(), 4);
+        assert!(initial.iter().all(|r| !r.exists && r.content.is_empty()));
+
+        assert!(matches!(write_rule_file(&dir, "README.md", "nope"), Err(GitError::InvalidPath(_))));
+        assert!(matches!(write_rule_file(&dir, "../CLAUDE.md", "nope"), Err(GitError::InvalidPath(_))));
+
+        let saved = write_rule_file(&dir, ".kana/rules.md", "# Règles Kana\nUtilise cargo test.\n").unwrap();
+        assert!(saved.exists);
+        assert_eq!(
+            fs::read_to_string(dir.join(".kana/rules.md")).unwrap(),
+            "# Règles Kana\nUtilise cargo test.\n"
+        );
+
+        let synced = sync_rule_files(
+            &dir,
+            "# Règles unifiées\nToujours écrire des tests.\n",
+            &["CLAUDE.md".into(), "AGENTS.md".into()],
+        )
+        .unwrap();
+        assert_eq!(synced.len(), 2);
+        assert_eq!(
+            fs::read_to_string(dir.join("CLAUDE.md")).unwrap(),
+            "# Règles unifiées\nToujours écrire des tests.\n"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("AGENTS.md")).unwrap(),
+            "# Règles unifiées\nToujours écrire des tests.\n"
+        );
+
+        let after = read_rule_files(&dir).unwrap();
+        assert!(after.iter().find(|r| r.path == "CLAUDE.md").unwrap().exists);
+        assert!(after.iter().find(|r| r.path == "AGENTS.md").unwrap().exists);
+        assert!(!after.iter().find(|r| r.path == "GEMINI.md").unwrap().exists);
+        assert!(after.iter().find(|r| r.path == ".kana/rules.md").unwrap().exists);
         let _ = fs::remove_dir_all(dir);
     }
 }
