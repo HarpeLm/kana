@@ -67,7 +67,7 @@ function ModalShell({
       >
         <div className="flex items-start justify-between gap-3 border-b border-[#2d2d2a] px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#383834] bg-[#252523] text-[#d97757]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#383834] bg-[#252523] text-[#60a5fa]">
               {icon}
             </div>
             <div>
@@ -130,7 +130,7 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-[#343430] bg-[#181817] px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2 text-[12.5px] text-[#dcdbd3]">
-          <Mail className="h-3.5 w-3.5 shrink-0 text-[#d97757]" />
+          <Mail className="h-3.5 w-3.5 shrink-0 text-[#60a5fa]" />
           <span className="truncate font-mono select-text">{FEEDBACK_EMAIL}</span>
         </div>
         <button
@@ -158,7 +158,7 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
             value={subject}
             onChange={(event) => setSubject(event.target.value)}
             placeholder={tr("ex. Suggestion d'amélioration", "e.g. Feature suggestion", locale)}
-            className="w-full rounded-xl border border-[#343430] bg-[#181817] px-3 py-2 text-[13px] text-[#ecebe4] placeholder-[#6e6d66] outline-none focus:border-[#d97757] select-text"
+            className="w-full rounded-xl border border-[#343430] bg-[#181817] px-3 py-2 text-[13px] text-[#ecebe4] placeholder-[#6e6d66] outline-none focus:border-[#3b82f6] select-text"
           />
         </div>
 
@@ -172,7 +172,7 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             placeholder={tr("Décrivez votre retour…", "Describe your feedback…", locale)}
-            className="w-full resize-none rounded-xl border border-[#343430] bg-[#181817] px-3 py-2 text-[13px] text-[#ecebe4] placeholder-[#6e6d66] outline-none focus:border-[#d97757] select-text"
+            className="w-full resize-none rounded-xl border border-[#343430] bg-[#181817] px-3 py-2 text-[13px] text-[#ecebe4] placeholder-[#6e6d66] outline-none focus:border-[#3b82f6] select-text"
           />
         </div>
 
@@ -186,7 +186,7 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
           </button>
           <button
             type="submit"
-            className="flex items-center gap-1.5 rounded-xl bg-[#d97757] px-4 py-2 text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e38768]"
+            className="flex items-center gap-1.5 rounded-xl bg-[#1e40af] px-4 py-2 text-[12.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
           >
             <Send className="h-3.5 w-3.5" />
             <span>{tr("Ouvrir dans Mail", "Open in Mail", locale)}</span>
@@ -428,7 +428,7 @@ function ChangelogDialog({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-xl border border-[#343430] bg-[#181817] px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center gap-1 rounded-full bg-[#d97757]/15 px-2.5 py-0.5 font-mono text-[12px] font-semibold text-[#d97757]">
+            <span className="flex items-center gap-1 rounded-full bg-[#1e3a8a]/35 px-2.5 py-0.5 font-mono text-[12px] font-semibold text-[#93c5fd]">
               <Sparkles className="h-3 w-3" />
               v0.1.0
             </span>
@@ -449,7 +449,7 @@ function ChangelogDialog({ onClose }: { onClose: () => void }) {
               <ul className="mt-2 space-y-1.5 text-[12.5px] leading-relaxed text-[#a8a79f]">
                 {section.items.map((item) => (
                   <li key={item} className="flex items-start gap-2">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#d97757]" />
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#3b82f6]" />
                     <span>{item}</span>
                   </li>
                 ))}
