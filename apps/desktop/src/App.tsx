@@ -4,7 +4,9 @@ import { AGENTS, type View } from "./data";
 import { useBrowserAgent } from "./hooks/useBrowserAgent";
 import type { Startup } from "./lib/startup";
 import { useProjects } from "./hooks/useProjects";
-import { setThreadModel } from "./lib/models";
+import { setThreadEffort, setThreadModel } from "./lib/models";
+import { chosenEffort } from "./lib/effort";
+import EffortPicker from "./components/EffortPicker";
 import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
 import { NO_PROJECT, NO_PROJECT_NAME, createProject, describeFolder, scratchDir, type Project } from "./lib/projects";
@@ -103,7 +105,7 @@ export default function App({ startup }: { startup: Startup }) {
       const carried = conversation.forkContext;
       if (carried) clearForkContext(threadId);
       const preface = carried ? `${ARTIFACT_GUIDE}${carried}` : ARTIFACT_GUIDE;
-      return { cwd, preface, model: conversation.modelId };
+      return { cwd, preface, model: conversation.modelId, effort: chosenEffort(conversation.agentId) };
     },
     [attachWorktree, clearForkContext],
   );
@@ -449,6 +451,7 @@ export default function App({ startup }: { startup: Startup }) {
               newSession={newSession}
               relayBanner={relayBanner}
               modelPicker={
+                <>
                 <ModelPicker
                   agents={AGENTS}
                   agentId={selected.agentId}
@@ -456,6 +459,13 @@ export default function App({ startup }: { startup: Startup }) {
                   canSwitchProvider={chat.messages.length === 0 && !chat.busy}
                   onSelect={chooseModel}
                 />
+                <EffortPicker
+                  agentId={selected.agentId}
+                  onChange={(value) => {
+                    if (chat.messages.length > 0) setThreadEffort(selected.id, value).catch(() => {});
+                  }}
+                />
+                </>
               }
             />
             </OpenArtifactContext.Provider>
