@@ -6,6 +6,7 @@ import type { Startup } from "./lib/startup";
 import { useProjects } from "./hooks/useProjects";
 import { setThreadEffort, setThreadModel } from "./lib/models";
 import { chosenEffort } from "./lib/effort";
+import { autoTitle } from "./lib/autoTitle";
 import EffortPicker from "./components/EffortPicker";
 import ModelPicker from "./components/ModelPicker";
 import { pickFiles } from "./lib/attachments";
@@ -175,7 +176,7 @@ export default function App({ startup }: { startup: Startup }) {
   // Le premier message donne son titre à la conversation et remet son projet en tête des récents.
   const sendMessage = (text: string) => {
     if (selected.title === "Nouvelle conversation") {
-      conversations.rename(selected.id, text.split("\n")[0].slice(0, 48));
+      conversations.rename(selected.id, autoTitle(text));
     }
     const project = projectList.projects.find((p) => p.path === selected.projectPath);
     if (project) projectList.use(project);
