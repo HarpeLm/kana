@@ -75,7 +75,13 @@ impl Store {
     fn from_connection(conn: Connection) -> Result<Self, StoreError> {
         conn.execute_batch(SCHEMA)?;
         // Colonnes ajoutées après la première version de la base : ignorées si elles existent déjà.
-        for column in ["project_path TEXT", "use_worktree INTEGER NOT NULL DEFAULT 1", "model_id TEXT", "extra_folders TEXT"] {
+        for column in [
+            "project_path TEXT",
+            "use_worktree INTEGER NOT NULL DEFAULT 1",
+            "model_id TEXT",
+            "extra_folders TEXT",
+            "acp_session_id TEXT",
+        ] {
             let _ = conn.execute(&format!("ALTER TABLE conversations ADD COLUMN {column}"), []);
         }
         Ok(Self { conn: Mutex::new(conn) })
@@ -90,7 +96,8 @@ impl Store {
         let conn = self.lock()?;
         let mut statement = conn.prepare(
             "SELECT id, title, project, agent_id, pinned, unread, archived, opened_at,
-                    worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id, extra_folders
+                    worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id, extra_folders,
+                    acp_session_id
              FROM conversations ORDER BY position",
         )?;
         let rows = statement.query_map([], |row| {
@@ -111,6 +118,7 @@ impl Store {
                 use_worktree: row.get(13)?,
                 model_id: row.get(14)?,
                 extra_folders: row.get(15)?,
+                acp_session_id: row.get(16)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -125,8 +133,9 @@ impl Store {
             let mut upsert = tx.prepare(
                 "INSERT INTO conversations
                     (id, position, title, project, agent_id, pinned, unread, archived, opened_at,
-                     worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id, extra_folders)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                     worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id, extra_folders,
+                     acp_session_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
                  ON CONFLICT(id) DO UPDATE SET
                     position = excluded.position, title = excluded.title, project = excluded.project,
                     agent_id = excluded.agent_id, pinned = excluded.pinned, unread = excluded.unread,
@@ -134,13 +143,14 @@ impl Store {
                     worktree = excluded.worktree, branch = excluded.branch,
                     forked_from = excluded.forked_from, fork_context = excluded.fork_context,
                     project_path = excluded.project_path, use_worktree = excluded.use_worktree,
-                    model_id = excluded.model_id, extra_folders = excluded.extra_folders",
+                    model_id = excluded.model_id, extra_folders = excluded.extra_folders,
+                    acp_session_id = excluded.acp_session_id",
             )?;
             for (position, c) in items.iter().enumerate() {
                 upsert.execute(params![
                     c.id, position as i64, c.title, c.project, c.agent_id, c.pinned, c.unread,
                     c.archived, c.opened_at, c.worktree, c.branch, c.forked_from, c.fork_context,
-                    c.project_path, c.use_worktree, c.model_id, c.extra_folders,
+                    c.project_path, c.use_worktree, c.model_id, c.extra_folders, c.acp_session_id,
                 ])?;
             }
         }
@@ -258,6 +268,7 @@ mod tests {
             use_worktree: true,
             model_id: Some("m".into()),
             extra_folders: Some("[\"/b\"]".into()),
+            acp_session_id: None,
         }
     }
 
@@ -279,6 +290,7 @@ mod tests {
         let mut first = conversation("a");
         first.worktree = Some("/tmp/wt".into());
         first.forked_from = Some("z".into());
+        first.acp_session_id = Some("sess-1".into());
         let second = conversation("b");
         store.save_conversations(&[second.clone(), first.clone()]).unwrap();
         assert_eq!(store.conversations().unwrap(), vec![second, first]);
@@ -327,6 +339,7 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert!(items[0].use_worktree);
         assert_eq!(items[0].project_path, None);
+        assert_eq!(items[0].acp_session_id, None);
     }
 
     #[test]
