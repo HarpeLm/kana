@@ -29,6 +29,14 @@ async fn client_of(sessions: &AgentSessions, thread_id: &str) -> Result<Arc<AcpC
         .ok_or_else(|| "l'agent de ce fil n'est pas démarré".to_string())
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartedSession {
+    pub session_id: String,
+    /// `true` si l'agent tournait déjà ou a repris la session existante via `session/load`.
+    pub resumed: bool,
+}
+
 /// Lance l'agent d'un fil s'il ne tourne pas déjà.
 #[tauri::command]
 pub async fn start_agent(
@@ -39,9 +47,13 @@ pub async fn start_agent(
     cwd: Option<String>,
     model: Option<String>,
     effort: Option<String>,
-) -> Result<(), String> {
-    if sessions.get(&thread_id).await.is_some() {
-        return Ok(());
+    resume_session_id: Option<String>,
+) -> Result<StartedSession, String> {
+    if let Some(existing) = sessions.get(&thread_id).await {
+        return Ok(StartedSession {
+            session_id: existing.session_id().to_owned(),
+            resumed: true,
+        });
     }
     let spec = spec_for(&agent)?;
     let cwd = cwd.map(PathBuf::from).unwrap_or_else(project_dir);
@@ -55,7 +67,7 @@ pub async fn start_agent(
         })
         .unwrap_or_default();
     let (client, mut events) =
-        AcpClient::spawn_with_mcp(&spec, &cwd, &mcp).await.map_err(|error| match error {
+        AcpClient::spawn_or_resume(&spec, &cwd, &mcp, resume_session_id.as_deref()).await.map_err(|error| match error {
             AcpError::AuthRequired(_) => {
                 "connexion requise : ouvre les Réglages pour te connecter".to_string()
             }
@@ -74,6 +86,10 @@ pub async fn start_agent(
             let _ = client.set_effort(&value).await;
         }
     }
+    let started = StartedSession {
+        session_id: client.session_id().to_owned(),
+        resumed: client.resumed(),
+    };
     sessions.insert(thread_id.clone(), Arc::new(client)).await;
 
     tauri::async_runtime::spawn(async move {
@@ -86,7 +102,7 @@ pub async fn start_agent(
             }
         }
     });
-    Ok(())
+    Ok(started)
 }
 
 /// Au-delà, une image n'est pas envoyée (elle reste citée par son chemin) ; et on n'en envoie pas plus de 6.
