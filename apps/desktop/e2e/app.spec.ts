@@ -991,3 +991,35 @@ test("benchmark de performance UI : cold start < 2500 ms, fluidité sous rafale 
 
   expect(errors).toEqual([]);
 });
+
+test("handoff worktree bidirectionnel : basculer vers un worktree isolé puis rapatrier en local", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  // Démarre la conversation pour charger le résumé git de SessionPanel et exercer le relais de contexte.
+  const composer = page.getByRole("textbox").last();
+  await composer.fill("Prépare le handoff");
+  await composer.press("Enter");
+  await expect(page.locator("main").getByText(/Tu as écrit « Prépare le handoff »\./)).toBeVisible();
+
+  await page.getByRole("button", { name: "Plan et tâches" }).click();
+  const panel = page.locator("aside").last();
+
+  const toWorktreeBtn = panel.getByRole("button", { name: "Basculer vers un worktree isolé (Handoff)" });
+  const toLocalBtn = panel.getByRole("button", { name: "Rapatrier en local (Handoff)" });
+
+  // 1. Local -> Worktree isolé
+  await expect(toWorktreeBtn).toBeVisible();
+  await toWorktreeBtn.click();
+  await expect(panel.getByText(/Handoff vers le worktree effectué : 2 fichiers transférés\./)).toBeVisible();
+  await expect(toLocalBtn).toBeVisible();
+  await expect(toWorktreeBtn).toHaveCount(0);
+
+  // 2. Worktree isolé -> Local (sans fusion définitive)
+  await toLocalBtn.click();
+  await expect(panel.getByText(/Rapatrié en local \(Handoff\) : 2 fichiers transférés\./)).toBeVisible();
+  await expect(toWorktreeBtn).toBeVisible();
+  await expect(toLocalBtn).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
