@@ -1,3 +1,5 @@
+import { tr, useLocale } from "../lib/i18n";
+
 function Key({ children }: { children: string }) {
   return (
     <kbd className="rounded-md border border-[#4a4a46] bg-[#333330] px-1.5 text-[12px] leading-5 text-[#c4c3bc]">
@@ -19,11 +21,12 @@ function Hint({ label, keys }: { label: string; keys: string[] }) {
 
 /** Rappel des touches utiles en bas de la recherche. */
 export default function SearchFooter() {
+  const locale = useLocale();
   return (
     <div className="flex items-center gap-6 border-t border-[#343430] px-6 py-3 text-[13px] text-[#9a9992]">
-      <Hint label="Fermer" keys={["Esc"]} />
-      <Hint label="Changer de type" keys={["←", "→"]} />
-      <Hint label="Ouvrir" keys={["↵"]} />
+      <Hint label={tr("Fermer", "Close", locale)} keys={["Esc"]} />
+      <Hint label={tr("Changer de type", "Switch tab", locale)} keys={["←", "→"]} />
+      <Hint label={tr("Ouvrir", "Open", locale)} keys={["↵"]} />
     </div>
   );
 }
