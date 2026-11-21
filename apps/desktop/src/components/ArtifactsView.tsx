@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { LayoutGrid, List, Search } from "lucide-react";
 import type { ArtifactEntry } from "../lib/artifactIndex";
 import { relativeTime } from "../lib/relativeTime";
 import ArtifactThumb from "./ArtifactThumb";
@@ -9,15 +9,47 @@ interface ArtifactsViewProps {
   loading: boolean;
   onOpen: (item: ArtifactEntry) => void;
   onMenu: (item: ArtifactEntry, x: number, y: number) => void;
+  /** Le dossier de la conversation ouverte : l'onglet « Cette conversation » ne montre que ses artéfacts. */
+  currentRoot?: string;
 }
 
+type Scope = "all" | "current";
+type Sort = "recent" | "title" | "project";
+type Layout = "grid" | "list";
+
+const SORTS: { id: Sort; label: string }[] = [
+  { id: "recent", label: "Plus récents" },
+  { id: "title", label: "Titre" },
+  { id: "project", label: "Projet" },
+];
+
+const chip = (on: boolean) =>
+  `h-8 rounded-lg px-3 text-[14px] transition ${on ? "bg-[#3a3a37] text-[#f0efe9]" : "text-[#c4c3bc] hover:bg-[#2a2a28] hover:text-[#f0efe9]"}`;
+
 /** La galerie de tous les artéfacts : une carte par page, avec son aperçu. */
-export default function ArtifactsView({ items, loading, onOpen, onMenu }: ArtifactsViewProps) {
+export default function ArtifactsView({ items, loading, onOpen, onMenu, currentRoot }: ArtifactsViewProps) {
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<Scope>("all");
+  const [sort, setSort] = useState<Sort>(() => (localStorage.getItem("kana-artifacts-sort") as Sort) || "recent");
+  const [layout, setLayout] = useState<Layout>(() => (localStorage.getItem("kana-artifacts-layout") as Layout) || "grid");
+  const choose = <T extends string>(key: string, set: (v: T) => void) => (value: T) => {
+    set(value);
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // préférence non retenue
+    }
+  };
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return needle ? items.filter((i) => i.title.toLowerCase().includes(needle) || i.project.toLowerCase().includes(needle)) : items;
-  }, [items, query]);
+    let list = scope === "current" && currentRoot ? items.filter((i) => i.root === currentRoot) : items;
+    if (needle) list = list.filter((i) => i.title.toLowerCase().includes(needle) || i.project.toLowerCase().includes(needle));
+    const sorted = [...list];
+    if (sort === "title") sorted.sort((a, b) => a.title.localeCompare(b.title, "fr"));
+    else if (sort === "project") sorted.sort((a, b) => a.project.localeCompare(b.project, "fr") || b.modified - a.modified);
+    else sorted.sort((a, b) => b.modified - a.modified);
+    return sorted;
+  }, [items, query, scope, sort, currentRoot]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -35,13 +67,60 @@ export default function ArtifactsView({ items, loading, onOpen, onMenu }: Artifa
           </label>
         </div>
 
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <div className="flex gap-1">
+            <button onClick={() => setScope("all")} className={chip(scope === "all")}>
+              Tous
+            </button>
+            <button onClick={() => setScope("current")} className={chip(scope === "current")}>
+              Cette conversation
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <select
+              value={sort}
+              onChange={(e) => choose<Sort>("kana-artifacts-sort", setSort)(e.target.value as Sort)}
+              aria-label="Trier par"
+              className="h-8 rounded-lg bg-transparent px-2 text-[14px] text-[#c4c3bc] outline-none hover:bg-[#2a2a28]"
+            >
+              {SORTS.map((s) => (
+                <option key={s.id} value={s.id} className="bg-[#2b2b29]">
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => choose<Layout>("kana-artifacts-layout", setLayout)("grid")} title="Grille" className={`${chip(layout === "grid")} flex w-8 items-center justify-center px-0`}>
+              <LayoutGrid className="h-4 w-4" strokeWidth={1.7} />
+            </button>
+            <button onClick={() => choose<Layout>("kana-artifacts-layout", setLayout)("list")} title="Liste" className={`${chip(layout === "list")} flex w-8 items-center justify-center px-0`}>
+              <List className="h-4 w-4" strokeWidth={1.7} />
+            </button>
+          </div>
+        </div>
+
         {shown.length === 0 ? (
           <p className="pt-16 text-center text-[14px] text-[#8c8b83]">
             {loading ? "Recherche des artéfacts…" : items.length === 0 ? "Aucun artéfact pour l'instant. Demande à un agent d'en créer un." : "Aucun résultat."}
           </p>
         ) : (
-          <div className="mt-8 grid grid-cols-3 gap-4">
-            {shown.map((item) => (
+          <div className={layout === "grid" ? "mt-5 grid grid-cols-3 gap-4" : "mt-5 divide-y divide-[#2a2a28] rounded-xl border border-[#333331]"}>
+            {shown.map((item) =>
+              layout === "list" ? (
+                <button
+                  key={item.key}
+                  onClick={() => onOpen(item)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    onMenu(item, e.clientX, e.clientY);
+                  }}
+                  className="flex w-full items-center gap-4 px-4 py-2.5 text-left transition first:rounded-t-xl last:rounded-b-xl hover:bg-[#232321]"
+                >
+                  <ArtifactThumb html={item.html} className="h-[42px] w-[56px] shrink-0 rounded-md" />
+                  <span className="min-w-0 flex-1 truncate text-[15px] text-[#ecebe4]">{item.title}</span>
+                  <span className="shrink-0 text-[13px] text-[#8c8b83]">{item.project}</span>
+                  <span className="w-[130px] shrink-0 text-right text-[13px] text-[#8c8b83]">{relativeTime(item.modified)}</span>
+                </button>
+              ) : (
               <button
                 key={item.key}
                 onClick={() => onOpen(item)}
@@ -59,7 +138,8 @@ export default function ArtifactsView({ items, loading, onOpen, onMenu }: Artifa
                   </p>
                 </div>
               </button>
-            ))}
+              ),
+            )}
           </div>
         )}
       </div>
