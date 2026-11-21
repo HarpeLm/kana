@@ -1,6 +1,6 @@
 //! Lecture de la sortie de l'agent : réponses, notifications et requêtes de l'agent.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering};
 
 use serde_json::{Value, json};
 use tokio::{
@@ -65,6 +65,9 @@ fn rpc_error_message(error: &Value) -> String {
 }
 
 fn on_notification(shared: &Shared, method: &str, params: &Value) {
+    if shared.suppress_updates.load(Ordering::SeqCst) {
+        return;
+    }
     if method == "session/update"
         && let Some(event) = AcpEvent::from_update(&params["update"])
     {
