@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, FolderOpen, FolderPlus, Folder, X } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, FolderPlus, Folder, GitBranch, X } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
-import { NO_PROJECT, type Project } from "../lib/projects";
+import { loadBranches, NO_PROJECT, type Project } from "../lib/projects";
 
 interface ProjectPickerProps {
   projects: Project[];
@@ -42,6 +42,7 @@ export default function ProjectPicker({
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [branches, setBranches] = useState<Record<string, string>>({});
   const root = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   useClickOutside(root, open, () => setOpen(false));
@@ -52,8 +53,10 @@ export default function ProjectPicker({
       setCreating(false);
       setError(null);
       setTimeout(() => search.current?.focus(), 0);
+      // La branche de chaque projet, lue à l'ouverture du menu.
+      void loadBranches(projects.map((p) => p.path)).then(setBranches);
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const needle = query.trim().toLowerCase();
   const shown = projects.filter((p) => !needle || p.name.toLowerCase().includes(needle) || p.path.toLowerCase().includes(needle));
@@ -114,6 +117,12 @@ export default function ProjectPicker({
                         <span className="block truncate">{project.name}</span>
                         {duplicated(project) && (
                           <span className="block truncate text-[11.5px] text-[#8c8b83]">{home(project.path)}</span>
+                        )}
+                        {branches[project.path] && (
+                          <span className="flex items-center gap-1 truncate text-[11.5px] text-[#8c8b83]">
+                            <GitBranch className="h-3 w-3 shrink-0" strokeWidth={1.7} />
+                            {branches[project.path]}
+                          </span>
                         )}
                       </span>
                       {current === project.path && <Check className="h-4 w-4 shrink-0 text-[#4a9bff]" strokeWidth={1.8} />}
