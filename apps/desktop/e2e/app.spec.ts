@@ -232,3 +232,21 @@ test("le compositeur : file d'attente et envoi prioritaire pendant que l'agent r
   await expect(page.getByText(/Tu as écrit « Message prioritaire »\./)).toBeVisible();
   await expect(page.getByText("Message annulé")).toHaveCount(0);
 });
+
+test("le menu Plus ouvre le volet Artéfacts et bascule Maintenir l'ordinateur actif", async ({ page }) => {
+  const errors = watchErrors(page);
+  const banner = page.getByRole("banner");
+  await banner.getByRole("button", { name: "Plus" }).click();
+  await expect(banner.getByRole("button", { name: "Conversation annexe" })).toHaveCount(0);
+  await expect(banner.getByRole("button", { name: "Tâches en arrière-plan" })).toHaveCount(0);
+  await expect(banner.getByRole("button", { name: "Simulateur iOS" })).toHaveCount(0);
+
+  const keepAwakeButton = banner.getByRole("button", { name: /Maintenir l'ordinateur actif/ });
+  await expect(keepAwakeButton).toHaveAttribute("aria-pressed", "false");
+  await keepAwakeButton.click();
+  await expect(keepAwakeButton).toHaveAttribute("aria-pressed", "true");
+
+  await banner.getByRole("button", { name: "Artéfacts" }).click();
+  await expect(page.getByRole("region", { name: "Artéfacts" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
