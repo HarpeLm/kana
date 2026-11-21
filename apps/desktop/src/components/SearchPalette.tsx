@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import type { Conversation } from "../lib/conversations";
 import type { ArtifactEntry } from "../lib/artifactIndex";
 import { relativeTime } from "../lib/relativeTime";
+import { loadScheduledTasks } from "../lib/schedule";
 import ArtifactThumb from "./ArtifactThumb";
 import {
   ACTION_NEW,
@@ -21,6 +22,7 @@ interface SearchPaletteProps {
   artifacts: ArtifactEntry[];
   onOpenArtifact: (item: ArtifactEntry) => void;
   onArtifactMenu: (item: ArtifactEntry, x: number, y: number) => void;
+  onOpenScheduled?: () => void;
   onAction?: (actionId: string) => void;
   onCreate?: () => void;
   onOpenSettings?: () => void;
@@ -34,6 +36,7 @@ export default function SearchPalette({
   onOpenArtifact,
   onArtifactMenu,
   onOpenConversation,
+  onOpenScheduled,
   onAction,
   onCreate,
   onOpenSettings,
@@ -43,7 +46,11 @@ export default function SearchPalette({
   const [tab, setTab] = useState<SearchTab>("all");
   const [index, setIndex] = useState(0);
 
-  const sections = useMemo(() => buildSections(conversations, query, tab, artifacts), [conversations, query, tab, artifacts]);
+  const scheduledTasks = useMemo(() => loadScheduledTasks(), []);
+  const sections = useMemo(
+    () => buildSections(conversations, query, tab, artifacts, scheduledTasks),
+    [conversations, query, tab, artifacts, scheduledTasks],
+  );
   const items = useMemo(() => sections.flatMap((s) => s.items), [sections]);
 
   useEffect(() => setIndex(0), [query, tab]);
@@ -52,6 +59,8 @@ export default function SearchPalette({
     onClose();
     if (item.kind === "artifact" && item.artifact) {
       onOpenArtifact(item.artifact);
+    } else if (item.kind === "scheduled") {
+      onOpenScheduled?.();
     } else if (item.kind === "conversation") {
       onOpenConversation(item.id.slice("conversation:".length));
     } else if (item.kind === "project") {
