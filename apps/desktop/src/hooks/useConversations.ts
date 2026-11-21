@@ -97,7 +97,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
   /** Change le projet d'une conversation (le dossier où ses agents travaillent). */
   const setProject = useCallback(
     (id: string, project: string, projectPath: string) =>
-      patch(id, (c) => ({ ...c, project, projectPath, worktree: undefined, branch: undefined })),
+      patch(id, (c) => ({ ...c, project, projectPath, worktree: undefined, branch: undefined, acpSessionId: undefined })),
     [patch],
   );
 
@@ -135,8 +135,25 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
 
   /** Choisit le fournisseur (l'agent) et le modèle d'une conversation. */
   const setAgent = useCallback(
-    (id: string, agentId: string, modelId?: string) => patch(id, (c) => ({ ...c, agentId, modelId })),
+    (id: string, agentId: string, modelId?: string) =>
+      patch(id, (c) => ({
+        ...c,
+        agentId,
+        modelId,
+        acpSessionId: c.agentId === agentId ? c.acpSessionId : undefined,
+      })),
     [patch],
+  );
+
+  /** Retient l'identifiant de session ACP du fil pour pouvoir le reprendre après redémarrage. */
+  const setAcpSessionId = useCallback(
+    (id: string, acpSessionId: string | undefined) =>
+      setItems((list) => {
+        const current = list.find((c) => c.id === id);
+        if (!current || current.acpSessionId === acpSessionId) return list;
+        return list.map((c) => (c.id === id ? { ...c, acpSessionId } : c));
+      }),
+    [],
   );
 
   /** Ajoute un dossier à la session (retenu avec la conversation). */
@@ -149,7 +166,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
   /** Le relais : la conversation continue chez un autre fournisseur, avec le résumé de ce qui s'est dit. */
   const relayTo = useCallback(
     (id: string, agentId: string, context: string) =>
-      patch(id, (c) => ({ ...c, agentId, modelId: undefined, forkContext: context })),
+      patch(id, (c) => ({ ...c, agentId, modelId: undefined, forkContext: context, acpSessionId: undefined })),
     [patch],
   );
 
@@ -172,7 +189,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
 
   /** Le dossier de travail a été supprimé : le prochain message en crée un neuf. */
   const clearWorktree = useCallback(
-    (id: string) => patch(id, (c) => ({ ...c, worktree: undefined, branch: undefined })),
+    (id: string) => patch(id, (c) => ({ ...c, worktree: undefined, branch: undefined, acpSessionId: undefined })),
     [patch],
   );
 
@@ -238,6 +255,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     setProject,
     setUseWorktree,
     setAgent,
+    setAcpSessionId,
     relayTo,
     setForkContext,
     createIn,
