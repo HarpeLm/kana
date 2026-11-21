@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   executeScheduledTask,
+  getScheduledDaemonStatus,
+  installScheduledDaemon,
   intervalSeconds,
   isTaskDue,
   launchdPlist,
@@ -9,6 +11,7 @@ import {
   nextRunAt,
   saveScheduledRuns,
   saveScheduledTasks,
+  uninstallScheduledDaemon,
   withinBudget,
   type ScheduledTask,
 } from "./schedule";
@@ -71,5 +74,24 @@ describe("schedule", () => {
     const { run } = executeScheduledTask(t, { tokensUsed: 800, nowMs: 5_000 });
     saveScheduledRuns([run]);
     expect(loadScheduledRuns()).toEqual([run]);
+  });
+
+  it("gère l'installation et la désactivation du daemon système launchctl en mode fallback", async () => {
+    const initial = await getScheduledDaemonStatus();
+    expect(initial.installed).toBe(false);
+    expect(initial.label).toBe("dev.kana.daemon");
+
+    const installed = await installScheduledDaemon(900);
+    expect(installed.installed).toBe(true);
+    expect(installed.loaded).toBe(true);
+    expect(installed.message).toContain("15 min");
+
+    const reloaded = await getScheduledDaemonStatus();
+    expect(reloaded.installed).toBe(true);
+    expect(reloaded.loaded).toBe(true);
+
+    const removed = await uninstallScheduledDaemon();
+    expect(removed.installed).toBe(false);
+    expect(removed.loaded).toBe(false);
   });
 });
