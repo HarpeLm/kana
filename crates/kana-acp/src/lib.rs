@@ -16,4 +16,4 @@ pub use client::AcpClient;
 pub use error::AcpError;
 pub use event::{AcpEvent, PermissionOption, PlanEntry};
 pub use mcp::McpServerConfig;
-pub use models::{AgentModels, ModelInfo};
+pub use models::{AgentModels, EffortInfo, ModelInfo};
