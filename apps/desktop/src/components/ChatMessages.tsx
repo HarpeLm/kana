@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef } from "react";
+import { useContext, useEffect, useRef, type UIEvent } from "react";
 import { ChevronRight, Copy } from "lucide-react";
 import { artifactTitle, findArtifacts, OpenArtifactContext } from "../lib/artifactRefs";
 import type { ChatMessage } from "../lib/chatState";
@@ -59,12 +59,21 @@ function AgentMessage({
 export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onSend, onFork }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
+  // On suit la fin de la conversation tant qu'on y est : dès qu'on remonte, la lecture n'est plus ramenée en bas.
+  const stick = useRef(true);
+  const onScroll = (event: UIEvent<HTMLDivElement>) => {
+    const box = event.currentTarget;
+    stick.current = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  };
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end", inline: "nearest" });
+    // Un message qu'on vient d'envoyer ramène toujours en bas.
+    if (messages[messages.length - 1]?.role === "user") stick.current = true;
+    if (stick.current) endRef.current?.scrollIntoView({ block: "end", inline: "nearest" });
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text">
+    <div onScroll={onScroll} className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 select-text">
       <div className="mx-auto min-w-0 max-w-[740px] space-y-5 text-[15px] leading-[1.7] [overflow-wrap:anywhere]">
         {messages.length === 0 && (
           <p className="pt-10 text-center text-[13px] text-[#7e7d76]">
