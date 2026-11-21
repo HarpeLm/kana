@@ -8,3 +8,8 @@ rusqlite = { version = "0.43.0", features = ["bundled"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
+
+[[bench]]
+name = "db_bench"
+harness = false
+
