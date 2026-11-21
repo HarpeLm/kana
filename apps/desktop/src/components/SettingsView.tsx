@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Shield, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Check, Download, Package, RefreshCw, Shield, Trash2 } from "lucide-react";
 import { AGENTS } from "../data";
 import { setLocale, tr, useLocale, type Locale } from "../lib/i18n";
 import {
@@ -12,7 +12,15 @@ import {
   type PermissionPolicy,
   type PermissionRuleScope,
 } from "../lib/permissionMode";
-import { setNotificationPrefs, useNotificationPrefs } from "../lib/settings";
+import {
+  checkAppUpdate,
+  installAdapterCache,
+  listAdapterCaches,
+  setNotificationPrefs,
+  useNotificationPrefs,
+  type AdapterCacheInfo,
+  type AppUpdateInfo,
+} from "../lib/settings";
 import AccountCard from "./AccountCard";
 import OrphanCleaner from "./OrphanCleaner";
 
@@ -37,6 +45,38 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
   const [ruleScope, setRuleScope] = useState<PermissionRuleScope>("command");
   const [rulePolicy, setRulePolicy] = useState<PermissionPolicy>("allow");
   const [rulePattern, setRulePattern] = useState("");
+  const [adapterCaches, setAdapterCaches] = useState<AdapterCacheInfo[]>([]);
+  const [installingAdapter, setInstallingAdapter] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  useEffect(() => {
+    void listAdapterCaches()
+      .then(setAdapterCaches)
+      .catch(() => {});
+  }, []);
+
+  const handleInstallAdapter = async (agentId: string) => {
+    if (installingAdapter) return;
+    setInstallingAdapter(agentId);
+    try {
+      const updated = await installAdapterCache(agentId);
+      setAdapterCaches((prev) => prev.map((item) => (item.agent_id === agentId ? updated : item)));
+    } finally {
+      setInstallingAdapter(null);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    try {
+      const info = await checkAppUpdate();
+      setUpdateInfo(info);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const handleAddRule = (event: FormEvent) => {
     event.preventDefault();
@@ -273,6 +313,101 @@ export default function SettingsView({ conversationIds, projectPaths }: Settings
                 ))}
               </ul>
             )}
+          </div>
+        </section>
+
+        <section className="mt-8 space-y-4 rounded-xl border border-[#2e2e2b] bg-[#21211f] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Package className="mt-0.5 h-4 w-4 shrink-0 text-[#d97757]" strokeWidth={1.8} />
+              <div>
+                <h2 className="text-[14px] font-medium text-[#ecebe4]">
+                  {tr(
+                    "Mises à jour Tauri & Cache local des adaptateurs ACP",
+                    "Tauri Auto-updater & Local ACP Adapter Cache",
+                    locale,
+                  )}
+                </h2>
+                <p className="mt-0.5 text-[12px] text-[#8c8b83]">
+                  {tr(
+                    "Vérifie les mises à jour de Kana et pré-installe les adaptateurs ACP dans ~/.kana/adapters pour démarrer instantanément sans npx -y.",
+                    "Check for Kana updates and pre-install ACP adapters in ~/.kana/adapters for instant startup without npx -y.",
+                    locale,
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCheckUpdate()}
+              disabled={checkingUpdate}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#2e2e2b] px-3 py-1.5 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36] disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdate ? "animate-spin" : ""}`} />
+              <span>{tr("Vérifier les mises à jour", "Check for updates", locale)}</span>
+            </button>
+          </div>
+
+          {updateInfo && (
+            <div className="rounded-lg border border-[#343431] bg-[#1a1a18] px-3 py-2 text-[12.5px] text-[#dcdbd3]">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-[#ecebe4]">
+                  Kana v{updateInfo.currentVersion} ({updateInfo.channel})
+                </span>
+                <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300">
+                  {updateInfo.updateAvailable
+                    ? tr(`Mise à jour v${updateInfo.latestVersion} disponible`, `Update v${updateInfo.latestVersion} available`, locale)
+                    : tr("À jour", "Up to date", locale)}
+                </span>
+              </div>
+              <p className="mt-1 text-[12px] text-[#8c8b83]">{updateInfo.releaseNotes}</p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {adapterCaches.map((adapter) => (
+              <div
+                key={adapter.agent_id}
+                className="flex items-center justify-between gap-3 rounded-lg bg-[#1b1b19] px-3 py-2 text-[12.5px]"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium capitalize text-[#ecebe4]">{adapter.agent_id}</span>
+                    <span className="font-mono text-[11.5px] text-[#8c8b83]">{adapter.package}</span>
+                    {adapter.cached ? (
+                      <span className="flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-300">
+                        <Check className="h-3 w-3" />
+                        <span>{tr("En cache local", "Cached locally", locale)}</span>
+                      </span>
+                    ) : (
+                      <span className="rounded bg-[#2a2a27] px-1.5 py-0.5 text-[11px] text-[#9a9992]">
+                        npx -y
+                      </span>
+                    )}
+                  </div>
+                  {adapter.local_path && (
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#6f6e68]">
+                      {adapter.local_path}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={installingAdapter === adapter.agent_id}
+                  onClick={() => void handleInstallAdapter(adapter.agent_id)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#333331] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3e3e3b] disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>
+                    {installingAdapter === adapter.agent_id
+                      ? tr("Installation…", "Installing…", locale)
+                      : adapter.cached
+                        ? tr("Mettre à jour le cache", "Update cache", locale)
+                        : tr("Mettre en cache", "Cache locally", locale)}
+                  </span>
+                </button>
+              </div>
+            ))}
           </div>
         </section>
 
