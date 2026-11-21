@@ -888,6 +888,9 @@ test("/advisor & Cross-Review, Diagnostics LSP dans FilesDock et Cache local des
   await expect(advisorDialog.getByText(/Pour quoi \/ quel objectif/)).toBeVisible();
   await expect(advisorDialog.getByText(/Pourquoi cette configuration/)).toBeVisible();
 
+  await advisorDialog.getByRole("button", { name: "Configurer avec l'IA" }).click();
+  await expect(advisorDialog.getByText(/Stratégie détectée :/)).toBeVisible();
+
   await advisorDialog.getByRole("button", { name: /Audit Sécurité & Permissions/ }).click();
   await expect(advisorDialog.getByText(/Le mode `plan` \(lecture seule\) couplé au Sandbox OS/)).toBeVisible();
 
