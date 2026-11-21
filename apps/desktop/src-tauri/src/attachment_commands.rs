@@ -1,8 +1,15 @@
 //! Pièces jointes de la zone de saisie : aperçu des images choisies ou déposées.
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+
+static CLIPBOARD_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Au-delà, on n'affiche pas d'aperçu : l'image est envoyée à l'agent, mais pas montrée.
 const MAX_PREVIEW_BYTES: u64 = 10 * 1024 * 1024;
@@ -53,6 +60,39 @@ pub async fn image_preview(path: String) -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || preview(Path::new(&path))).await.ok()?
 }
 
+fn clipboard_ext(mime: &str) -> Option<&'static str> {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Some("png"),
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/gif" => Some("gif"),
+        "image/webp" => Some("webp"),
+        _ => None,
+    }
+}
+
+fn write_clipboard_image(mime: &str, data: &str) -> Result<String, String> {
+    let ext = clipboard_ext(mime).ok_or_else(|| "format d'image non pris en charge".to_string())?;
+    let bytes = STANDARD.decode(data.trim()).map_err(|_| "image illisible".to_string())?;
+    if bytes.is_empty() || bytes.len() > MAX_PREVIEW_BYTES as usize {
+        return Err("taille d'image non prise en charge".into());
+    }
+    let dir = std::env::temp_dir().join("kana-clipboard");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis());
+    let seq = CLIPBOARD_SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = dir.join(format!("collage-{now}-{seq}.{ext}"));
+    fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Enregistre une image collée depuis le presse-papiers dans un fichier temporaire, pour la joindre au message.
+#[tauri::command]
+pub async fn save_clipboard_image(mime: String, data: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || write_clipboard_image(&mime, &data))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +120,17 @@ mod tests {
         assert!(url.starts_with("data:image/jpeg;base64,"));
         assert!(url.len() < 60_000);
         assert_eq!(thumbnail(&dir.join("absent.png")), None);
+    }
+
+    #[test]
+    fn saves_clipboard_images_and_rejects_invalid_data() {
+        let path = write_clipboard_image("image/png", "AQID").expect("png valide");
+        assert!(path.ends_with(".png"));
+        assert_eq!(fs::read(&path).unwrap(), vec![1u8, 2, 3]);
+        let _ = fs::remove_file(path);
+
+        assert!(write_clipboard_image("text/plain", "AQID").is_err());
+        assert!(write_clipboard_image("image/png", "!!!").is_err());
+        assert!(write_clipboard_image("image/png", "").is_err());
     }
 }
