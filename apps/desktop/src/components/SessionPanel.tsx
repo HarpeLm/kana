@@ -161,6 +161,8 @@ interface SessionPanelProps {
   onOpenTerminal: () => void;
   /** Clic droit sur un artéfact : le menu (ouvrir, copier le chemin, supprimer). */
   onArtifactMenu: (path: string, x: number, y: number) => void;
+  /** Ouvre le sélecteur de dossier natif (Finder) pour associer un dossier de projet. */
+  onOpenFolder?: () => void;
   /** Donne un dossier de plus à l'agent (il le lit à partir de son chemin). */
   onAddFolder: (path: string) => void;
   canAddFolder: boolean;
@@ -210,6 +212,7 @@ export default function SessionPanel({
   onOpenFile,
   onOpenTerminal,
   onArtifactMenu,
+  onOpenFolder,
   onAddFolder,
   canAddFolder,
   onChangeEnvironment,
@@ -268,8 +271,16 @@ export default function SessionPanel({
               onChangeEnvironment={onChangeEnvironment}
             />
             <div ref={folderRef} className="relative">
-              <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />} onClick={noProject ? undefined : () => setFolderMenu((v) => !v)}>
-                {noProject ? "Aucun dossier" : conversation.project}
+              <Row
+                icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}
+                onClick={noProject ? onOpenFolder : () => setFolderMenu((v) => !v)}
+                title={noProject ? "Choisir un dossier de projet" : undefined}
+              >
+                {noProject ? (
+                  <span className="text-[#b8b7ae]">Aucun dossier</span>
+                ) : (
+                  conversation.project
+                )}
                 {conversation.projectPath && !noProject && <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>}
               </Row>
               {folderMenu && (
