@@ -138,6 +138,73 @@ export async function loadStoredMessages(conversationId: string): Promise<ChatMe
   }));
 }
 
+export interface StoredMessageHit {
+  conversationId: string;
+  messageId: string;
+  role: string;
+  snippet: string;
+}
+
+function makeLocalSnippet(text: string, thought: string, query: string): string {
+  const source = text.toLowerCase().includes(query.toLowerCase()) || !thought.trim() ? text : thought;
+  const clean = source.replace(/\s+/g, " ").trim();
+  if (clean.length <= 140) return clean;
+  const idx = clean.toLowerCase().indexOf(query.toLowerCase());
+  if (idx < 0) return `${clean.slice(0, 120)}…`;
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(clean.length, start + 120);
+  return `${start > 0 ? "…" : ""}${clean.slice(start, end)}${end < clean.length ? "…" : ""}`;
+}
+
+/** Recherche plein texte dans les messages enregistrés (SQLite FTS5 côté Tauri, scan localStorage en navigateur). */
+export async function searchStoredMessages(query: string, limit = 20): Promise<StoredMessageHit[]> {
+  const trimmed = query.trim();
+  if (!trimmed || limit <= 0) return [];
+  if (inTauri) {
+    return invoke<StoredMessageHit[]>("db_search_messages", { query: trimmed, limit });
+  }
+  const tokens = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+  const hits: StoredMessageHit[] = [];
+  const seenConv = new Set<string>();
+  const keys: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("kana-messages-")) keys.push(k);
+    }
+  } catch {
+    return [];
+  }
+  const knownConvs = loadLocalConversations();
+  const knownSet = knownConvs ? new Set(knownConvs.map((c) => c.id)) : null;
+
+  for (const key of keys) {
+    const conversationId = key.slice("kana-messages-".length);
+    if (knownSet && !knownSet.has(conversationId)) continue;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) ?? "[]");
+      if (!Array.isArray(parsed)) continue;
+      for (const msg of parsed as ChatMessage[]) {
+        const haystack = `${msg.text ?? ""}\n${msg.thought ?? ""}`.toLowerCase();
+        if (!tokens.every((t) => haystack.includes(t))) continue;
+        hits.push({
+          conversationId,
+          messageId: msg.id,
+          role: msg.role,
+          snippet: makeLocalSnippet(msg.text ?? "", msg.thought ?? "", tokens[0]),
+        });
+        seenConv.add(`${conversationId}:${msg.id}`);
+        if (hits.length >= limit) return hits;
+      }
+    } catch {
+      // conversation illisible ignorée
+    }
+  }
+  void seenConv;
+  return hits;
+}
+
 export async function saveStoredMessages(conversationId: string, messages: ChatMessage[]): Promise<void> {
   if (!inTauri) {
     try {
