@@ -7,7 +7,7 @@ export const TERMINAL_FONT =
 export const TERMINAL_THEME: ITheme = {
   background: "#181817",
   foreground: "#d4d3cb",
-  cursor: "#d97757",
+  cursor: "#3b82f6",
   cursorAccent: "#181817",
   selectionBackground: "#3d3d39",
   black: "#2b2b29",
