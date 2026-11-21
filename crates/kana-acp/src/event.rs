@@ -355,4 +355,30 @@ mod tests {
         assert_eq!(options.len(), 2);
         assert_eq!(options[0].id, "allow");
     }
+
+    #[test]
+    fn json_rpc_event_parsing_throughput_stays_within_budget() {
+        let frames = [
+            r#"{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Flux ACP rapide"}}"#,
+            r#"{"sessionUpdate":"tool_call","toolCallId":"tc-1","title":"cargo test","status":"completed","rawOutput":{"output":"ok"}}"#,
+            r#"{"sessionUpdate":"available_commands_update","availableCommands":[{"name":"/advisor","description":"Conseiller"}]}"#,
+            r#"{"sessionUpdate":"usage_update","used":12000,"size":200000}"#,
+        ];
+        let start = std::time::Instant::now();
+        let mut count = 0usize;
+        for _ in 0..1_000 {
+            for raw in frames {
+                let value: Value = serde_json::from_str(raw).unwrap();
+                if AcpEvent::from_update(&value).is_some() {
+                    count += 1;
+                }
+            }
+        }
+        let elapsed = start.elapsed();
+        assert_eq!(count, 4_000);
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "le parsing de 4 000 trames JSON-RPC a dépassé le budget : {elapsed:?}"
+        );
+    }
 }
