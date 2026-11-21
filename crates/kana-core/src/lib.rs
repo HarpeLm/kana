@@ -21,8 +21,8 @@ pub use permission::{
 };
 pub use relay::{DEFAULT_RELAY_ORDER, RelayConfig, pick_target};
 pub use schedule::{
-    ScheduledRunRecord, ScheduledTask, interval_seconds, is_task_due, launchd_plist, next_run_at,
-    within_budget,
+    LAUNCHD_DAEMON_LABEL, ScheduledRunRecord, ScheduledTask, interval_seconds, is_task_due,
+    launchd_daemon_plist, launchd_plist, next_run_at, within_budget,
 };
 pub use thread::{ThreadPhase, ThreadState};
 pub use usage::{
