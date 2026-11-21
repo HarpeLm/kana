@@ -27,6 +27,7 @@ import { buildRelayContext } from "./lib/fork";
 import { OpenFileContext } from "./lib/fileRefs";
 import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
+import { setKeepAwake } from "./lib/settings";
 import { createWorktree, removeWorktree } from "./lib/worktree";
 import { loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
 import { useConversations } from "./hooks/useConversations";
@@ -306,11 +307,20 @@ export default function App({ startup }: { startup: Startup }) {
   const [artMaximized, setArtMaximized] = useState(false);
 
   // Entrées du menu "..."
-  const [showArtifacts, setShowArtifacts] = useState(false);
-  const [showSideChat, setShowSideChat] = useState(false);
-  const [showBackgroundTasks, setShowBackgroundTasks] = useState(false);
-  const [showSimulator, setShowSimulator] = useState(false);
-  const [keepAwake, setKeepAwake] = useState(false);
+  const [keepAwake, setKeepAwakeState] = useState(false);
+  const keepAwakeSeq = useRef(0);
+  const toggleKeepAwake = () => {
+    const seq = ++keepAwakeSeq.current;
+    const next = !keepAwake;
+    setKeepAwakeState(next);
+    void setKeepAwake(next)
+      .then((active) => {
+        if (keepAwakeSeq.current === seq) setKeepAwakeState(active);
+      })
+      .catch(() => {
+        if (keepAwakeSeq.current === seq) setKeepAwakeState(!next);
+      });
+  };
 
   // Le terminal est monté à la première ouverture puis gardé : son shell survit quand on le masque.
   const [terminalOpened, setTerminalOpened] = useState(false);
@@ -385,11 +395,10 @@ export default function App({ startup }: { startup: Startup }) {
     setTerminalOpened(true);
   };
 
-  const showRightPanel = showPlan || showArtifacts || showBackgroundTasks;
   // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
   const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
   // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
-  const sessionSummary = useSessionSummary(showRightPanel && chat.messages.length > 0, workPath, chat.busy);
+  const sessionSummary = useSessionSummary(showPlan && chat.messages.length > 0, workPath, chat.busy);
   const artifactPaths = (sessionSummary.summary?.changed ?? [])
     .filter((f) => isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path)))
     .map((f) => f.path);
@@ -477,16 +486,10 @@ export default function App({ startup }: { startup: Startup }) {
             showFiles,
             onFiles: toggle(setShowFiles),
             more: {
-              showArtifacts,
-              onArtifacts: toggle(setShowArtifacts),
-              showSideChat,
-              onSideChat: toggle(setShowSideChat),
-              showBackgroundTasks,
-              onBackgroundTasks: toggle(setShowBackgroundTasks),
-              showSimulator,
-              onSimulator: toggle(setShowSimulator),
+              showArtifacts: showArtDock,
+              onArtifacts: toggle(setShowArtDock),
               keepAwake,
-              onKeepAwake: toggle(setKeepAwake),
+              onKeepAwake: toggleKeepAwake,
             },
           }}
         >
@@ -552,7 +555,7 @@ export default function App({ startup }: { startup: Startup }) {
             />
             </OpenFileContext.Provider>
             </OpenArtifactContext.Provider>
-            {showRightPanel && (
+            {showPlan && (
               <SessionPanel
                 conversation={selected}
                 messages={chat.messages}
