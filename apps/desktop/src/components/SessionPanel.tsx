@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation } from "../lib/conversations";
-import { createPullRequest, type BranchSummary, type PullRequest } from "../lib/forge";
+import { createPullRequest, discardWork, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
 import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import ConfirmDialog from "./ConfirmDialog";
@@ -130,10 +130,16 @@ interface SessionPanelProps {
   /** Compacter : l'agent repart avec un résumé de la conversation. */
   onCompact: () => void;
   canCompact: boolean;
+  /** Le travail a été abandonné (dossier de travail supprimé) : l'agent doit être arrêté et le dossier oublié. */
+  onDiscarded: () => void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started, onCompact, canCompact }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded }: SessionPanelProps) {
+  const [action, setAction] = useState<"merge" | "discard" | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
   const [compacted, setCompacted] = useState(false);
   useUsageVersion();
   const [creating, setCreating] = useState(false);
@@ -165,6 +171,49 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
         : nothingToShare
           ? "Aucun changement par rapport à la branche principale"
           : null;
+
+  const worktree = conversation.worktree;
+  const projectPath = conversation.projectPath && conversation.projectPath !== NO_PROJECT ? conversation.projectPath : undefined;
+  const mergeBlocked = !worktree || !projectPath
+    ? "Cette conversation ne travaille pas dans un dossier de travail à part"
+    : !summary
+      ? "Aucune information sur la branche"
+      : onMainBranch
+        ? "Le travail est déjà sur la branche principale"
+        : nothingToShare
+          ? "Aucun changement par rapport à la branche principale"
+          : null;
+
+  const openAction = (kind: "merge" | "discard") => {
+    setActionError("");
+    setAction(kind);
+  };
+
+  const runAction = async () => {
+    if (!summary?.branch || !worktree || !projectPath || actionBusy) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      if (action === "merge") {
+        const result = await mergeWork(projectPath, worktree, summary.branch, conversation.title === "Nouvelle conversation" ? summary.branch : conversation.title);
+        setNotice(
+          `Fusionné dans ${result.base} : ${result.merged_commits} commit${result.merged_commits > 1 ? "s" : ""}${result.saved ? " (dont tes changements en cours)" : ""}.`,
+        );
+        setTimeout(() => setNotice(""), 8000);
+        onRefresh();
+      } else if (action === "discard") {
+        await discardWork(projectPath, worktree, summary.branch);
+        setNotice("Travail abandonné : le prochain message repart d'un dossier neuf.");
+        setTimeout(() => setNotice(""), 8000);
+        onDiscarded();
+      }
+      setAction(null);
+    } catch (e) {
+      setActionError(String(e));
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   const startPr = () => {
     setTitle(conversation.title === "Nouvelle conversation" ? (summary?.branch ?? "") : conversation.title);
@@ -391,18 +440,84 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
         </div>
 
         {started && (
-        <div className="shrink-0 border-t border-[#2f2f2c] p-3">
-          <button
-            onClick={startPr}
-            disabled={prBlocked !== null}
-            title={prBlocked ?? "Pousser la branche et ouvrir une pull request"}
-            className="w-full rounded-xl bg-[#333331] px-3 py-2 text-[13.5px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]"
-          >
-            Créer une PR
-          </button>
+        <div className="shrink-0 space-y-2 border-t border-[#2f2f2c] p-3">
+          {notice && <p className="rounded-lg bg-[#2a3a2c] px-3 py-2 text-[12.5px] text-[#9be0a8]">{notice}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={() => openAction("merge")}
+              disabled={mergeBlocked !== null}
+              title={mergeBlocked ?? `Fusionner ce travail dans ${summary?.base ?? "la branche principale"}, sans passer par GitHub`}
+              className="min-w-0 flex-1 truncate rounded-xl bg-[#333331] px-3 py-2 text-[13.5px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]"
+            >
+              Fusionner dans {summary?.base ?? "main"}
+            </button>
+            <button
+              onClick={startPr}
+              disabled={prBlocked !== null}
+              title={prBlocked ?? "Pousser la branche et ouvrir une pull request"}
+              className="shrink-0 rounded-xl bg-[#333331] px-3 py-2 text-[13.5px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40 disabled:hover:bg-[#333331]"
+            >
+              Créer une PR
+            </button>
+          </div>
+          {worktree && summary && !onMainBranch && (
+            <button
+              onClick={() => openAction("discard")}
+              className="w-full text-center text-[12.5px] text-[#8c8b83] transition hover:text-[#f87171]"
+            >
+              Abandonner ce travail
+            </button>
+          )}
         </div>
         )}
       </div>
+
+      {action === "merge" && summary?.branch && (
+        <ConfirmDialog
+          title={`Fusionner dans ${summary.base ?? "la branche principale"} ?`}
+          confirmLabel={actionBusy ? "En cours…" : "Fusionner"}
+          confirmTone="accent"
+          initialFocus="cancel"
+          onCancel={() => !actionBusy && setAction(null)}
+          onConfirm={() => void runAction()}
+        >
+          <p>Kana va, dans cet ordre :</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            {summary.dirty && <li>enregistrer les changements en cours dans un commit à ton nom ;</li>}
+            <li>
+              fusionner <code>{summary.branch}</code> dans <code>{summary.base}</code>, directement dans ton projet
+              {projectPath ? <> (<code>{home(projectPath)}</code>)</> : null}.
+            </li>
+          </ol>
+          <p className="mt-2">
+            Ça modifie les fichiers de ton projet. Rien n'est envoyé sur GitHub. Si la fusion a des conflits, elle est annulée et ton projet reste
+            intact ; il doit aussi être sur <code>{summary.base}</code>, sans changement non enregistré.
+          </p>
+          {actionError && <p className="mt-2 whitespace-pre-wrap text-[12.5px] text-red-300">{actionError}</p>}
+        </ConfirmDialog>
+      )}
+
+      {action === "discard" && summary?.branch && (
+        <ConfirmDialog
+          title="Abandonner ce travail ?"
+          confirmLabel={actionBusy ? "En cours…" : "Abandonner le travail"}
+          confirmTone="danger"
+          initialFocus="cancel"
+          onCancel={() => !actionBusy && setAction(null)}
+          onConfirm={() => void runAction()}
+        >
+          <p>
+            Le dossier de travail et la branche <code>{summary.branch}</code> seront supprimés, avec tout ce qu'ils contiennent :{" "}
+            <strong>
+              {summary.files} fichier{summary.files > 1 ? "s" : ""} modifié{summary.files > 1 ? "s" : ""}
+              {summary.ahead > 0 ? `, ${summary.ahead} commit${summary.ahead > 1 ? "s" : ""} non fusionné${summary.ahead > 1 ? "s" : ""}` : ""}
+            </strong>
+            . C'est définitif.
+          </p>
+          <p className="mt-2">La conversation reste ; son prochain message repart d'un dossier neuf, depuis {summary.base}.</p>
+          {actionError && <p className="mt-2 whitespace-pre-wrap text-[12.5px] text-red-300">{actionError}</p>}
+        </ConfirmDialog>
+      )}
 
       {creating && summary?.branch && (
         <ConfirmDialog
