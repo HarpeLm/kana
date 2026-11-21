@@ -8,6 +8,7 @@ interface SearchResultRowProps {
   active: boolean;
   onHover: () => void;
   onChoose: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 const ICON = "h-[18px] w-[18px] shrink-0 text-[#c4c3bc]";
@@ -20,7 +21,7 @@ function ItemIcon({ item }: { item: SearchItem }) {
   return <MessageSquare className={ICON} strokeWidth={1.6} />;
 }
 
-export default function SearchResultRow({ item, active, onHover, onChoose }: SearchResultRowProps) {
+export default function SearchResultRow({ item, active, onHover, onChoose, onContextMenu }: SearchResultRowProps) {
   const ref = useRef<HTMLButtonElement>(null);
 
   // Garde la ligne choisie au clavier visible dans la liste.
@@ -35,6 +36,7 @@ export default function SearchResultRow({ item, active, onHover, onChoose }: Sea
       aria-selected={active}
       onMouseMove={onHover}
       onClick={onChoose}
+      onContextMenu={onContextMenu}
       className={`flex h-9 w-full items-center gap-3 rounded-lg px-4 text-left text-[15px] transition-colors ${
         active ? "bg-[#3a3a37] text-[#f0efe9]" : "text-[#e6e5df]"
       }`}
