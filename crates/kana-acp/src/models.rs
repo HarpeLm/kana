@@ -9,8 +9,18 @@ pub struct ModelInfo {
     pub name: String,
 }
 
+/// Le niveau d'effort (de réflexion) que l'agent laisse choisir : une option de configuration de catégorie `thought_level`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EffortInfo {
+    pub config_id: String,
+    pub current: Option<String>,
+    pub options: Vec<ModelInfo>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct AgentModels {
+    /// Le niveau d'effort, quand l'agent en propose.
+    pub effort: Option<EffortInfo>,
     /// Le modèle utilisé par défaut.
     pub current: Option<String>,
     pub available: Vec<ModelInfo>,
@@ -23,6 +33,12 @@ impl AgentModels {
     /// Lit la réponse de `session/new` : la liste `models`, ou à défaut l'option de configuration
     /// de catégorie `model`. Vide quand l'agent ne propose pas de choix de modèle.
     pub fn from_session(result: &Value) -> Self {
+        let mut models = Self::models_from_session(result);
+        models.effort = EffortInfo::from_config_options(&result["configOptions"]);
+        models
+    }
+
+    fn models_from_session(result: &Value) -> Self {
         let legacy = &result["models"];
         if let Some(list) = legacy["availableModels"].as_array() {
             let available = list
@@ -33,7 +49,7 @@ impl AgentModels {
                     Some(ModelInfo { id, name })
                 })
                 .collect();
-            return Self { current: legacy["currentModelId"].as_str().map(str::to_owned), available, config_id: None };
+            return Self { current: legacy["currentModelId"].as_str().map(str::to_owned), available, config_id: None, effort: None };
         }
         Self::from_config_options(&result["configOptions"]).unwrap_or_default()
     }
@@ -54,6 +70,29 @@ impl AgentModels {
             current: option["currentValue"].as_str().map(str::to_owned),
             available,
             config_id: option["id"].as_str().map(str::to_owned),
+            effort: None,
+        })
+    }
+}
+
+impl EffortInfo {
+    fn from_config_options(options: &Value) -> Option<Self> {
+        let option = options.as_array()?.iter().find(|o| o["category"] == "thought_level")?;
+        let list = option["options"].as_array()?;
+        let options: Vec<ModelInfo> = list
+            .iter()
+            .filter_map(|m| {
+                let id = m["value"].as_str()?.to_owned();
+                Some(ModelInfo { name: m["name"].as_str().unwrap_or(&id).to_owned(), id })
+            })
+            .collect();
+        if options.is_empty() {
+            return None;
+        }
+        Some(Self {
+            config_id: option["id"].as_str()?.to_owned(),
+            current: option["currentValue"].as_str().map(str::to_owned),
+            options,
         })
     }
 }
@@ -63,6 +102,20 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn reads_the_effort_option() {
+        let result = json!({ "configOptions": [
+            { "id": "model", "category": "model", "currentValue": "a", "options": [{ "value": "a", "name": "A" }] },
+            { "id": "effort", "category": "thought_level", "currentValue": "medium",
+              "options": [{ "value": "low", "name": "Low" }, { "value": "medium", "name": "Medium" }] }
+        ]});
+        let effort = AgentModels::from_session(&result).effort.unwrap();
+        assert_eq!(effort.config_id, "effort");
+        assert_eq!(effort.current.as_deref(), Some("medium"));
+        assert_eq!(effort.options.len(), 2);
+        assert!(AgentModels::from_session(&json!({})).effort.is_none());
+    }
 
     #[test]
     fn reads_the_models_of_a_new_session() {
