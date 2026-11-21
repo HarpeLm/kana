@@ -29,6 +29,7 @@ export interface ChatObserver {
   onDone?: (threadId: string) => void;
   onError?: (threadId: string, message: string) => void;
   onSession?: (threadId: string, sessionId: string) => void;
+  onPermission?: (threadId: string, title: string) => void;
 }
 
 /** Ce qu'il faut préparer avant d'envoyer le premier message d'un fil. */
@@ -155,6 +156,8 @@ export function useChat(
         watch?.onDone?.(event.threadId);
       } else if (event.kind === "error") {
         watch?.onError?.(event.threadId, event.message);
+      } else if (event.kind === "permission") {
+        watch?.onPermission?.(event.threadId, event.title);
       }
       update(event.threadId, (chat) => applyEvent(chat, event));
     }).then(
@@ -167,7 +170,8 @@ export function useChat(
   }, [update]);
 
   const send = useCallback(
-    async (text: string, fromQueue = false) => {
+    async (text: string, fromQueue = false, modeOverride?: PermissionMode) => {
+      if (modeOverride) modeRef.current = modeOverride;
       if (!fromQueue && chatsRef.current[threadId]?.busy) {
         update(threadId, (chat) => enqueueMessage(chat, text));
         return;
@@ -182,11 +186,12 @@ export function useChat(
         const { cwd, preface, carried, model, effort, acpSessionId } = await prepareRef.current(threadId);
         const started = await startAgent(threadId, agentId, cwd, model, effort, acpSessionId);
         observerRef.current?.onSession?.(threadId, started.sessionId);
+        const activeMode = modeOverride ?? modeRef.current;
         // En plan, l'agent passe dans son propre mode lecture seule quand il en a un ; sinon Kana refuse les modifications (voir autoAnswer).
-        await setPlanMode(threadId, modeRef.current === "plan").catch(() => false);
+        await setPlanMode(threadId, activeMode === "plan").catch(() => false);
         const resume = !started.resumed && !carried ? buildResumeContext(priorMessages) : "";
         const prefix = !started.resumed ? `${preface ?? ""}${resume}` : carried ? (preface ?? "") : "";
-        await sendPrompt(threadId, promptFor(modeRef.current, `${prefix}${text}`), imagePathsIn(text));
+        await sendPrompt(threadId, promptFor(activeMode, `${prefix}${text}`), imagePathsIn(text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
         observerRef.current?.onError?.(threadId, String(error));
