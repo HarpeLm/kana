@@ -23,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(state::AgentSessions::default())
+        .manage(state::KeepAwake::default())
         .manage(terminals::Terminals::default())
         .manage(browser_agent::AgentState::default())
         .setup(|app| {
@@ -64,6 +65,10 @@ pub fn run() {
             settings_commands::has_api_key,
             settings_commands::set_api_key,
             settings_commands::delete_api_key,
+            settings_commands::set_keep_awake,
+            settings_commands::core_detect_problem,
+            settings_commands::core_pick_relay_target,
+            settings_commands::core_auto_answer,
             git_commands::git_diff,
             git_commands::git_branch_summary,
             git_commands::git_pull_requests,
