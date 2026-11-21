@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ArtifactsIcon } from "./icons";
 import { CornerDownLeft, Folder, MessageSquare, Plus, Settings } from "lucide-react";
 import { ACTION_NEW, ACTION_SETTINGS, type SearchItem } from "../lib/searchItems";
 
@@ -12,6 +13,7 @@ interface SearchResultRowProps {
 const ICON = "h-[18px] w-[18px] shrink-0 text-[#c4c3bc]";
 
 function ItemIcon({ item }: { item: SearchItem }) {
+  if (item.kind === "artifact") return <ArtifactsIcon className={ICON} />;
   if (item.kind === "project") return <Folder className={ICON} strokeWidth={1.6} />;
   if (item.id === ACTION_NEW) return <Plus className={ICON} strokeWidth={1.6} />;
   if (item.id === ACTION_SETTINGS) return <Settings className={ICON} strokeWidth={1.6} />;
