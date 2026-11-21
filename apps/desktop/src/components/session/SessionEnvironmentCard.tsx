@@ -202,7 +202,7 @@ export default function SessionEnvironmentCard({
                 readOnly: env.readOnly,
               })
             }
-            className="h-3.5 w-3.5 accent-[#d97757]"
+            className="h-3.5 w-3.5 accent-[#2563eb]"
           />
           <span>Sandbox OS isolé</span>
         </label>
@@ -293,7 +293,7 @@ export default function SessionEnvironmentCard({
               type="button"
               disabled={cloudSubmitting || !activeCloudUrl.trim() || !cloudPrompt.trim()}
               onClick={() => void handleSubmitCloudJob()}
-              className="shrink-0 rounded-lg bg-[#d97757] px-2.5 py-1 text-[11.5px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-40"
+              className="shrink-0 rounded-lg bg-[#1e40af] px-2.5 py-1 text-[11.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-40"
             >
               {cloudSubmitting ? "Envoi…" : "Envoyer une tâche Cloud"}
             </button>
