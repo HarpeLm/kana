@@ -80,19 +80,12 @@ export default function WelcomeProfileModal({
         <h2 className="mt-4 text-[17px] font-semibold tracking-[-0.01em] text-[#ecebe4]">
           {tr("Bienvenue dans Kana", "Welcome to Kana", locale)}
         </h2>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-[#8c8b83]">
-          {tr(
-            "Comment souhaitez-vous que Kana vous appelle ? Votre profil reste 100 % local sur cet ordinateur.",
-            "What should Kana call you? Your profile stays 100% local on this computer.",
-            locale,
-          )}
-        </p>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label
               htmlFor="kana-welcome-name"
-              className="mb-1.5 block text-[12px] font-medium text-[#c4c3bc]"
+              className="mb-1.5 block text-[13px] text-[#9a9992]"
             >
               {tr("Comment souhaitez-vous que Kana vous appelle ?", "What should Kana call you?", locale)}
             </label>
@@ -102,8 +95,7 @@ export default function WelcomeProfileModal({
               autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder={tr("Prénom ou pseudo (ex. HarpeLm)", "First name or handle (e.g. HarpeLm)", locale)}
-              className="w-full rounded-xl border border-[#383834] bg-[#181817] px-3.5 py-2.5 text-[13.5px] text-[#ecebe4] placeholder-[#6e6d66] outline-none transition focus:border-[#3b82f6] select-text"
+              className="w-full rounded-xl border border-[#383834] bg-[#181817] px-3.5 py-2.5 text-[13.5px] text-[#ecebe4] outline-none transition focus:border-[#3b82f6] select-text"
             />
           </div>
 
