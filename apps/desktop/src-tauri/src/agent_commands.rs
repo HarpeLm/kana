@@ -158,6 +158,18 @@ pub async fn set_effort(
     client.set_effort(&value).await.map_err(|e| e.to_string())
 }
 
+/// Met l'agent en mode « plan » (ou le remet dans son mode habituel). Renvoie `false` si l'agent n'a pas de tel mode :
+/// l'interface refuse alors elle-même les modifications.
+#[tauri::command]
+pub async fn set_plan_mode(
+    sessions: State<'_, AgentSessions>,
+    thread_id: String,
+    on: bool,
+) -> Result<bool, String> {
+    let client = client_of(&sessions, &thread_id).await?;
+    client.set_plan_mode(on).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn cancel_prompt(
     sessions: State<'_, AgentSessions>,
