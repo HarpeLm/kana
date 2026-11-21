@@ -139,3 +139,86 @@ export function notifyOs(title: string, body: string): void {
     }
   }
 }
+
+export interface AdapterCacheInfo {
+  agent_id: string;
+  package: string;
+  binary: string;
+  cached: boolean;
+  local_path: string | null;
+}
+
+export interface AppUpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  channel: string;
+  releaseNotes: string;
+}
+
+const demoAdapterCaches = new Map<string, AdapterCacheInfo>([
+  [
+    "claude",
+    {
+      agent_id: "claude",
+      package: "@zed-industries/claude-agent-acp",
+      binary: "claude-agent-acp",
+      cached: false,
+      local_path: null,
+    },
+  ],
+  [
+    "codex",
+    {
+      agent_id: "codex",
+      package: "@zed-industries/codex-acp",
+      binary: "codex-acp",
+      cached: false,
+      local_path: null,
+    },
+  ],
+  [
+    "gemini",
+    {
+      agent_id: "gemini",
+      package: "@google/gemini-cli",
+      binary: "gemini",
+      cached: false,
+      local_path: null,
+    },
+  ],
+]);
+
+export function listAdapterCaches(): Promise<AdapterCacheInfo[]> {
+  if (inTauri) return invoke("list_adapter_caches");
+  return Promise.resolve([...demoAdapterCaches.values()]);
+}
+
+export function installAdapterCache(agentId: string): Promise<AdapterCacheInfo> {
+  if (inTauri) return invoke("install_adapter_cache", { agentId });
+  const existing = demoAdapterCaches.get(agentId) ?? {
+    agent_id: agentId,
+    package: `@zed-industries/${agentId}-acp`,
+    binary: `${agentId}-acp`,
+    cached: true,
+    local_path: `~/.kana/adapters/node_modules/.bin/${agentId}-acp`,
+  };
+  const updated: AdapterCacheInfo = {
+    ...existing,
+    cached: true,
+    local_path: `~/.kana/adapters/node_modules/.bin/${existing.binary}`,
+  };
+  demoAdapterCaches.set(agentId, updated);
+  return Promise.resolve(updated);
+}
+
+export function checkAppUpdate(): Promise<AppUpdateInfo> {
+  if (inTauri) return invoke("check_app_update");
+  return Promise.resolve({
+    currentVersion: "0.1.0",
+    latestVersion: "0.1.0",
+    updateAvailable: false,
+    channel: "stable",
+    releaseNotes: "Kana 0.1.0 est à jour (auto-updater Tauri v2 + Homebrew Cask).",
+  });
+}
