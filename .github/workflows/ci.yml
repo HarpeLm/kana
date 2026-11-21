@@ -97,14 +97,20 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
-      - name: Génération de la formule Homebrew Cask (kana.rb)
+      - name: Génération de la formule Homebrew Cask (kana.rb) et du manifeste Auto-Updater
         if: matrix.platform == 'macos-latest'
         run: |
           mkdir -p dist/homebrew-cask
-          cat << 'EOF' > dist/homebrew-cask/kana.rb
+          DMG_FILE=$(find . -name "*.dmg" -print -quit || true)
+          if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+            SHA256_VAL="\"$(shasum -a 256 "$DMG_FILE" | awk '{print $1}')\""
+          else
+            SHA256_VAL=":no_check"
+          fi
+          cat << EOF > dist/homebrew-cask/kana.rb
           cask "kana" do
             version "0.1.0"
-            sha256 :no_check
+            sha256 ${SHA256_VAL}
 
             url "https://github.com/HarpePluie/kana/releases/download/v#{version}/Kana_#{version}_universal.dmg"
             name "Kana"
@@ -126,9 +132,21 @@ jobs:
             ]
           end
           EOF
-      - name: Publication de l'artéfact Homebrew Cask
+          cat << 'EOF' > dist/homebrew-cask/latest.json
+          {
+            "version": "0.1.0",
+            "notes": "Kana universal release (macOS DMG notarisé, Linux AppImage/DEB, Windows MSI/NSIS)",
+            "pub_date": "2026-11-21T00:00:00Z",
+            "platforms": {
+              "darwin-universal": { "url": "https://github.com/HarpePluie/kana/releases/download/v0.1.0/Kana.app.tar.gz", "signature": "" },
+              "linux-x86_64": { "url": "https://github.com/HarpePluie/kana/releases/download/v0.1.0/kana_0.1.0_amd64.AppImage.tar.gz", "signature": "" },
+              "windows-x86_64": { "url": "https://github.com/HarpePluie/kana/releases/download/v0.1.0/Kana_0.1.0_x64-setup.nsis.zip", "signature": "" }
+            }
+          }
+          EOF
+      - name: Publication de l'artéfact Homebrew Cask & Auto-Updater
         if: matrix.platform == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: homebrew-cask-kana
-          path: dist/homebrew-cask/kana.rb
+          path: dist/homebrew-cask/
