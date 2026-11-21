@@ -53,6 +53,7 @@ import { useSidebarWidth } from "./hooks/useSidebarWidth";
 import { sectionsOf } from "./lib/conversations";
 import type { ConversationActions } from "./components/conversationActions";
 import ChatView from "./components/ChatView";
+import AdvisorModal, { type CrossReviewPipelineState } from "./components/AdvisorModal";
 import BrowserApprovalDialog from "./components/BrowserApprovalDialog";
 import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -86,6 +87,8 @@ export default function App({ startup }: { startup: Startup }) {
   const [keptWorktree, setKeptWorktree] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
+  const [advisorModal, setAdvisorModal] = useState<{ open: boolean; query: string }>({ open: false, query: "" });
+  const [crossReviewMap, setCrossReviewMap] = useState<Record<string, CrossReviewPipelineState>>({});
   const [extensibility, setExtensibility] = useState<{ open: boolean; tab: ExtensibilityTab }>({
     open: false,
     tab: "mcp",
@@ -306,8 +309,19 @@ export default function App({ startup }: { startup: Startup }) {
 
   // Le premier message donne son titre à la conversation et remet son projet en tête des récents.
   const sendMessage = (text: string, modeOverride?: PermissionMode) => {
-    if (text.trim() === "/rewind") {
+    const trimmed = text.trim();
+    if (trimmed === "/rewind") {
       void handleRewind();
+      return;
+    }
+    if (
+      trimmed === "/advisor" ||
+      trimmed.startsWith("/advisor ") ||
+      trimmed === "/cross-review" ||
+      trimmed.startsWith("/cross-review ")
+    ) {
+      const rest = trimmed.replace(/^\/(?:advisor|cross-review)\s*/i, "");
+      setAdvisorModal({ open: true, query: rest });
       return;
     }
     if (selected.title === "Nouvelle conversation") {
@@ -593,6 +607,7 @@ export default function App({ startup }: { startup: Startup }) {
       browserAgent.approval !== null ||
       extensibility.open ||
       showInspector ||
+      advisorModal.open ||
       document.querySelector('[role="alertdialog"]') !== null;
     if (blockedByModal) return;
 
@@ -894,6 +909,8 @@ export default function App({ startup }: { startup: Startup }) {
                     `Feedback importé depuis ${feedback.forge === "gitlab" ? "la MR" : "la PR"} #${feedback.prNumber} (« ${feedback.title} ») :\n\n${comments}\n\n${checks}${logs}\n\nCorrige les points signalés et vérifie les tests.`,
                   );
                 }}
+                onOpenAdvisor={() => setAdvisorModal({ open: true, query: "" })}
+                crossReview={crossReviewMap[selected.id] ?? null}
               />
             )}
           </div>
@@ -918,6 +935,7 @@ export default function App({ startup }: { startup: Startup }) {
             setShowFiles(false);
             setFilesMaximized(false);
           }}
+          onSendDiagnostics={(report) => void sendMessage(report)}
         />
 
         <ArtifactDock
@@ -1056,6 +1074,60 @@ export default function App({ startup }: { startup: Startup }) {
         conversation={selected}
         messages={chat.messages}
         onClose={() => setShowInspector(false)}
+      />
+
+      <AdvisorModal
+        open={advisorModal.open}
+        initialQuery={advisorModal.query}
+        onClose={() => setAdvisorModal((prev) => ({ ...prev, open: false }))}
+        onApplySingle={({ agentId: nextAgent, mode: nextMode, sandbox, prompt }) => {
+          setAgent(selected.id, nextAgent, selected.modelId);
+          if (sandbox) {
+            conversations.setEnvironment(selected.id, { kind: "local", sandbox: true });
+          }
+          changeMode(nextMode);
+          void sendMessage(prompt, nextMode);
+        }}
+        onLaunchCrossReview={({ implementer, reviewer, verifier, mode: nextMode, sandbox, taskDescription }) => {
+          setAgent(selected.id, implementer, selected.modelId);
+          if (sandbox) {
+            conversations.setEnvironment(selected.id, { kind: "local", sandbox: true });
+          }
+          changeMode(nextMode);
+          setShowPlan(true);
+
+          const reviewPrompt = `[Cross-Review Étape 2/3 · Revue critique du Diff par ${reviewer}]\nRelis le diff produit par ${implementer} pour « ${taskDescription} », signale toute régression, faille ou angle mort et propose les correctifs.`;
+          const verifyPrompt = `[Cross-Review Étape 3/3 · Vérification & Tests par ${verifier}]\nVérifie la compilation, les tests unitaires/E2E et le rendu Globe pour « ${taskDescription} ».`;
+
+          const revId = conversations.spawnSubagent(selected.id, `Cross-Review (${reviewer})`, reviewPrompt, true);
+          if (revId) {
+            setAgent(revId, reviewer, undefined);
+            void sendToThread(revId, reviewer, reviewPrompt, "plan");
+          }
+
+          const verId = conversations.spawnSubagent(selected.id, `Vérification (${verifier})`, verifyPrompt, false);
+          if (verId) {
+            setAgent(verId, verifier, undefined);
+            void sendToThread(verId, verifier, verifyPrompt, nextMode);
+          }
+
+          setCrossReviewMap((prev) => ({
+            ...prev,
+            [selected.id]: {
+              taskSummary: taskDescription,
+              stages: [
+                { step: 1, role: "Implémentation", agentId: implementer, status: "running" },
+                { step: 2, role: "Cross-Review du Diff", agentId: reviewer, status: "running" },
+                { step: 3, role: "Vérification & Globe", agentId: verifier, status: "running" },
+              ],
+            },
+          }));
+
+          void sendMessage(
+            `[Pipeline Cross-Review Multi-Fournisseurs (${implementer} → ${reviewer} → ${verifier})]\nÉtape 1 · Implémentation principale : ${taskDescription}`,
+            nextMode,
+          );
+        }}
       />
 
       {deleting && (
