@@ -70,6 +70,7 @@ pub fn run() {
             git_commands::repo_files,
             git_commands::read_repo_file,
             git_commands::write_repo_file,
+            git_commands::delete_repo_file,
             browser_commands::browser_open,
             browser_commands::browser_set_bounds,
             browser_commands::browser_set_visible,
