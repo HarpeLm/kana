@@ -658,3 +658,159 @@ test("/rewind et SessionPanel : restauration d'un tour, menu forge et import rev
 
   expect(errors).toEqual([]);
 });
+
+test("recherche plein texte des messages et coûts estimés en $ dans SessionPanel", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.evaluate(() => {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    localStorage.setItem(
+      "kana-conversations",
+      JSON.stringify([
+        { id: "c1", title: "Essai", project: "kana", agentId: "opencode", pinned: false, projectPath: "/tmp/kana" },
+        { id: "c2", title: "Audit Sécurité", project: "kana", agentId: "claude", pinned: false, projectPath: "/tmp/kana" },
+      ]),
+    );
+    localStorage.setItem(
+      "kana-messages-c2",
+      JSON.stringify([
+        { id: "m-fts-1", role: "agent", text: "Signature webhook validée sur motcleFTS99.", think: "", tools: [] },
+      ]),
+    );
+    const sampleUsage = {
+      turns: 2,
+      inputTokens: 12000,
+      outputTokens: 3000,
+      totalTokens: 15000,
+      cacheReadTokens: 4000,
+      cacheWriteTokens: 1000,
+      costUsd: 0.0042,
+    };
+    localStorage.setItem(
+      "kana-usage",
+      JSON.stringify({
+        days: { [today]: { opencode: sampleUsage } },
+        sessions: { c1: sampleUsage },
+        projects: { "/tmp/kana": sampleUsage },
+        problems: {},
+      }),
+    );
+  });
+  await page.reload();
+  await expect(page.getByText("Audit Sécurité").first()).toBeVisible();
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  await page.getByRole("button", { name: "Plan et tâches" }).click();
+  const panel = page.locator("aside").last();
+  await expect(panel.getByText("Coût session")).toBeVisible();
+  await expect(panel.getByText("Cache (lecture / écriture)")).toBeVisible();
+  await expect(panel.getByText("Coût projet")).toBeVisible();
+  await expect(panel.getByText("$0.0042").first()).toBeVisible();
+  await expect(panel.getByText("Coût du jour")).toBeVisible();
+
+  await nav(page).getByRole("button", { name: "Rechercher" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rechercher" });
+  await dialog.getByRole("textbox").fill("motcleFTS99");
+  await expect(dialog.getByText("Messages")).toBeVisible();
+  await expect(dialog.getByText(/motcleFTS99/).first()).toBeVisible();
+  await dialog.getByRole("option", { name: /Audit Sécurité/ }).first().click();
+
+  await expect(page.locator("main").getByText(/Signature webhook validée sur motcleFTS99\./)).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("règles de permissions, journal d'audit et changement de langue FR/EN", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "kana-permission-audit",
+      JSON.stringify([
+        {
+          id: "aud1",
+          at: Date.now(),
+          title: "Accès .env bloqué ([SECRET MASQUÉ])",
+          scope: "path",
+          decision: "ask",
+          source: "default-rule",
+          mode: "ask",
+        },
+      ]),
+    );
+  });
+  await page.reload();
+  await nav(page).getByRole("button", { name: "Personnalisation" }).click();
+  await expect(page.getByRole("heading", { name: "Sécurité, règles de permissions & journal d'audit" })).toBeVisible();
+
+  // Vérifie le journal d'audit et le vidage
+  await expect(page.getByText(/Accès \.env bloqué/)).toBeVisible();
+  await page.getByRole("button", { name: "Vider le journal" }).click();
+  await expect(page.getByText("Aucune décision enregistrée pour l'instant.")).toBeVisible();
+
+  // Ajout, activation et suppression d'une règle granulaire
+  await page.getByLabel("Décision de la règle").selectOption("deny");
+  await page.getByLabel("Motif de la règle").fill("rm -rf");
+  await page.getByRole("button", { name: "Ajouter la règle" }).click();
+  await expect(page.getByText("rm -rf", { exact: true })).toBeVisible();
+
+  const toggle = page.getByLabel("Activer rm -rf");
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+
+  await page.getByRole("button", { name: "Supprimer la règle rm -rf" }).click();
+  await expect(page.getByText("Aucune règle personnalisée enregistrée.")).toBeVisible();
+
+  // Bascule EN puis retour FR
+  await page.getByLabel("Langue de l'interface").selectOption("en");
+  await expect(page.getByRole("heading", { name: "Accounts & connections" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Security, permission rules & audit log" })).toBeVisible();
+  await expect(nav(page).getByRole("button", { name: "Customize" })).toBeVisible();
+
+  await page.getByLabel("Interface language").selectOption("fr");
+  await expect(page.getByRole("heading", { name: "Comptes et connexions" })).toBeVisible();
+  await expect(nav(page).getByRole("button", { name: "Personnalisation" })).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("inspecteur ACP/MCP en direct et export Markdown / JSON", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+  const composer = page.getByRole("textbox").last();
+  await composer.fill("Inspecte la trame");
+  await composer.press("Enter");
+  await expect(page.locator("main").getByText(/Tu as écrit « Inspecte la trame »\./)).toBeVisible();
+
+  const banner = page.getByRole("banner");
+  await banner.getByRole("button", { name: "Plus" }).click();
+  await banner.getByRole("button", { name: /Inspecteur ACP\/MCP & Export/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Inspecteur ACP/MCP & Export" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("session/prompt").first()).toBeVisible();
+  await expect(dialog.getByText("acp/done").first()).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Sortant (out)" }).click();
+  await expect(dialog.getByText("session/prompt").first()).toBeVisible();
+  await expect(dialog.getByText("acp/done")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Toutes" }).click();
+
+  await dialog.getByRole("button", { name: "Exporter Markdown (.md)" }).click();
+  await expect(dialog.getByText(/Export Markdown prêt/)).toBeVisible();
+  const mdExport = await page.evaluate(() => (window as unknown as { __kanaLastExport?: { filename: string; content: string } }).__kanaLastExport);
+  expect(mdExport?.filename).toMatch(/\.md$/);
+  expect(mdExport?.content).toContain("Inspecte la trame");
+
+  await dialog.getByRole("button", { name: "Exporter JSON (.json)" }).click();
+  await expect(dialog.getByText(/Export JSON prêt/)).toBeVisible();
+  const jsonExport = await page.evaluate(() => (window as unknown as { __kanaLastExport?: { filename: string; content: string } }).__kanaLastExport);
+  expect(jsonExport?.filename).toMatch(/\.json$/);
+  expect(JSON.parse(jsonExport?.content ?? "{}").messages?.length).toBeGreaterThanOrEqual(2);
+
+  await dialog.getByRole("button", { name: "Vider" }).click();
+  await expect(dialog.getByText("Aucune trame enregistrée pour l'instant.")).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Fermer" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
