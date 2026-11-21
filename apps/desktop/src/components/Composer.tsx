@@ -147,7 +147,7 @@ export default function Composer({
     setPaletteClosed(false);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
-      if (!el) return;
+      if (!el || el.value !== applied.text) return;
       el.focus();
       el.setSelectionRange(applied.cursor, applied.cursor);
     });
