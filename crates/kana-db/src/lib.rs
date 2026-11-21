@@ -3,5 +3,5 @@
 mod model;
 mod store;
 
-pub use model::{StoredConversation, StoredMessage, StoredProject};
+pub use model::{StoredConversation, StoredMessage, StoredMessageHit, StoredProject};
 pub use store::{Store, StoreError};
