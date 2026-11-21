@@ -13,6 +13,7 @@ import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
 import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
 import { isArtifactPath } from "./lib/fileKinds";
+import { ARTIFACT_GUIDE } from "./lib/agentGuide";
 import { OpenArtifactContext } from "./lib/artifactRefs";
 import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
@@ -99,8 +100,9 @@ export default function App({ startup }: { startup: Startup }) {
         // Sans dossier de travail à part, l'agent travaille directement dans le dossier du projet.
         if (!cwd) cwd = projectPath;
       }
-      const preface = conversation.forkContext;
-      if (preface) clearForkContext(threadId);
+      const carried = conversation.forkContext;
+      if (carried) clearForkContext(threadId);
+      const preface = carried ? `${ARTIFACT_GUIDE}${carried}` : ARTIFACT_GUIDE;
       return { cwd, preface, model: conversation.modelId };
     },
     [attachWorktree, clearForkContext],
