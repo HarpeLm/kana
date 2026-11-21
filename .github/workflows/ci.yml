@@ -1,6 +1,6 @@
 name: Tests
 
-# À chaque push et à chaque pull request : les tests Rust, puis ceux de l'interface.
+# On every push and pull request: the Rust tests, then the interface tests.
 on:
   push:
   pull_request:
@@ -36,9 +36,9 @@ jobs:
       - run: npm ci
       - name: Types
         run: npx tsc --noEmit
-      - name: Tests de la logique (Vitest)
+      - name: Logic tests (Vitest)
         run: npm test
-      - name: Navigateur de test
+      - name: Test browser
         run: npx playwright install --with-deps chromium
-      - name: Tests de l'écran (Playwright)
+      - name: Screen tests (Playwright)
         run: npm run test:e2e
