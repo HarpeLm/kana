@@ -12,6 +12,8 @@ import SidePane from "./SidePane";
 import ToolbarButton from "./ToolbarButton";
 
 interface FilesDockProps {
+  /** « artifacts » : volet à part pour les artéfacts, sans arbre de fichiers. */
+  variant?: "files" | "artifacts";
   /** Un fichier à ouvrir (depuis le panneau de la session) ; `id` change à chaque demande. */
   openRequest?: { id: number; path: string } | null;
   /** Dossier de travail de la conversation ; sans lui, le dépôt où l'app a été lancée. */
@@ -30,6 +32,7 @@ interface FilesDockProps {
  * Un clic sur un fichier l'ouvre en aperçu, un double clic le garde ; ⌘S enregistre.
  */
 export default function FilesDock({
+  variant = "files",
   openRequest,
   root,
   visible,
@@ -49,7 +52,8 @@ export default function FilesDock({
     files.open(openRequest.path, true);
     void refresh();
   }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [showTree, setShowTree] = useState(true);
+  const isArt = variant === "artifacts";
+  const [showTree, setShowTree] = useState(!isArt);
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [sourcePaths, setSourcePaths] = useState<Set<string>>(new Set());
   const [closing, setClosing] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export default function FilesDock({
 
   return (
     <SidePane
-      label="Fichiers"
+      label={isArt ? "Artéfacts" : "Fichiers"}
       visible={visible}
       maximized={maximized}
       width={width}
@@ -98,7 +102,7 @@ export default function FilesDock({
                 <Maximize2 className="h-[17px] w-[17px]" strokeWidth={1.6} />
               )}
             </ToolbarButton>
-            <ToolbarButton title="Fermer les fichiers" onClick={onClose}>
+            <ToolbarButton title={isArt ? "Fermer les artéfacts" : "Fermer les fichiers"} onClick={onClose}>
               <X className="h-[17px] w-[17px]" strokeWidth={1.6} />
             </ToolbarButton>
           </div>
@@ -115,7 +119,7 @@ export default function FilesDock({
           sourceMode={!!path && hasRenderedView(path) && !showsRendered(path, sourcePaths.has(path))}
           onToggleSource={() => path && toggleSource(path)}
           onCollapseAll={() => setCollapseSignal((n) => n + 1)}
-          treeVisible={showTree}
+          treeVisible={showTree && !isArt}
           onToggleTree={() => setShowTree((v) => !v)}
           onCopyPath={() => {
             if (path && list) void navigator.clipboard?.writeText(`${list.root}/${path}`).catch(() => {});
@@ -137,7 +141,7 @@ export default function FilesDock({
             />
           </div>
 
-          {showTree && (
+          {showTree && !isArt && (
             <div className="w-[240px] shrink-0 border-l border-[#262623]">
               {error ? (
                 <p className="m-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-300">
