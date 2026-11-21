@@ -32,6 +32,21 @@ fn call_tool(params: &Value, driver: &dyn ToolDriver) -> Result<Value, (i64, Str
         Ok(text) => (text, false),
         Err(message) => (message, true),
     };
+    if !is_error
+        && let Ok(parsed) = serde_json::from_str::<Value>(&text)
+        && let Some(image) = parsed.get("__kana_image")
+        && let Some(data) = image["data"].as_str()
+    {
+        let mime_type = image["mimeType"].as_str().unwrap_or("image/png");
+        let summary = image["text"].as_str().unwrap_or("Screenshot captured.");
+        return Ok(json!({
+            "content": [
+                { "type": "text", "text": summary },
+                { "type": "image", "data": data, "mimeType": mime_type }
+            ],
+            "isError": false
+        }));
+    }
     Ok(json!({ "content": [{ "type": "text", "text": text }], "isError": is_error }))
 }
 
@@ -74,6 +89,14 @@ mod tests {
             match name {
                 "browser_snapshot" => Ok("page".into()),
                 "browser_click" => Err(format!("refusé : {}", arguments["ref"])),
+                "browser_screenshot" => Ok(json!({
+                    "__kana_image": {
+                        "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                        "mimeType": "image/png",
+                        "text": "Screenshot 1280x720"
+                    }
+                })
+                .to_string()),
                 _ => Ok("ok".into()),
             }
         }
@@ -81,6 +104,21 @@ mod tests {
 
     fn reply(body: &str) -> Value {
         serde_json::from_str(&handle(body, &Fake).expect("une réponse")).unwrap()
+    }
+
+    #[test]
+    fn screenshot_tool_returns_multimodal_text_and_image_content_blocks() {
+        let r = reply(
+            r#"{"jsonrpc":"2.0","id":77,"method":"tools/call","params":{"name":"browser_screenshot","arguments":{"fullPage":true}}}"#,
+        );
+        assert_eq!(r["result"]["isError"], false);
+        let content = r["result"]["content"].as_array().expect("content array");
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "Screenshot 1280x720");
+        assert_eq!(content[1]["type"], "image");
+        assert_eq!(content[1]["mimeType"], "image/png");
+        assert!(content[1]["data"].as_str().unwrap().starts_with("iVBORw0KGgo"));
     }
 
     #[test]
