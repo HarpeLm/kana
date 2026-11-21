@@ -61,6 +61,17 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Marque une conversation comme non lue (sans effet si elle l'est déjà). */
+  const markUnread = useCallback(
+    (id: string) =>
+      setItems((list) => {
+        const current = list.find((c) => c.id === id);
+        if (!current || current.unread) return list;
+        return list.map((c) => (c.id === id ? { ...c, unread: true } : c));
+      }),
+    [],
+  );
+
   const toggleArchive = useCallback(
     (id: string) => patch(id, (c) => ({ ...c, archived: !c.archived, pinned: false })),
     [patch],
@@ -244,6 +255,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     addFolder,
     togglePin,
     toggleUnread,
+    markUnread,
     toggleArchive,
     moveToSection,
     moveDown,
