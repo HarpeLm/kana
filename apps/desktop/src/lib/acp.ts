@@ -32,13 +32,36 @@ export type ThreadEvent = AcpEvent & { threadId: string };
 
 export type Unlisten = () => void;
 
+export interface StartedSession {
+  sessionId: string;
+  resumed: boolean;
+}
+
 // Dans un navigateur simple (sans Tauri), on bascule sur un agent simulé.
+const mockSessions = new Set<string>();
 
 /** Lance l'agent d'un fil, dans `cwd` (le dossier de travail de la conversation) s'il y en a un. */
-export function startAgent(threadId: string, agent: string, cwd?: string, model?: string, effort?: string): Promise<void> {
-  return inTauri
-    ? invoke("start_agent", { threadId, agent, cwd: cwd ?? null, model: model ?? null, effort: effort ?? null })
-    : Promise.resolve();
+export function startAgent(
+  threadId: string,
+  agent: string,
+  cwd?: string,
+  model?: string,
+  effort?: string,
+  resumeSessionId?: string,
+): Promise<StartedSession> {
+  if (inTauri) {
+    return invoke<StartedSession>("start_agent", {
+      threadId,
+      agent,
+      cwd: cwd ?? null,
+      model: model ?? null,
+      effort: effort ?? null,
+      resumeSessionId: resumeSessionId ?? null,
+    });
+  }
+  const resumed = mockSessions.has(threadId) || !!resumeSessionId;
+  mockSessions.add(threadId);
+  return Promise.resolve({ sessionId: resumeSessionId ?? "mock", resumed });
 }
 
 /** Met l'agent en mode « plan » (il refuse alors lui-même de modifier quoi que ce soit) ou le remet en mode habituel. `false` : il n'a pas de mode plan. */
@@ -48,7 +71,11 @@ export function setPlanMode(threadId: string, on: boolean): Promise<boolean> {
 
 /** Arrête l'agent d'un fil : le prochain message en lance un neuf (peut-être d'un autre fournisseur). */
 export function stopAgent(threadId: string): Promise<void> {
-  return inTauri ? invoke("stop_agent", { threadId }) : Promise.resolve();
+  if (!inTauri) {
+    mockSessions.delete(threadId);
+    return Promise.resolve();
+  }
+  return invoke("stop_agent", { threadId });
 }
 
 export function sendPrompt(threadId: string, text: string, images: string[] = []): Promise<void> {
