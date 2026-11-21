@@ -36,6 +36,8 @@ pub(crate) struct Shared {
     pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Reply>>>,
     pub(crate) permissions: Mutex<HashMap<String, oneshot::Sender<Option<String>>>>,
     pub(crate) events: mpsc::UnboundedSender<AcpEvent>,
+    /// Ignore les `session/update` rejoués pendant `session/load` : l'historique vient déjà de la base.
+    pub(crate) suppress_updates: AtomicBool,
 }
 
 impl Shared {
@@ -58,6 +60,8 @@ pub struct AcpClient {
     models: AgentModels,
     /// L'agent accepte de vraies images dans un message.
     images: bool,
+    /// `true` si la session a été reprise via `session/load`.
+    resumed: bool,
     /// Le mode « plan » de l'agent est actif.
     plan_on: AtomicBool,
     /// Le mode de travail du début de session, auquel on revient en quittant le plan.
@@ -75,7 +79,7 @@ impl AcpClient {
         spec: &AgentSpec,
         cwd: &Path,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
-        Self::connect(spec, cwd, None, &[]).await
+        Self::connect(spec, cwd, None, &[], None).await
     }
 
     /// Comme `spawn`, et propose des serveurs MCP à l'agent (ceux qu'il ne sait pas utiliser par HTTP
@@ -85,7 +89,19 @@ impl AcpClient {
         cwd: &Path,
         mcp: &[McpServerConfig],
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
-        Self::connect(spec, cwd, None, mcp).await
+        Self::connect(spec, cwd, None, mcp, None).await
+    }
+
+    /// Comme `spawn_with_mcp`, mais tente d'abord `session/load` si `resume_session_id` est fourni
+    /// et que l'agent annonce `agentCapabilities.loadSession = true`. Si `session/load` échoue
+    /// (hors authentification requise ou fermeture du processus), retombe sur `session/new`.
+    pub async fn spawn_or_resume(
+        spec: &AgentSpec,
+        cwd: &Path,
+        mcp: &[McpServerConfig],
+        resume_session_id: Option<&str>,
+    ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
+        Self::connect(spec, cwd, None, mcp, resume_session_id).await
     }
 
     /// Comme `spawn`, mais exécute d'abord la méthode de connexion `method_id`.
@@ -94,7 +110,7 @@ impl AcpClient {
         cwd: &Path,
         method_id: &str,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
-        Self::connect(spec, cwd, Some(method_id), &[]).await
+        Self::connect(spec, cwd, Some(method_id), &[], None).await
     }
 
     async fn connect(
@@ -102,6 +118,7 @@ impl AcpClient {
         cwd: &Path,
         method_id: Option<&str>,
         mcp: &[McpServerConfig],
+        resume_session_id: Option<&str>,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
         let mut child = Command::new(&spec.command)
             .args(&spec.args)
@@ -122,6 +139,7 @@ impl AcpClient {
             pending: Mutex::default(),
             permissions: Mutex::default(),
             events,
+            suppress_updates: AtomicBool::new(false),
         });
         tokio::spawn(reader::read_loop(stdout, shared.clone()));
 
@@ -131,6 +149,7 @@ impl AcpClient {
             session_id: String::new(),
             models: AgentModels::default(),
             images: false,
+            resumed: false,
             plan_on: AtomicBool::new(false),
             default_mode: None,
             _child: child,
@@ -142,11 +161,33 @@ impl AcpClient {
                 .request("authenticate", json!({ "methodId": method_id }))
                 .await?;
         }
-        let servers = if supports_http(&init) {
+        let servers: Vec<Value> = if supports_http(&init) {
             mcp.iter().map(McpServerConfig::to_acp).collect()
         } else {
             Vec::new()
         };
+        let can_load = init["agentCapabilities"]["loadSession"] == true;
+        if can_load && let Some(sid) = resume_session_id.filter(|s| !s.is_empty()) {
+            client.shared.suppress_updates.store(true, Ordering::SeqCst);
+            let load = client
+                .request("session/load", protocol::load_session_params(sid, cwd, servers.clone()))
+                .await;
+            client.shared.suppress_updates.store(false, Ordering::SeqCst);
+            match load {
+                Ok(session) => {
+                    client.models = AgentModels::from_session(&session);
+                    client.default_mode = client.models.modes.as_ref().and_then(|m| m.current.clone());
+                    client.session_id = session["sessionId"].as_str().unwrap_or(sid).to_owned();
+                    client.resumed = true;
+                    return Ok((client, receiver));
+                }
+                Err(AcpError::Rpc { code: AUTH_REQUIRED_CODE, .. }) => {
+                    return Err(AcpError::AuthRequired(AuthMethod::list_from(&init)));
+                }
+                Err(AcpError::Rpc { .. } | AcpError::Protocol(_)) => {}
+                Err(other) => return Err(other),
+            }
+        }
         let session = match client
             .request("session/new", protocol::new_session_params(cwd, servers))
             .await
@@ -167,6 +208,11 @@ impl AcpClient {
 
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// `true` si la session existante a été reprise via `session/load`, `false` si une session neuve a été créée.
+    pub fn resumed(&self) -> bool {
+        self.resumed
     }
 
     /// L'agent sait lire de vraies images dans un message (sinon on ne lui donne que leur chemin).
