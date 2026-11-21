@@ -112,3 +112,10 @@
 .markdown-body th { background: #1f1f1d; }
 .markdown-body hr { border: 0; border-top: 1px solid #2b2b28; margin: 1.5em 0; }
 .markdown-body .md-image { color: #8a8982; font-style: italic; }
+
+/* Pendant le glissement d'un dossier de la barre latérale : une main fermée partout. */
+body.kana-grabbing,
+body.kana-grabbing * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
