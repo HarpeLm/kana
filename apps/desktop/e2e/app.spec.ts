@@ -865,3 +865,72 @@ test("volet Globe : bascule de viewport responsive, tiroir DevTools (Console & R
 
   expect(errors).toEqual([]);
 });
+
+test("/advisor & Cross-Review, Diagnostics LSP dans FilesDock et Cache local des adaptateurs ACP dans SettingsView", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  // 1. Commande /advisor dans le compositeur -> ouverture du conseiller interactif (Quoi / Pour quoi / Pourquoi) et pipeline Cross-Review
+  const composer = page.getByRole("textbox").last();
+  await composer.fill("/adv");
+  const slashMenu = page.getByRole("listbox", { name: "Commandes slash" });
+  await expect(slashMenu).toBeVisible();
+  await expect(slashMenu.getByRole("option", { name: /advisor/ })).toBeVisible();
+  await composer.press("Tab");
+  await expect(composer).toHaveValue("/advisor ");
+  await composer.type("Durcir le module d'authentification");
+  await composer.press("Enter");
+
+  const advisorDialog = page.getByRole("dialog", { name: "Conseiller /advisor & Cross-Review" });
+  await expect(advisorDialog).toBeVisible();
+  await expect(advisorDialog.getByText(/Qu'est-ce que l'on met en place/)).toBeVisible();
+  await expect(advisorDialog.getByText(/Pour quoi \/ quel objectif/)).toBeVisible();
+  await expect(advisorDialog.getByText(/Pourquoi cette configuration/)).toBeVisible();
+
+  await advisorDialog.getByRole("button", { name: /Audit Sécurité & Permissions/ }).click();
+  await expect(advisorDialog.getByText(/Le mode `plan` \(lecture seule\) couplé au Sandbox OS/)).toBeVisible();
+
+  await advisorDialog.getByRole("button", { name: "Lancer le pipeline Cross-Review (3 agents)" }).click();
+  await expect(advisorDialog).toHaveCount(0);
+
+  // Le panneau SessionPanel s'ouvre et affiche le suivi du pipeline Cross-Review + sous-agents multi-fournisseurs
+  const panel = page.locator("aside").last();
+  await expect(panel.getByText("Cross-Review & /advisor")).toBeVisible();
+  await expect(panel.getByText("Étape 1 · Implémentation")).toBeVisible();
+  await expect(panel.getByText("Étape 2 · Cross-Review du Diff")).toBeVisible();
+  await expect(panel.getByText("Étape 3 · Vérification & Globe")).toBeVisible();
+  await expect(page.locator("main").getByText(/Pipeline Cross-Review Multi-Fournisseurs/).first()).toBeVisible();
+
+  // 2. Diagnostics LSP & Compilateur dans FilesDock + envoi des erreurs à l'agent
+  await page.getByRole("banner").getByRole("button", { name: "Fichiers" }).click();
+  const filesPane = page.getByRole("region", { name: "Fichiers" });
+  await expect(filesPane).toHaveCSS("opacity", "1");
+
+  await filesPane.getByRole("button", { name: /Diagnostics/ }).click();
+  const diagRegion = filesPane.getByRole("region", { name: "Diagnostics LSP & Compilateur" });
+  await expect(diagRegion).toBeVisible();
+  await expect(diagRegion.getByText(/crates\/kana-acp\/src\/client\.rs:54:12/)).toBeVisible();
+  await expect(diagRegion.getByText("E0308")).toBeVisible();
+
+  // Cliquer sur un diagnostic ouvre le fichier correspondant dans l'éditeur
+  await diagRegion.getByRole("button", { name: /crates\/kana-acp\/src\/client\.rs:54:12/ }).click();
+  await expect(filesPane.getByText("crates/kana-acp/src/client.rs").first()).toBeVisible();
+
+  // Envoyer les erreurs compilateur/LSP à l'agent
+  await diagRegion.getByRole("button", { name: "Envoyer les erreurs à l'agent" }).click();
+  await expect(page.locator("main").getByText(/Diagnostics LSP \/ Compilateur détectés dans le dépôt/).first()).toBeVisible();
+
+  // 3. Section Mises à jour Tauri & Cache local des adaptateurs ACP dans SettingsView
+  await nav(page).getByRole("button", { name: "Personnalisation" }).click();
+  await expect(page.getByRole("heading", { name: "Mises à jour Tauri & Cache local des adaptateurs ACP" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Vérifier les mises à jour" }).click();
+  await expect(page.getByText("À jour", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Mettre en cache" }).first().click();
+  await expect(page.getByText("En cache local").first()).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
