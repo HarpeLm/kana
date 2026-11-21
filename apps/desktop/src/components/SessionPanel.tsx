@@ -1,4 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
+import { useClickOutside } from "../hooks/useClickOutside";
+import ConversationMenuItem, { MenuDivider } from "./ConversationMenuItem";
 import {
   Check,
   Circle,
@@ -18,7 +21,7 @@ import {
 } from "lucide-react";
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation } from "../lib/conversations";
-import { createPullRequest, discardWork, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
+import { createPullRequest, discardWork, githubUrl, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
 import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import { isArtifactPath } from "../lib/fileKinds";
@@ -138,10 +141,15 @@ interface SessionPanelProps {
   onDiscarded: () => void;
   /** Ouvre un fichier du dossier de travail dans le volet Fichiers (une page HTML s'y modifie visuellement). */
   onOpenFile: (path: string) => void;
+  /** Ouvre le terminal du dossier de travail. */
+  onOpenTerminal: () => void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile, onOpenTerminal }: SessionPanelProps) {
+  const [folderMenu, setFolderMenu] = useState(false);
+  const folderRef = useRef<HTMLDivElement>(null);
+  useClickOutside(folderRef, folderMenu, () => setFolderMenu(false));
   const [action, setAction] = useState<"merge" | "discard" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -260,10 +268,51 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
         <div className={`flex min-h-0 flex-col overflow-y-auto p-4 ${anyFilled ? "flex-1" : ""}`}>
         <Section title="Environnement" compact>
           <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
-          <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />}>
-            {noProject ? "Aucun dossier" : conversation.project}
-            {conversation.projectPath && !noProject && <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>}
-          </Row>
+          <div ref={folderRef} className="relative">
+            <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />} onClick={noProject ? undefined : () => setFolderMenu((v) => !v)}>
+              {noProject ? "Aucun dossier" : conversation.project}
+              {conversation.projectPath && !noProject && <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>}
+            </Row>
+            {folderMenu && (
+              <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-[#41413d] bg-[#2b2b29] p-1 shadow-xl">
+                <ConversationMenuItem
+                  label="Afficher dans le Finder"
+                  onClick={() => {
+                    setFolderMenu(false);
+                    const dir = workPath ?? conversation.projectPath;
+                    if (dir) void revealItemInDir(dir).catch(() => {});
+                  }}
+                />
+                <ConversationMenuItem
+                  label="Ouvrir le dépôt sur GitHub"
+                  onClick={() => {
+                    setFolderMenu(false);
+                    void githubUrl(workPath ?? conversation.projectPath).then((url) => {
+                      if (url) void openUrl(url).catch(() => {});
+                      else setNotice("Ce dossier n'a pas de dépôt GitHub.");
+                    });
+                  }}
+                />
+                <MenuDivider />
+                <ConversationMenuItem
+                  label="Copier le chemin"
+                  onClick={() => {
+                    setFolderMenu(false);
+                    const dir = workPath ?? conversation.projectPath;
+                    if (dir) void navigator.clipboard?.writeText(dir).catch(() => {});
+                  }}
+                />
+                <MenuDivider />
+                <ConversationMenuItem
+                  label="Ouvrir dans le terminal"
+                  onClick={() => {
+                    setFolderMenu(false);
+                    onOpenTerminal();
+                  }}
+                />
+              </div>
+            )}
+          </div>
           {(summary?.base ?? summary?.branch) && (
             <Row
               icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}
