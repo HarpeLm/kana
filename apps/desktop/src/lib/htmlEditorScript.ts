@@ -60,6 +60,9 @@ export const EDITOR_SCRIPT = String.raw`
     + '#kana-trash:hover{background:#3a2422}'
     + '#kana-grab{position:fixed;z-index:2147483647;display:none;width:20px;height:26px;border:0;border-radius:6px;background:#2a2a28;color:#a8a79f;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.35);align-items:center;justify-content:center;padding:0;touch-action:none}'
     + '#kana-grab:hover{background:#3a3a37;color:#fff}'
+    + '#kana-note{position:fixed;z-index:2147483647;display:none;width:26px;height:26px;border:0;border-radius:8px;background:#2a2a28;color:#8ab4f8;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);align-items:center;justify-content:center;padding:0}'
+    + '#kana-note:hover{background:#2a3446}'
+    + '[data-kana-marked]{outline:2px solid #4a9bff!important;outline-offset:3px;border-radius:4px}'
     + '#kana-line{position:fixed;z-index:2147483646;display:none;height:3px;border-radius:2px;background:#4a9bff;pointer-events:none}';
   document.head.appendChild(style);
 
@@ -118,6 +121,12 @@ export const EDITOR_SCRIPT = String.raw`
   grab.title = 'Glisser pour déplacer';
   grab.innerHTML = '<svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><circle cx="3.5" cy="2.5" r="1.3"/><circle cx="8.5" cy="2.5" r="1.3"/><circle cx="3.5" cy="7" r="1.3"/><circle cx="8.5" cy="7" r="1.3"/><circle cx="3.5" cy="11.5" r="1.3"/><circle cx="8.5" cy="11.5" r="1.3"/></svg>';
   document.body.appendChild(grab);
+  // La bulle de commentaire : un bouton pour demander à l'agent de corriger cette ligne.
+  var note = document.createElement('button');
+  note.id = 'kana-note';
+  note.title = "Commenter (l'agent modifie seulement ici)";
+  note.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  document.body.appendChild(note);
   var line = document.createElement('div');
   line.id = 'kana-line';
   document.body.appendChild(line);
@@ -173,19 +182,40 @@ export const EDITOR_SCRIPT = String.raw`
     grab.style.display = movable ? 'flex' : 'none';
     grab.style.top = Math.max(2, r.top + 1) + 'px';
     grab.style.left = Math.max(2, r.left - 24) + 'px';
+    note.style.display = 'flex';
+    note.style.top = Math.max(2, r.top + 2) + 'px';
+    note.style.left = Math.min(window.innerWidth - 58, r.right - 56) + 'px';
     trash.style.display = 'flex';
     trash.style.top = Math.max(2, r.top + 2) + 'px';
     trash.style.left = Math.min(window.innerWidth - 30, r.right - 28) + 'px';
   }
   document.addEventListener('mouseover', function (e) {
     var t = e.target;
-    if (drag || t === trash || t === grab || (trash.contains && trash.contains(t)) || (grab.contains && grab.contains(t))) { clearTimeout(hideTimer); return; }
+    if (drag || t === trash || t === grab || t === note || (note.contains && note.contains(t)) || (trash.contains && trash.contains(t)) || (grab.contains && grab.contains(t))) { clearTimeout(hideTimer); return; }
     var el = t.closest && t.closest('li,tr,p,h1,h2,h3,h4,h5,h6,blockquote,figure,img,pre,dt,dd');
     while (el && !DELETABLE[el.tagName]) el = el.parentElement;
-    if (!el || el === document.body) { hideTimer = setTimeout(function () { trash.style.display = 'none'; grab.style.display = 'none'; current = null; }, 250); return; }
+    if (!el || el === document.body) { hideTimer = setTimeout(function () { trash.style.display = 'none'; note.style.display = 'none'; grab.style.display = 'none'; current = null; }, 250); return; }
     clearTimeout(hideTimer);
     current = el;
     place(el);
+  });
+  note.addEventListener('click', function () {
+    if (!current) return;
+    var path = pathOf(current);
+    if (!path) return;
+    var heading = '';
+    var h = current;
+    while (h && !heading) {
+      var prev = h;
+      while ((prev = prev.previousElementSibling)) {
+        if (/^H[1-6]$/.test(prev.tagName)) { heading = prev.textContent.trim(); break; }
+      }
+      if (/^H[1-6]$/.test(h.tagName)) heading = h.textContent.trim();
+      h = h.parentElement && h.parentElement !== document.body ? h.parentElement : null;
+    }
+    var r = current.getBoundingClientRect();
+    send({ kind: 'comment', path: path, html: current.outerHTML.replace(/ (contenteditable|data-kana-[a-z]+)(="[^"]*")?/g, '').slice(0, 1500), text: current.textContent.trim().slice(0, 300), heading: heading.slice(0, 120), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } });
+    note.style.display = 'none'; trash.style.display = 'none'; grab.style.display = 'none';
   });
   trash.addEventListener('click', function () {
     if (!current) return;
@@ -194,12 +224,12 @@ export const EDITOR_SCRIPT = String.raw`
     trash.style.display = 'none';
     current = null;
   });
-  document.addEventListener('scroll', function () { trash.style.display = 'none'; if (!drag) grab.style.display = 'none'; }, true);
+  document.addEventListener('scroll', function () { trash.style.display = 'none'; note.style.display = 'none'; if (!drag) grab.style.display = 'none'; }, true);
 
   // Les liens et boutons de la page ne naviguent pas pendant l'édition.
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a,button,form');
-    if (a && a.id !== 'kana-trash' && a.id !== 'kana-grab') e.preventDefault();
+    if (a && a.id !== 'kana-trash' && a.id !== 'kana-grab' && a.id !== 'kana-note') e.preventDefault();
   }, true);
 
   // Commandes de l'app : annuler, rétablir (appliquées au cadre).
@@ -207,6 +237,11 @@ export const EDITOR_SCRIPT = String.raw`
     var m = e.data;
     if (!m || !m.kana) return;
     var el, tpl;
+    if (m.cmd === 'mark') {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-kana-marked]'), function (x) { x.removeAttribute('data-kana-marked'); });
+      el = m.path && nodeAt(m.path); if (el) el.setAttribute('data-kana-marked', '');
+      return;
+    }
     if (m.cmd === 'set') { el = nodeAt(m.path); if (el) el.innerHTML = m.html; }
     else if (m.cmd === 'remove') { el = nodeAt(m.path); if (el) el.remove(); }
     else if (m.cmd === 'move') {
