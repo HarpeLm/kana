@@ -29,7 +29,18 @@ import {
 } from "lucide-react";
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation, EnvironmentKind } from "../lib/conversations";
-import { createPullRequest, discardWork, githubUrl, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
+import {
+  createPullRequest,
+  discardWork,
+  fetchPrFeedback,
+  forgeUrl,
+  inspectMergeConflicts,
+  mergeWork,
+  type BranchSummary,
+  type ConflictFile,
+  type PrFeedback,
+  type PullRequest,
+} from "../lib/forge";
 import { pickFiles } from "../lib/attachments";
 import {
   NO_PROJECT,
@@ -174,6 +185,10 @@ interface SessionPanelProps {
   onSpawnSubagent: (roleLabel: string, prompt: string, readOnly?: boolean) => void;
   /** Ouvre le fil d'un sous-agent. */
   onOpenSubagent: (id: string) => void;
+  /** Demande à l'agent de résoudre les conflits détectés lors de la fusion. */
+  onResolveConflicts?: (branch: string, base: string, conflicts: ConflictFile[]) => void;
+  /** Injecte les commentaires de review et logs CI en échec d'une PR/MR dans la conversation. */
+  onImportPrFeedback?: (feedback: PrFeedback) => void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
@@ -203,6 +218,8 @@ export default function SessionPanel({
   subagents,
   onSpawnSubagent,
   onOpenSubagent,
+  onResolveConflicts,
+  onImportPrFeedback,
 }: SessionPanelProps) {
   const [folderMenu, setFolderMenu] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
@@ -210,6 +227,9 @@ export default function SessionPanel({
   const [action, setAction] = useState<"merge" | "discard" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [conflictDetected, setConflictDetected] = useState(false);
+  const [resolvingConflicts, setResolvingConflicts] = useState(false);
+  const [importingPr, setImportingPr] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
   const [compacted, setCompacted] = useState(false);
   useUsageVersion();
@@ -286,6 +306,7 @@ export default function SessionPanel({
 
   const openAction = (kind: "merge" | "discard") => {
     setActionError("");
+    setConflictDetected(false);
     setAction(kind);
   };
 
@@ -293,6 +314,7 @@ export default function SessionPanel({
     if (!summary?.branch || !worktree || !projectPath || actionBusy) return;
     setActionBusy(true);
     setActionError("");
+    setConflictDetected(false);
     try {
       if (action === "merge") {
         const result = await mergeWork(projectPath, worktree, summary.branch, conversation.title === "Nouvelle conversation" ? summary.branch : conversation.title);
@@ -309,9 +331,45 @@ export default function SessionPanel({
       }
       setAction(null);
     } catch (e) {
-      setActionError(String(e));
+      const msg = String(e);
+      setActionError(msg);
+      if (action === "merge" && /conflit|conflict/i.test(msg)) {
+        setConflictDetected(true);
+      }
     } finally {
       setActionBusy(false);
+    }
+  };
+
+  const resolveMergeConflictsWithAgent = async () => {
+    if (!summary?.branch || !projectPath || !onResolveConflicts || resolvingConflicts) return;
+    setResolvingConflicts(true);
+    try {
+      const conflicts = await inspectMergeConflicts(projectPath, summary.branch);
+      setAction(null);
+      setActionError("");
+      setConflictDetected(false);
+      onResolveConflicts(summary.branch, summary.base ?? "main", conflicts);
+    } catch (e) {
+      setActionError(String(e));
+    } finally {
+      setResolvingConflicts(false);
+    }
+  };
+
+  const importPrFeedback = async (prNumber: number) => {
+    if (!onImportPrFeedback || importingPr !== null) return;
+    setImportingPr(prNumber);
+    try {
+      const feedback = await fetchPrFeedback(prNumber, workPath ?? projectPath);
+      onImportPrFeedback(feedback);
+      setNotice(`Commentaires et logs CI de #${prNumber} envoyés à l'agent.`);
+      setTimeout(() => setNotice(""), 6000);
+    } catch (e) {
+      setNotice(`Impossible d'importer #${prNumber} : ${String(e)}`);
+      setTimeout(() => setNotice(""), 8000);
+    } finally {
+      setImportingPr(null);
     }
   };
 
@@ -434,12 +492,12 @@ export default function SessionPanel({
                   }}
                 />
                 <ConversationMenuItem
-                  label="Ouvrir le dépôt sur GitHub"
+                  label="Ouvrir sur GitHub / GitLab / Forge"
                   onClick={() => {
                     setFolderMenu(false);
-                    void githubUrl(workPath ?? conversation.projectPath).then((url) => {
+                    void forgeUrl(workPath ?? conversation.projectPath).then((url) => {
                       if (url) void openUrl(url).catch(() => {});
-                      else setNotice("Ce dossier n'a pas de dépôt GitHub.");
+                      else setNotice("Ce dossier n'a pas de dépôt distant.");
                     });
                   }}
                 />
@@ -750,31 +808,46 @@ export default function SessionPanel({
         </Section>
 
         {pulls.length > 0 && (
-          <Section title="Pull requests" count={pulls.length}>
+          <Section title="Pull / Merge requests" count={pulls.length}>
             {pulls.map((pr) => (
-              <button
-                key={pr.url}
-                onClick={() => onOpenLink(pr.url)}
-                className="flex w-full items-start gap-3 rounded-lg px-1 py-1.5 text-left transition hover:bg-[#2a2a28]"
-              >
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-                  <PullIcon state={pr.state} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] text-[#ecebe4]">
-                    {pr.isDraft ? "[Brouillon] " : ""}
-                    {pr.title}
+              <div key={pr.url} className="rounded-lg px-1 py-1.5 transition hover:bg-[#2a2a28]">
+                <button
+                  type="button"
+                  onClick={() => onOpenLink(pr.url)}
+                  className="flex w-full items-start gap-3 text-left"
+                >
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                    <PullIcon state={pr.state} />
                   </span>
-                  <span className="mt-0.5 flex items-center gap-2 text-[12.5px] text-[#8c8b83]">
-                    <span className="truncate">
-                      {pr.repo ? `${pr.repo.split("/")[1]} ` : ""}#{pr.number}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] text-[#ecebe4]">
+                      {pr.isDraft ? "[Brouillon] " : ""}
+                      {pr.title}
                     </span>
-                    <span className="text-[#3fb950]">+{pr.additions}</span>
-                    <span className="text-[#f85149]">−{pr.deletions}</span>
-                    {pr.checksFailed > 0 && <span className="ml-auto text-[#f87171]">{pr.checksFailed} en échec</span>}
+                    <span className="mt-0.5 flex items-center gap-2 text-[12.5px] text-[#8c8b83]">
+                      <span className="truncate">
+                        {pr.forge === "gitlab" ? "GitLab · " : ""}
+                        {pr.repo ? `${pr.repo.split("/")[1] ?? pr.repo} ` : ""}#{pr.number}
+                      </span>
+                      <span className="text-[#3fb950]">+{pr.additions}</span>
+                      <span className="text-[#f85149]">−{pr.deletions}</span>
+                      {pr.checksFailed > 0 && <span className="ml-auto text-[#f87171]">{pr.checksFailed} en échec</span>}
+                    </span>
                   </span>
-                </span>
-              </button>
+                </button>
+                {onImportPrFeedback && (
+                  <div className="mt-1.5 pl-7">
+                    <button
+                      type="button"
+                      disabled={importingPr === pr.number}
+                      onClick={() => void importPrFeedback(pr.number)}
+                      className="rounded-md bg-[#30302d] px-2 py-0.5 text-[11.5px] text-[#dcdbd3] transition hover:bg-[#3b3b37] disabled:opacity-50"
+                    >
+                      {importingPr === pr.number ? "Importation…" : "Importer review & logs CI"}
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </Section>
         )}
@@ -888,7 +961,21 @@ export default function SessionPanel({
             Ça modifie les fichiers de ton projet. Rien n'est envoyé sur GitHub. Si la fusion a des conflits, elle est annulée et ton projet reste
             intact ; il doit aussi être sur <code>{summary.base}</code>, sans changement non enregistré.
           </p>
-          {actionError && <p className="mt-2 whitespace-pre-wrap text-[12.5px] text-red-300">{actionError}</p>}
+          {actionError && (
+            <div className="mt-2 space-y-2">
+              <p className="whitespace-pre-wrap text-[12.5px] text-red-300">{actionError}</p>
+              {conflictDetected && onResolveConflicts && (
+                <button
+                  type="button"
+                  disabled={resolvingConflicts}
+                  onClick={() => void resolveMergeConflictsWithAgent()}
+                  className="w-full rounded-lg bg-[#d97757] px-3 py-1.5 text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-50"
+                >
+                  {resolvingConflicts ? "Inspection des conflits…" : "Résoudre les conflits avec l'agent"}
+                </button>
+              )}
+            </div>
+          )}
         </ConfirmDialog>
       )}
 
