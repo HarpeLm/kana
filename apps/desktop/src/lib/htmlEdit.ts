@@ -13,7 +13,9 @@ export type Path = number[];
 export type Op =
   | { kind: "set"; path: Path; html: string }
   | { kind: "remove"; path: Path }
-  | { kind: "insert"; parent: Path; index: number; html: string };
+  | { kind: "insert"; parent: Path; index: number; html: string }
+  /** Déplace un élément parmi ses frères : `to` est sa place une fois déplacé. */
+  | { kind: "move"; from: Path; to: number };
 
 export function nodeAt(doc: Document, path: Path): Element | null {
   let node: Element | undefined = doc.documentElement;
@@ -58,6 +60,15 @@ export function applyOp(doc: Document, op: Op): Op | null {
     const html = el.outerHTML;
     el.remove();
     return { kind: "insert", parent: op.path.slice(0, -1), index, html };
+  }
+  if (op.kind === "move") {
+    const el = nodeAt(doc, op.from);
+    const parent = el?.parentElement;
+    if (!el || !parent) return null;
+    const from = Array.prototype.indexOf.call(parent.children, el) as number;
+    const others = [...parent.children].filter((child) => child !== el);
+    parent.insertBefore(el, others[op.to] ?? null);
+    return { kind: "move", from: [...op.from.slice(0, -1), op.to], to: from };
   }
   const parent = nodeAt(doc, op.parent);
   if (!parent) return null;
