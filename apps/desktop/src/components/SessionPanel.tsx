@@ -22,6 +22,8 @@ import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import ConfirmDialog from "./ConfirmDialog";
 import SiteIcon from "./SiteIcon";
+import { AGENTS } from "../data";
+import { formatTokens, problemOf, usageToday, useUsageVersion } from "../lib/usage";
 
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
@@ -118,10 +120,16 @@ interface SessionPanelProps {
   onOpenDiff: () => void;
   onOpenLink: (url: string) => void;
   onRefresh: () => void;
+  /** Occupation de la fenêtre de contexte de l'agent, si l'agent la donne. */
+  context: { used: number; size: number } | null;
+  /** Fournisseur de la conversation. */
+  agentId: string;
+  onOpenRelay: () => void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context, agentId, onOpenRelay }: SessionPanelProps) {
+  useUsageVersion();
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -192,6 +200,42 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
               {summary?.base ?? summary?.branch}
             </Row>
           )}
+        </Section>
+
+        <Section title="Consommation" compact>
+          <div className="px-1 pb-2">
+            <div className="flex items-baseline justify-between text-[13px] text-[#ecebe4]">
+              <span>Contexte</span>
+              <span className="text-[#8c8b83]">
+                {context ? `${formatTokens(context.used)} / ${formatTokens(context.size)} jetons` : "pas encore mesuré"}
+              </span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#30302d]">
+              <div
+                className={`h-full rounded-full ${context && context.used / context.size > 0.85 ? "bg-[#f85149]" : "bg-[#4a9bff]"}`}
+                style={{ width: `${context ? Math.min(100, Math.max(1, (context.used / context.size) * 100)) : 0}%` }}
+              />
+            </div>
+          </div>
+          {AGENTS.map((agent) => {
+            const usage = usageToday(agent.id);
+            const problem = problemOf(agent.id);
+            return (
+              <Row
+                key={agent.id}
+                onClick={onOpenRelay}
+                title="Ouvrir les réglages du relais"
+                icon={<span className={`h-2 w-2 rounded-full ${problem ? "bg-[#f0883e]" : agent.id === agentId ? "bg-[#3fb950]" : "bg-[#55554f]"}`} />}
+                trailing={
+                  <span className={`shrink-0 text-[12.5px] ${problem ? "text-[#e69b80]" : "text-[#8c8b83]"}`}>
+                    {problem ? (problem.kind === "limit" ? "limite" : "connexion") : usage.totalTokens > 0 ? formatTokens(usage.totalTokens) : usage.turns > 0 ? `${usage.turns} rép.` : "—"}
+                  </span>
+                }
+              >
+                {agent.name}
+              </Row>
+            );
+          })}
         </Section>
 
         <Section title="Plan et tâches" count={plan.length} compact={plan.length === 0}>
