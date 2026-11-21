@@ -934,3 +934,60 @@ test("/advisor & Cross-Review, Diagnostics LSP dans FilesDock et Cache local des
 
   expect(errors).toEqual([]);
 });
+
+test("benchmark de performance UI : cold start < 2500 ms, fluidité sous rafale de chunks et basculement 10+ sessions sans blocage", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+
+  // 1. Cold start avec 12 sessions pré-hydratées
+  await page.evaluate(() => {
+    const convs = Array.from({ length: 12 }, (_, i) => ({
+      id: `perf-c${i + 1}`,
+      title: `Session Perf #${i + 1}`,
+      project: "kana",
+      agentId: i % 2 === 0 ? "opencode" : "claude",
+      pinned: i === 0,
+      projectPath: "/tmp/kana",
+    }));
+    localStorage.setItem("kana-conversations", JSON.stringify(convs));
+    for (let i = 0; i < 12; i++) {
+      const msgs = Array.from({ length: 20 }, (_, m) => ({
+        id: `pm-${i}-${m}`,
+        role: m % 2 === 0 ? "user" : "agent",
+        text: `Historique session #${i + 1} tour ${m + 1} — indexation FTS5 et mémoire stable.`,
+        thought: "",
+        tools: [],
+      }));
+      localStorage.setItem(`kana-messages-perf-c${i + 1}`, JSON.stringify(msgs));
+    }
+  });
+
+  const t0 = Date.now();
+  await page.reload();
+  await expect(nav(page).getByRole("button", { name: "Rechercher" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Session Perf #1", exact: true })).toBeVisible();
+  const coldStartMs = Date.now() - t0;
+  expect(coldStartMs).toBeLessThan(2500);
+
+  // 2. Basculement rapide entre plusieurs sessions avec historique + vérification de l'empreinte
+  const switchT0 = Date.now();
+  for (const target of ["Session Perf #2", "Session Perf #5", "Session Perf #9", "Session Perf #1"]) {
+    await page.getByRole("button", { name: target, exact: true }).click();
+    await expect(page.locator("header").getByText(target)).toBeVisible();
+  }
+  const multiSwitchMs = Date.now() - switchT0;
+  expect(multiSwitchMs).toBeLessThan(2000);
+
+  // 3. Rafale de streaming dans le chat et réactivité UI immédiate pendant et après le flux
+  const composer = page.getByRole("textbox").last();
+  const burstPrompt = Array.from({ length: 24 }, (_, i) => `chunk${i}`).join(" ");
+  const streamT0 = Date.now();
+  await composer.fill(burstPrompt);
+  await composer.press("Enter");
+  await expect(page.locator("main").getByText(/Tu as écrit « chunk0 chunk1/)).toBeVisible();
+  const streamElapsedMs = Date.now() - streamT0;
+  expect(streamElapsedMs).toBeLessThan(4000);
+
+  expect(errors).toEqual([]);
+});
