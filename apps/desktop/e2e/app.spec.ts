@@ -162,3 +162,73 @@ test("l'éditeur d'artéfacts : supprimer une ligne puis annuler", async ({ page
   await page.getByRole("button", { name: "Annuler" }).click();
   await expect(frame.getByText("Choisir une maquette avec l'équipe")).toBeVisible();
 });
+
+test("le compositeur : Shift+Entrée ajoute une ligne, /commandes et @mentions complètent le texte", async ({ page }) => {
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+  const box = page.getByRole("textbox").last();
+
+  await box.fill("/co");
+  const slashMenu = page.getByRole("listbox", { name: "Commandes slash" });
+  await expect(slashMenu).toBeVisible();
+  await expect(slashMenu.getByRole("option", { name: /compact/ })).toBeVisible();
+  await box.press("Tab");
+  await expect(box).toHaveValue("/compact ");
+
+  await box.type("@");
+  const mentionMenu = page.getByRole("listbox", { name: "Mentions" });
+  await expect(mentionMenu).toBeVisible();
+  await mentionMenu.getByRole("button", { name: "Symboles" }).click();
+  await mentionMenu.getByRole("option", { name: /AcpClient/ }).click();
+  await expect(box).toHaveValue("/compact @AcpClient (crates/kana-acp/src/client.rs:54) ");
+
+  await box.fill("Ligne 1");
+  await box.press("Shift+Enter");
+  await box.type("Ligne 2");
+  await expect(box).toHaveValue("Ligne 1\nLigne 2");
+  await box.press("Enter");
+  await expect(box).toHaveValue("");
+  await expect(page.getByText(/Ligne 1\s+Ligne 2/).first()).toBeVisible();
+});
+
+test("le compositeur : collage d'une image depuis le presse-papiers", async ({ page }) => {
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+  const box = page.getByRole("textbox").last();
+  await box.evaluate((node) => {
+    const pngBytes = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196,
+      137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 96, 0, 0, 0, 2, 0, 1, 226, 33, 188, 51, 0, 0, 0, 0, 73, 69, 78, 68,
+      174, 66, 96, 130,
+    ]);
+    const file = new File([pngBytes], "capture.png", { type: "image/png" });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: dt });
+    node.dispatchEvent(paste);
+  });
+  await expect(page.locator("img[alt^='collage-']")).toBeVisible();
+});
+
+test("le compositeur : file d'attente et envoi prioritaire pendant que l'agent répond", async ({ page }) => {
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+  const box = page.getByRole("textbox").last();
+  const longPrompt = Array.from({ length: 18 }, (_, i) => `mot${i}`).join(" ");
+  await box.fill(longPrompt);
+  await box.press("Enter");
+  await expect(page.getByRole("button", { name: "Arrêter" })).toBeVisible();
+
+  await box.fill("Message annulé");
+  await box.press("Enter");
+  await expect(page.getByText("Message annulé")).toBeVisible();
+
+  await box.fill("Message prioritaire");
+  await box.press("Enter");
+  await expect(page.getByText("Message prioritaire")).toBeVisible();
+
+  await page.getByRole("button", { name: "Retirer de la file" }).first().click();
+  await expect(page.getByText("Message annulé")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Envoyer maintenant" }).first().click();
+  await expect(page.getByText(/Tu as écrit « Message prioritaire »\./)).toBeVisible();
+  await expect(page.getByText("Message annulé")).toHaveCount(0);
+});
