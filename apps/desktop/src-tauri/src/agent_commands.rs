@@ -2,8 +2,10 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use kana_acp::{AcpClient, AcpError, AcpEvent, McpServerConfig};
-use serde::Serialize;
+use kana_acp::{
+    AcpClient, AcpError, AcpEvent, AgentSpec, ExecutionTarget, McpServerConfig, SandboxPolicy,
+};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
@@ -37,6 +39,69 @@ pub struct StartedSession {
     pub resumed: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEnvironmentParam {
+    pub kind: String,
+    #[serde(default)]
+    pub target: Option<String>,
+    #[serde(default)]
+    pub sandbox: Option<bool>,
+    #[serde(default)]
+    pub read_only: Option<bool>,
+}
+
+fn parse_ssh_target(raw: &str) -> (String, Option<String>) {
+    let trimmed = raw.trim();
+    match trimmed.split_once(':') {
+        Some((host, path)) if !host.trim().is_empty() => {
+            let dir = path.trim();
+            (
+                host.trim().to_string(),
+                if dir.is_empty() { None } else { Some(dir.to_string()) },
+            )
+        }
+        _ => (trimmed.to_string(), None),
+    }
+}
+
+fn parse_docker_target(raw: &str) -> (String, Option<String>) {
+    let trimmed = raw.trim();
+    match trimmed.split_once(':') {
+        Some((container, workdir)) if !container.trim().is_empty() && workdir.trim().starts_with('/') => {
+            (container.trim().to_string(), Some(workdir.trim().to_string()))
+        }
+        _ => (trimmed.to_string(), None),
+    }
+}
+
+pub(crate) fn apply_environment(spec: AgentSpec, env: Option<AgentEnvironmentParam>) -> AgentSpec {
+    let Some(env) = env else { return spec; };
+    let target_raw = env.target.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let spec = match (env.kind.as_str(), target_raw) {
+        ("ssh", Some(raw)) => {
+            let (host, remote_dir) = parse_ssh_target(raw);
+            spec.with_target(ExecutionTarget::Ssh { host, remote_dir })
+        }
+        ("docker", Some(raw)) => {
+            let (container, workdir) = parse_docker_target(raw);
+            spec.with_target(ExecutionTarget::Docker { container, workdir })
+        }
+        ("devcontainer", Some(raw)) => {
+            spec.with_target(ExecutionTarget::DevContainer { folder: raw.to_string() })
+        }
+        _ => spec.with_target(ExecutionTarget::Local),
+    };
+    let sandbox = if env.read_only == Some(true) {
+        SandboxPolicy::ReadOnly
+    } else if env.sandbox == Some(true) {
+        SandboxPolicy::WorkspaceWrite
+    } else {
+        SandboxPolicy::None
+    };
+    spec.with_sandbox(sandbox)
+}
+
 /// Lance l'agent d'un fil s'il ne tourne pas déjà.
 #[tauri::command]
 pub async fn start_agent(
@@ -48,6 +113,7 @@ pub async fn start_agent(
     model: Option<String>,
     effort: Option<String>,
     resume_session_id: Option<String>,
+    environment: Option<AgentEnvironmentParam>,
 ) -> Result<StartedSession, String> {
     if let Some(existing) = sessions.get(&thread_id).await {
         return Ok(StartedSession {
@@ -55,7 +121,7 @@ pub async fn start_agent(
             resumed: true,
         });
     }
-    let spec = spec_for(&agent)?;
+    let spec = apply_environment(spec_for(&agent)?, environment);
     let cwd = cwd.map(PathBuf::from).unwrap_or_else(project_dir);
     // Les outils pour naviguer dans le Globe, proposés à chaque agent.
     let mcp: Vec<McpServerConfig> = app
@@ -206,4 +272,87 @@ pub async fn answer_permission(
     let client = client_of(&sessions, &thread_id).await?;
     client.resolve_permission(&request_id, option_id).await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configures_sandbox_and_remote_targets_from_environment() {
+        let base = AgentSpec::new("opencode", &["acp"]);
+
+        let sandboxed = apply_environment(
+            base.clone(),
+            Some(AgentEnvironmentParam {
+                kind: "local".into(),
+                target: None,
+                sandbox: Some(true),
+                read_only: None,
+            }),
+        );
+        assert_eq!(sandboxed.sandbox, SandboxPolicy::WorkspaceWrite);
+        assert_eq!(sandboxed.target, ExecutionTarget::Local);
+
+        let ro = apply_environment(
+            base.clone(),
+            Some(AgentEnvironmentParam {
+                kind: "local".into(),
+                target: None,
+                sandbox: Some(true),
+                read_only: Some(true),
+            }),
+        );
+        assert_eq!(ro.sandbox, SandboxPolicy::ReadOnly);
+
+        let ssh = apply_environment(
+            base.clone(),
+            Some(AgentEnvironmentParam {
+                kind: "ssh".into(),
+                target: Some("me@srv:/repo".into()),
+                sandbox: None,
+                read_only: None,
+            }),
+        );
+        assert_eq!(
+            ssh.target,
+            ExecutionTarget::Ssh {
+                host: "me@srv".into(),
+                remote_dir: Some("/repo".into()),
+            }
+        );
+
+        let docker = apply_environment(
+            base.clone(),
+            Some(AgentEnvironmentParam {
+                kind: "docker".into(),
+                target: Some("dev-box:/app".into()),
+                sandbox: None,
+                read_only: None,
+            }),
+        );
+        assert_eq!(
+            docker.target,
+            ExecutionTarget::Docker {
+                container: "dev-box".into(),
+                workdir: Some("/app".into()),
+            }
+        );
+
+        let dc = apply_environment(
+            base,
+            Some(AgentEnvironmentParam {
+                kind: "devcontainer".into(),
+                target: Some("/Users/me/proj".into()),
+                sandbox: None,
+                read_only: None,
+            }),
+        );
+        assert_eq!(
+            dc.target,
+            ExecutionTarget::DevContainer {
+                folder: "/Users/me/proj".into(),
+            }
+        );
+    }
 }
