@@ -28,7 +28,7 @@ export default function PermissionPrompt({ request, onAnswer }: PermissionPrompt
   };
 
   return (
-    <div className="rounded-xl border border-[#d97757]/40 bg-[#d97757]/5 px-3.5 py-3 text-[13px]">
+    <div className="rounded-xl border border-[#3b82f6]/40 bg-[#1e3a8a]/20 px-3.5 py-3 text-[13px]">
       <p className="mb-2 text-[#e6e5df]">
         {tr("L'agent demande l'autorisation :", "Agent requests permission:", locale)}{" "}
         <span className="font-medium">{request.title}</span>
@@ -40,7 +40,7 @@ export default function PermissionPrompt({ request, onAnswer }: PermissionPrompt
             onClick={() => onAnswer(request.requestId, option.id)}
             className={`rounded-lg px-3 py-1 text-[12px] font-medium transition ${
               option.kind.startsWith("allow")
-                ? "bg-[#d97757] text-[#181817] hover:bg-[#e38768]"
+                ? "bg-[#1e40af] text-[#f8fafc] hover:bg-[#2563eb]"
                 : "bg-[#2e2e2b] text-[#e6e5df] hover:bg-[#383835]"
             }`}
           >
