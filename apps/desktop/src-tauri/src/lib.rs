@@ -14,6 +14,7 @@ mod settings_commands;
 mod state;
 mod terminal_commands;
 mod terminals;
+mod voice_commands;
 mod worktree_commands;
 
 use tauri::Manager;
@@ -125,6 +126,9 @@ pub fn run() {
             terminal_commands::terminal_write,
             terminal_commands::terminal_resize,
             terminal_commands::terminal_close,
+            voice_commands::voice_capabilities,
+            voice_commands::transcribe_audio_whisper,
+            voice_commands::trigger_macos_dictation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
