@@ -218,6 +218,7 @@ export default function App({ startup }: { startup: Startup }) {
   const [showPlan, setShowPlan] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [diffFocus, setDiffFocus] = useState<{ id: number; path: string } | null>(null);
   const [showBrowser, setShowBrowser] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const [showArtDock, setShowArtDock] = useState(false);
@@ -466,7 +467,10 @@ export default function App({ startup }: { startup: Startup }) {
                 summary={sessionSummary.summary}
                 pulls={sessionSummary.pulls}
                 workPath={workPath}
-                onOpenDiff={() => setShowDiff(true)}
+                onOpenDiff={(path) => {
+                  if (path) setDiffFocus((f) => ({ id: (f?.id ?? 0) + 1, path }));
+                  setShowDiff(true);
+                }}
                 onOpenLink={openInGlobe}
                 onRefresh={() => void sessionSummary.refresh()}
                 context={chat.context}
@@ -525,6 +529,7 @@ export default function App({ startup }: { startup: Startup }) {
 
         <DiffDock
           path={workPath}
+          focusRequest={diffFocus}
           visible={diffVisible}
           width={diffPanel.width}
           dragging={diffPanel.dragging}
