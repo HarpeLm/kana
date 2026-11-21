@@ -87,9 +87,92 @@ pub fn tool_definitions() -> Vec<Value> {
             json!({ "seconds": { "type": "number", "description": "Between 0.5 and 10." } }),
             &["seconds"],
         ),
+        tool(
+            "browser_screenshot",
+            "Capture a PNG visual screenshot of the current page or a specific element reference so multimodal models can inspect the UI directly.",
+            json!({
+                "ref": { "type": "string", "description": "Optional element reference like \"e3\" to highlight/crop." },
+                "fullPage": { "type": "boolean", "description": "Capture the full document height instead of the current viewport." }
+            }),
+            &[],
+        ),
+        tool(
+            "browser_console_errors",
+            "Read JavaScript console errors, uncaught exceptions, unhandled promise rejections and optional warnings from the active page.",
+            json!({
+                "includeWarnings": { "type": "boolean", "description": "Also include console.warn entries." },
+                "clear": { "type": "boolean", "description": "Clear the buffered console errors after reading." }
+            }),
+            &[],
+        ),
+        tool(
+            "browser_network_errors",
+            "Read failed XHR and fetch network requests (HTTP 4xx/5xx or connection failures) recorded on the active page.",
+            json!({
+                "clear": { "type": "boolean", "description": "Clear the buffered network failures after reading." }
+            }),
+            &[],
+        ),
+        tool(
+            "browser_tabs",
+            "List, open, select or close browser tabs in the Kana Globe pane.",
+            json!({
+                "action": { "type": "string", "enum": ["list", "open", "select", "close"] },
+                "tabId": { "type": "string", "description": "Tab identifier (like \"b1\") for select or close." },
+                "url": { "type": "string", "description": "Address to open when action is \"open\"." }
+            }),
+            &["action"],
+        ),
+        tool(
+            "browser_upload_file",
+            "Attach a local file to an <input type=\"file\"> element on the page. Sensitive paths (.env, SSH keys) are rejected.",
+            json!({
+                "ref": element,
+                "path": { "type": "string", "description": "Absolute or project-relative path to the file to upload." }
+            }),
+            &["ref", "path"],
+        ),
+        tool(
+            "browser_set_viewport",
+            "Emulate a responsive viewport size (desktop, tablet 768px, mobile 390px or custom dimensions) in the Globe pane.",
+            json!({
+                "preset": { "type": "string", "enum": ["desktop", "tablet", "mobile"] },
+                "width": { "type": "number", "description": "Optional custom viewport width in CSS pixels." },
+                "height": { "type": "number", "description": "Optional custom viewport height in CSS pixels." }
+            }),
+            &[],
+        ),
+        tool(
+            "browser_trace",
+            "Start, stop, inspect status or export a timestamped Globe verification trace report (HTML proof of session actions and diagnostics).",
+            json!({
+                "action": { "type": "string", "enum": ["start", "stop", "status", "export"] }
+            }),
+            &["action"],
+        ),
     ]
 }
 
 pub fn is_known_tool(name: &str) -> bool {
     tool_definitions().iter().any(|t| t["name"] == name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn includes_all_multimodal_and_devtools_globe_tools() {
+        for expected in [
+            "browser_screenshot",
+            "browser_console_errors",
+            "browser_network_errors",
+            "browser_tabs",
+            "browser_upload_file",
+            "browser_set_viewport",
+            "browser_trace",
+        ] {
+            assert!(is_known_tool(expected), "missing tool {expected}");
+        }
+    }
 }
