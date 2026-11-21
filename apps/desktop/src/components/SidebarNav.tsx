@@ -57,7 +57,7 @@ export default function SidebarNav(p: SidebarNavProps) {
         label={tr("Personnalisation", "Customize", locale)}
         icon={<Briefcase className={ICON} strokeWidth={1.6} />}
         onClick={p.onCustomize}
-        active={p.view === "settings"}
+        active={p.view === "customizations"}
       />
     </nav>
   );
