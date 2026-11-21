@@ -1,4 +1,5 @@
 import type { AcpEvent, AvailableCommand, PermissionOption } from "./acp";
+import { redactSecrets, redactUnknown } from "./permissionMode";
 
 export interface ToolCall {
   id: string;
@@ -159,16 +160,19 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
     }
     case "tool_call": {
       const [rest, agent] = withAgentMessage(chat.messages);
+      const safeTitle = event.title !== null && event.title !== undefined ? redactSecrets(event.title) : undefined;
+      const safeInput = event.raw_input !== undefined ? redactUnknown(event.raw_input) : undefined;
+      const safeOutput = event.output !== null && event.output !== undefined ? redactSecrets(event.output) : undefined;
       const known = agent.tools.find((t) => t.id === event.id);
       const tools = known
         ? agent.tools.map((t) =>
             t.id === event.id
               ? {
                   ...t,
-                  title: event.title ?? t.title,
+                  title: safeTitle ?? t.title,
                   status: event.status ?? t.status,
-                  input: event.raw_input ?? t.input,
-                  output: event.output ?? t.output,
+                  input: safeInput ?? t.input,
+                  output: safeOutput ?? t.output,
                 }
               : t,
           )
@@ -176,10 +180,10 @@ export function applyEvent(chat: ChatState, event: AcpEvent): ChatState {
             ...agent.tools,
             {
               id: event.id,
-              title: event.title ?? "Outil",
+              title: safeTitle ?? "Outil",
               status: event.status ?? "pending",
-              input: event.raw_input,
-              output: event.output ?? undefined,
+              input: safeInput,
+              output: safeOutput,
             },
           ];
       return { ...chat, messages: [...rest, { ...agent, tools, breakBefore: true }] };
