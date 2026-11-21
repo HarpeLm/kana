@@ -116,7 +116,7 @@ export default function AccountMenu({
         >
           {hasName ? (
             <>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#3e3e39] bg-[#d97757]/20 text-[11px] font-semibold text-[#e69b80]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#3e3e39] bg-[#1e3a8a]/35 text-[11px] font-semibold text-[#93c5fd]">
                 {initials}
               </span>
               <span className="min-w-0 flex-1">
@@ -207,7 +207,7 @@ export default function AccountMenu({
                     className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] text-[#dcdbd3] transition hover:bg-[#2b2b29]"
                   >
                     <span>Français</span>
-                    {locale === "fr" && <Check className="h-3.5 w-3.5 text-[#d97757]" />}
+                    {locale === "fr" && <Check className="h-3.5 w-3.5 text-[#60a5fa]" />}
                   </button>
                   <button
                     type="button"
@@ -217,7 +217,7 @@ export default function AccountMenu({
                     className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] text-[#dcdbd3] transition hover:bg-[#2b2b29]"
                   >
                     <span>English</span>
-                    {locale === "en" && <Check className="h-3.5 w-3.5 text-[#d97757]" />}
+                    {locale === "en" && <Check className="h-3.5 w-3.5 text-[#60a5fa]" />}
                   </button>
                 </div>
               )}
@@ -317,7 +317,7 @@ export default function AccountMenu({
                   clearUserProfile();
                   closeMenu();
                 }}
-                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-[#e69b80] transition hover:bg-[#31312e]"
+                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-[#93c5fd] transition hover:bg-[#31312e]"
               >
                 <LogOut className="h-4 w-4" strokeWidth={1.7} />
                 <span>{tr("Se déconnecter", "Sign out", locale)}</span>
@@ -332,7 +332,7 @@ export default function AccountMenu({
                 }}
                 className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-[#ecebe4] transition hover:bg-[#31312e]"
               >
-                <LogIn className="h-4 w-4 text-[#d97757]" strokeWidth={1.7} />
+                <LogIn className="h-4 w-4 text-[#60a5fa]" strokeWidth={1.7} />
                 <span>{tr("Se connecter", "Sign in", locale)}</span>
               </button>
             )}
