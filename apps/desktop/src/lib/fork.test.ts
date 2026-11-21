@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "./chatState";
-import { buildCompactContext, buildRelayContext } from "./fork";
+import { buildCompactContext, buildRelayContext, buildResumeContext } from "./fork";
 
 const msg = (role: ChatMessage["role"], text: string): ChatMessage => ({ id: text.slice(0, 4), role, text, thought: "", tools: [] });
 
@@ -23,5 +23,18 @@ describe("contexte transmis à un autre agent", () => {
     const context = buildCompactContext([msg("error", "boom"), msg("user", "  "), msg("user", "vrai")]);
     expect(context).not.toContain("boom");
     expect(context).toContain("Utilisateur : vrai");
+  });
+  it("la reprise après redémarrage renvoie vide sans échange exploitable", () => {
+    expect(buildResumeContext([])).toBe("");
+    expect(buildResumeContext([msg("error", "boom"), msg("user", "   ")])).toBe("");
+  });
+  it("la reprise après redémarrage garde les échanges récents et raccourcit les anciens", () => {
+    const old = "x".repeat(500);
+    const messages = [msg("user", old), ...Array.from({ length: 12 }, (_, i) => msg(i % 2 ? "agent" : "user", "y".repeat(1000)))];
+    const context = buildResumeContext(messages);
+    expect(context).toContain("redémarrage");
+    expect(context).toContain("…");
+    expect(context).not.toContain(old);
+    expect(context.endsWith("voici mon nouveau message :\n\n")).toBe(true);
   });
 });
