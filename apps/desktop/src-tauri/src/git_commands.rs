@@ -103,3 +103,13 @@ pub async fn git_remote_url(path: Option<String>) -> Result<String, String> {
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Met un fichier du dépôt à la corbeille.
+#[tauri::command]
+pub async fn delete_repo_file(path: Option<String>, file: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        kana_git::trash_file(&start_dir(path)?, &file).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
