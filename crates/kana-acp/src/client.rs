@@ -185,6 +185,9 @@ impl AcpClient {
         match self.request("session/prompt", params).await {
             Ok(result) => {
                 let stop_reason = result["stopReason"].as_str().unwrap_or("end_turn").to_owned();
+                if let Some(usage) = AcpEvent::turn_usage(&result) {
+                    let _ = self.shared.events.send(usage);
+                }
                 let _ = self.shared.events.send(AcpEvent::Done { stop_reason: stop_reason.clone() });
                 Ok(stop_reason)
             }
