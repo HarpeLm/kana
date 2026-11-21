@@ -448,6 +448,11 @@ export default function App({ startup }: { startup: Startup }) {
                 started={chat.messages.length > 0}
                 onCompact={compactSession}
                 canCompact={!chat.busy && chat.messages.length > 0}
+                onDiscarded={() => {
+                  stopAgent(selected.id).catch(() => {});
+                  conversations.clearWorktree(selected.id);
+                  void sessionSummary.refresh();
+                }}
               />
             )}
           </div>
