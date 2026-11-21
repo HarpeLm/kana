@@ -52,6 +52,8 @@ pub fn run() {
             worktree_commands::remove_worktree,
             worktree_commands::merge_worktree,
             worktree_commands::discard_worktree,
+            worktree_commands::handoff_to_worktree,
+            worktree_commands::handoff_to_local,
             worktree_commands::scan_orphan_worktrees,
             worktree_commands::clean_orphan_worktree,
             agent_commands::start_agent,
