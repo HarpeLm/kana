@@ -34,6 +34,19 @@ pub enum CliCommand {
         mode: String,
         json: bool,
     },
+    /// Exécute les tâches planifiées échues en mode daemon (`kana daemon ...`).
+    Daemon {
+        once: bool,
+        interval_secs: u64,
+        json: bool,
+    },
+    /// Démarre le serveur Kana Cloud / compagnon Web & Mobile (`kana serve ...`).
+    Serve {
+        host: String,
+        port: u16,
+        token: Option<String>,
+        cwd: Option<String>,
+    },
     /// Affiche l'aide CLI (`--help`, `-h`, `help`).
     Help,
     /// Affiche la version (`--version`, `-V`, `version`).
@@ -126,6 +139,8 @@ pub fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
         }
         "run" => parse_run_args(&filtered[1..]),
         "bench" => parse_bench_args(&filtered[1..]),
+        "daemon" => parse_daemon_args(&filtered[1..]),
+        "serve" => parse_serve_args(&filtered[1..]),
         other => Err(format!(
             "sous-commande inconnue : '{other}'. Utilisez `kana --help` pour voir les options disponibles."
         )),
@@ -178,6 +193,113 @@ fn parse_bench_args(args: &[&str]) -> Result<CliCommand, String> {
     }
 
     Ok(CliCommand::Bench { suite, mode, json })
+}
+
+fn parse_daemon_args(args: &[&str]) -> Result<CliCommand, String> {
+    let mut once = false;
+    let mut interval_secs: u64 = 300;
+    let mut json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i] {
+            "-h" | "--help" => return Ok(CliCommand::Help),
+            "--once" => once = true,
+            "--json" => json = true,
+            "-i" | "--interval" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| "option `--interval` : durée en secondes manquante".to_string())?;
+                let parsed = raw
+                    .trim()
+                    .parse::<u64>()
+                    .map_err(|_| format!("option `--interval` invalide : '{raw}' (entier positif attendu)"))?;
+                if parsed == 0 {
+                    return Err("option `--interval` : la durée doit être supérieure à 0".to_string());
+                }
+                interval_secs = parsed;
+            }
+            other => {
+                return Err(format!("option inconnue pour `kana daemon` : '{other}'"));
+            }
+        }
+        i += 1;
+    }
+
+    Ok(CliCommand::Daemon {
+        once,
+        interval_secs,
+        json,
+    })
+}
+
+fn parse_serve_args(args: &[&str]) -> Result<CliCommand, String> {
+    let mut host = String::from("0.0.0.0");
+    let mut port: u16 = 7788;
+    let mut token: Option<String> = None;
+    let mut cwd: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i] {
+            "-h" | "--help" => return Ok(CliCommand::Help),
+            "--host" => {
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| "option `--host` : adresse manquante".to_string())?
+                    .trim();
+                if val.is_empty() {
+                    return Err("option `--host` : adresse vide".to_string());
+                }
+                host = val.to_string();
+            }
+            "-p" | "--port" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| "option `--port` : numéro de port manquant".to_string())?;
+                let parsed = raw
+                    .trim()
+                    .parse::<u16>()
+                    .map_err(|_| format!("option `--port` invalide : '{raw}' (1..=65535 attendu)"))?;
+                if parsed == 0 {
+                    return Err("option `--port` : le port doit être compris entre 1 et 65535".to_string());
+                }
+                port = parsed;
+            }
+            "-t" | "--token" => {
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| "option `--token` : secret manquant".to_string())?
+                    .trim();
+                if val.is_empty() {
+                    return Err("option `--token` : secret vide".to_string());
+                }
+                token = Some(val.to_string());
+            }
+            "-C" | "--cwd" => {
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| "option `--cwd` : chemin manquant".to_string())?;
+                cwd = Some((*val).to_string());
+            }
+            other => {
+                return Err(format!("option inconnue pour `kana serve` : '{other}'"));
+            }
+        }
+        i += 1;
+    }
+
+    Ok(CliCommand::Serve {
+        host,
+        port,
+        token,
+        cwd,
+    })
 }
 
 fn parse_run_args(args: &[&str]) -> Result<CliCommand, String> {
@@ -287,6 +409,8 @@ pub fn format_cli_help() -> String {
         "UTILISATION :",
         "  kana                                  Lance l'interface graphique Tauri",
         "  kana run [OPTIONS] <PROMPT>           Exécute une tâche agent en mode headless / CI",
+        "  kana daemon [OPTIONS]                 Exécute les tâches planifiées échues en arrière-plan (`launchd`)",
+        "  kana serve [OPTIONS]                  Démarre le serveur Kana Cloud & compagnon Web/Mobile",
         "  kana advisor [TÂCHE]                  Conseiller /advisor : quoi mettre, pour quoi et pourquoi",
         "  kana bench [OPTIONS]                  Harnais d'évaluation (SWE-bench Verified, Terminal-Bench, WebArena)",
         "  kana --help | -h                      Affiche cette aide",
@@ -306,6 +430,17 @@ pub fn format_cli_help() -> String {
         "  -s, --suite <NOM>                     all | swe-bench | terminal-bench | webarena (défaut : all)",
         "  -m, --mode <MODE>                     single | cross-review | compare (défaut : compare)",
         "      --json                            Sortie structurée JSON du rapport comparatif",
+        "",
+        "OPTIONS DE `kana daemon` :",
+        "      --once                            Exécute un seul passage sur les tâches échues puis quitte",
+        "  -i, --interval <SECONDES>             Intervalle entre deux vérifications en boucle (défaut : 300)",
+        "      --json                            Sortie structurée JSON du passage daemon",
+        "",
+        "OPTIONS DE `kana serve` :",
+        "      --host <ADRESSE>                  Adresse d'écoute HTTP (défaut : 0.0.0.0)",
+        "  -p, --port <PORT>                     Port d'écoute HTTP (défaut : 7788)",
+        "  -t, --token <SECRET>                  Jeton Bearer requis pour l'API /api/* (ou env KANA_CLOUD_TOKEN)",
+        "  -C, --cwd <CHEMIN>                    Dossier de travail par défaut des tâches Cloud",
     ]
     .join("\n")
 }
@@ -750,5 +885,64 @@ mod tests {
         let swe_only = run_public_benchmark_harness("swe-bench", "single");
         assert_eq!(swe_only.total_tasks, 3);
         assert!(swe_only.tasks.iter().all(|t| t.suite == PublicBenchSuite::SweBench));
+    }
+
+    #[test]
+    fn parses_daemon_and_serve_commands() {
+        assert_eq!(
+            parse_cli_args(&vec_str(&["daemon"])).unwrap(),
+            CliCommand::Daemon {
+                once: false,
+                interval_secs: 300,
+                json: false,
+            }
+        );
+        assert_eq!(
+            parse_cli_args(&vec_str(&["daemon", "--once", "--interval", "120", "--json"])).unwrap(),
+            CliCommand::Daemon {
+                once: true,
+                interval_secs: 120,
+                json: true,
+            }
+        );
+        assert!(parse_cli_args(&vec_str(&["daemon", "--interval", "0"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["daemon", "--unknown"])).is_err());
+
+        assert_eq!(
+            parse_cli_args(&vec_str(&["serve"])).unwrap(),
+            CliCommand::Serve {
+                host: "0.0.0.0".into(),
+                port: 7788,
+                token: None,
+                cwd: None,
+            }
+        );
+        assert_eq!(
+            parse_cli_args(&vec_str(&[
+                "serve",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8080",
+                "--token",
+                "s3cr3t",
+                "--cwd",
+                "/srv/repo",
+            ]))
+            .unwrap(),
+            CliCommand::Serve {
+                host: "127.0.0.1".into(),
+                port: 8080,
+                token: Some("s3cr3t".into()),
+                cwd: Some("/srv/repo".into()),
+            }
+        );
+        assert!(parse_cli_args(&vec_str(&["serve", "--port", "0"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["serve", "--port", "notanumber"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["serve", "--token"])).is_err());
+
+        let help = format_cli_help();
+        assert!(help.contains("kana daemon"));
+        assert!(help.contains("kana serve"));
     }
 }
