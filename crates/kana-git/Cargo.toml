@@ -7,3 +7,8 @@ edition = "2024"
 serde = { workspace = true }
 serde_json.workspace = true
 thiserror = { workspace = true }
+
+[[bench]]
+name = "git_bench"
+harness = false
+
