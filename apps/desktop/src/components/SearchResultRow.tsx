@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ArtifactsIcon } from "./icons";
 import {
+  Clock,
   CornerDownLeft,
   Files,
   Folder,
@@ -40,6 +41,7 @@ const ICON = "h-[18px] w-[18px] shrink-0 text-[#c4c3bc]";
 
 function ItemIcon({ item }: { item: SearchItem }) {
   if (item.kind === "artifact" || item.id === ACTION_TOGGLE_ARTIFACTS) return <ArtifactsIcon className={ICON} />;
+  if (item.kind === "scheduled") return <Clock className={ICON} strokeWidth={1.6} />;
   if (item.kind === "project") return <Folder className={ICON} strokeWidth={1.6} />;
   if (item.id === ACTION_NEW) return <Plus className={ICON} strokeWidth={1.6} />;
   if (item.id === ACTION_SETTINGS) return <Settings className={ICON} strokeWidth={1.6} />;
