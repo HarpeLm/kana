@@ -1,0 +1,50 @@
+import { describe, expect, it } from "vitest";
+import type { ArtifactEntry } from "./artifactIndex";
+import type { Conversation } from "./conversations";
+import { buildSections } from "./searchItems";
+
+const conv = (id: string, title: string, project = "kana", extra: Partial<Conversation> = {}): Conversation => ({
+  id,
+  title,
+  project,
+  agentId: "opencode",
+  pinned: false,
+  ...extra,
+});
+const artifact = (title: string, modified: number): ArtifactEntry => ({
+  key: `/r::artefacts/${title}.html`,
+  root: "/r",
+  path: `artefacts/${title}.html`,
+  title,
+  modified,
+  conversationId: "c1",
+  project: "kana",
+  html: "<p>x</p>",
+});
+
+const conversations = [conv("c1", "Plan de lancement", "kana", { openedAt: 3 }), conv("c2", "Bug login", "aquapp", { openedAt: 2 }), conv("c3", "Vieille", "kana", { archived: true })];
+
+describe("buildSections", () => {
+  it("sans saisie : récents (sans les archivées), artéfacts, actions", () => {
+    const names = buildSections(conversations, "", "all", [artifact("Plan", 1)]).map((s) => s.name);
+    expect(names).toEqual(["Récents", "Artéfacts", "Actions"]);
+    const recent = buildSections(conversations, "", "all")[0];
+    expect(recent.items.map((i) => i.title)).toEqual(["Plan de lancement", "Bug login"]);
+  });
+  it("filtre les sessions par le texte saisi", () => {
+    const sections = buildSections(conversations, "bug", "all");
+    expect(sections.find((s) => s.name === "Sessions")?.items.map((i) => i.title)).toEqual(["Bug login"]);
+  });
+  it("l'onglet Artéfacts liste les artéfacts et les filtre", () => {
+    const list = [artifact("Plan", 2), artifact("Budget", 1)];
+    expect(buildSections(conversations, "", "artifacts", list)[0].items).toHaveLength(2);
+    const found = buildSections(conversations, "bud", "artifacts", list)[0].items;
+    expect(found.map((i) => i.title)).toEqual(["Budget"]);
+    expect(found[0].kind).toBe("artifact");
+    expect(buildSections(conversations, "zzz", "artifacts", list)).toEqual([]);
+  });
+  it("l'onglet Projets regroupe par projet", () => {
+    const items = buildSections(conversations, "", "projects")[0].items;
+    expect(items.map((i) => i.title)).toEqual(["kana", "aquapp"]);
+  });
+});
