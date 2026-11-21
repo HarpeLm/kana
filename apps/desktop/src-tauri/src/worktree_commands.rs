@@ -78,6 +78,56 @@ pub async fn remove_worktree(path: String, project_path: Option<String>) -> Resu
 }
 
 #[derive(Serialize)]
+pub struct MergeResult {
+    pub(crate) base: String,
+    pub(crate) merged_commits: u32,
+    pub(crate) fast_forward: bool,
+    /// Des changements non enregistrés du dossier de travail ont été mis dans un commit avant la fusion.
+    pub(crate) saved: bool,
+}
+
+/// Vérifie qu'un couple (dossier de travail, branche) est bien un travail de Kana.
+fn check_work(worktree: &str, branch: &str) -> Result<(), String> {
+    if !branch.starts_with("kana/") {
+        return Err("ce n'est pas une branche de Kana".into());
+    }
+    if !inside_root(Path::new(worktree)) {
+        return Err("ce dossier n'est pas un dossier de travail de Kana".into());
+    }
+    Ok(())
+}
+
+/// Fusionne le travail d'une conversation dans la branche principale du projet, sans passer par GitHub.
+/// Les changements non enregistrés du dossier de travail sont d'abord mis dans un commit. Refuse si le
+/// projet a des changements non enregistrés, ou s'il n'est pas sur sa branche principale ; en cas de
+/// conflit, la fusion est annulée et le projet reste intact.
+#[tauri::command]
+pub async fn merge_worktree(project_path: String, worktree: String, branch: String, title: String) -> Result<MergeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_work(&worktree, &branch)?;
+        let repo = kana_git::repo_root(Path::new(&project_path)).map_err(|e| e.to_string())?;
+        let saved = kana_git::save_work(Path::new(&worktree), &title).map_err(|e| e.to_string())?;
+        let report = kana_git::merge_branch(&repo, &branch).map_err(|e| e.to_string())?;
+        Ok(MergeResult { base: report.base, merged_commits: report.merged_commits, fast_forward: report.fast_forward, saved })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Abandonne le travail d'une conversation : supprime son dossier de travail et sa branche, avec tout ce
+/// qu'ils contiennent. Définitif ; l'interface demande confirmation avant.
+#[tauri::command]
+pub async fn discard_worktree(project_path: String, worktree: String, branch: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_work(&worktree, &branch)?;
+        let repo = kana_git::repo_root(Path::new(&project_path)).map_err(|e| e.to_string())?;
+        kana_git::discard_work(&repo, Path::new(&worktree), &branch).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
 pub struct Orphan {
     pub(crate) repo: String,
     pub(crate) repo_name: String,
@@ -245,6 +295,24 @@ mod tests {
             let kept = clean_orphan_worktree(conv1.repo.clone(), conv1.branch.clone(), None).await.unwrap();
             assert!(!kept.deleted_branch && kept.kept.is_some());
             assert!(scan_orphan_worktrees(vec![], vec![project.path.clone()]).await.unwrap().iter().any(|o| o.branch == "kana/conv1"));
+
+            // Fusion puis abandon, de bout en bout : conv3 apporte un fichier, conv4 est abandonnée.
+            let wt = |id: &str| create_worktree(id.into(), None, Some(project.path.clone()));
+            let merged = wt("conv3").await.unwrap().unwrap();
+            fs::write(Path::new(&merged.path).join("fusion.txt"), "à fusionner").unwrap();
+            let result = merge_worktree(project.path.clone(), merged.path.clone(), merged.branch.clone(), "Ajoute fusion".into())
+                .await
+                .unwrap();
+            assert!(result.saved && result.merged_commits == 1);
+            assert!(Path::new(&project.path).join("fusion.txt").exists());
+            let dropped = wt("conv4").await.unwrap().unwrap();
+            fs::write(Path::new(&dropped.path).join("perdu.txt"), "abandonné").unwrap();
+            discard_worktree(project.path.clone(), dropped.path.clone(), dropped.branch.clone()).await.unwrap();
+            assert!(!Path::new(&dropped.path).exists());
+            assert!(!Path::new(&project.path).join("perdu.txt").exists());
+            // Des chemins qui ne sont pas à Kana sont refusés.
+            assert!(discard_worktree(project.path.clone(), project.path.clone(), "kana/x".into()).await.is_err());
+            assert!(merge_worktree(project.path.clone(), merged.path.clone(), "main".into(), "t".into()).await.is_err());
 
             // Une branche qui n'est pas de Kana n'est jamais touchée.
             assert!(clean_orphan_worktree(conv1.repo.clone(), "main".into(), None).await.is_err());
