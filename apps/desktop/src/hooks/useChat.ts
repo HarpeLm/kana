@@ -31,6 +31,8 @@ export interface PreparedThread {
   cwd?: string;
   /** Texte à placer devant le message (contexte d'une bifurcation). */
   preface?: string;
+  /** Un résumé est à transmettre (relais, bifurcation) : le nouvel agent doit le recevoir même s'il a déjà reçu les consignes. */
+  carried?: boolean;
   /** Modèle choisi pour la conversation. */
   model?: string;
   /** Niveau d'effort choisi pour ce fournisseur. */
@@ -103,6 +105,8 @@ export function useChat(
       );
     }
   }, [chats]);
+  // Les agents à qui on a déjà donné les consignes de Kana (par conversation).
+  const introduced = useRef(new Set<string>());
   const modeRef = useRef(mode);
   useEffect(() => {
     modeRef.current = mode;
@@ -146,9 +150,13 @@ export function useChat(
     async (text: string) => {
       update(threadId, (chat) => addUserMessage(chat, text));
       try {
-        const { cwd, preface, model, effort } = await prepareRef.current(threadId);
+        const { cwd, preface, carried, model, effort } = await prepareRef.current(threadId);
+        // Les consignes ne partent qu'une fois par agent lancé, pas à chaque message.
+        const key = `${threadId}:${agentId}`;
+        const intro = carried || !introduced.current.has(key) ? preface : undefined;
+        introduced.current.add(key);
         await startAgent(threadId, agentId, cwd, model, effort);
-        await sendPrompt(threadId, promptFor(modeRef.current, preface ? `${preface}${text}` : text), imagePathsIn(text));
+        await sendPrompt(threadId, promptFor(modeRef.current, intro ? `${intro}${text}` : text), imagePathsIn(text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
         observerRef.current?.onError?.(threadId, String(error));
