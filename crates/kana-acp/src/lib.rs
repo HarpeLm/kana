@@ -14,6 +14,6 @@ pub use agents::{AgentSpec, api_key_env, preset};
 pub use auth::AuthMethod;
 pub use client::AcpClient;
 pub use error::AcpError;
-pub use event::{AcpEvent, PermissionOption, PlanEntry};
+pub use event::{AcpEvent, AvailableCommand, PermissionOption, PlanEntry};
 pub use mcp::McpServerConfig;
 pub use models::{AgentModels, EffortInfo, ModelInfo, ModesInfo};
