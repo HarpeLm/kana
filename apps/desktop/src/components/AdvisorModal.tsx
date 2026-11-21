@@ -322,9 +322,9 @@ export default function AdvisorModal({
         {/* En-tête minimaliste */}
         <div className="flex items-center justify-between border-b border-[#2b2b28] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <Compass className="h-4.5 w-4.5 text-[#d97757]" strokeWidth={1.8} />
+            <Compass className="h-4.5 w-4.5 text-[#60a5fa]" strokeWidth={1.8} />
             <h2 className="text-[14.5px] font-semibold text-[#f0efe9]">
-              Conseiller <code className="font-mono text-[#d97757]">/advisor</code>
+              Conseiller <code className="font-mono text-[#60a5fa]">/advisor</code>
             </h2>
           </div>
           <button
@@ -363,9 +363,9 @@ export default function AdvisorModal({
                 className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#2c2c29] px-3 py-1.5 text-[12px] font-medium text-[#ecebe4] transition hover:bg-[#383834] disabled:opacity-40"
               >
                 {aiAnalyzing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#d97757]" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#60a5fa]" />
                 ) : (
-                  <Sparkles className="h-3.5 w-3.5 text-[#d97757]" strokeWidth={1.8} />
+                  <Sparkles className="h-3.5 w-3.5 text-[#60a5fa]" strokeWidth={1.8} />
                 )}
                 <span>{aiAnalyzing ? "Analyse…" : "Configurer avec l'IA"}</span>
               </button>
@@ -394,7 +394,7 @@ export default function AdvisorModal({
                     onClick={() => setTaskKind(choice.id)}
                     className={`rounded-full border px-3 py-1 text-[12.5px] transition ${
                       active
-                        ? "border-[#d97757] bg-[#d97757]/15 text-[#f0efe9]"
+                        ? "border-[#3b82f6] bg-[#1e3a8a]/35 text-[#f0efe9]"
                         : "border-[#2f2f2c] bg-[#181817] text-[#b8b7ae] hover:border-[#42423d] hover:text-[#ecebe4]"
                     }`}
                   >
@@ -421,7 +421,7 @@ export default function AdvisorModal({
                     onClick={() => setGoalKind(choice.id)}
                     className={`rounded-full border px-3 py-1 text-[12.5px] transition ${
                       active
-                        ? "border-[#d97757] bg-[#d97757]/15 text-[#f0efe9]"
+                        ? "border-[#3b82f6] bg-[#1e3a8a]/35 text-[#f0efe9]"
                         : "border-[#2f2f2c] bg-[#181817] text-[#b8b7ae] hover:border-[#42423d] hover:text-[#ecebe4]"
                     }`}
                   >
@@ -516,7 +516,7 @@ export default function AdvisorModal({
             <button
               type="button"
               onClick={handleCrossReviewLaunch}
-              className="flex items-center gap-1.5 rounded-xl bg-[#d97757] px-3.5 py-1.5 text-[12.5px] font-medium text-[#181817] transition hover:bg-[#e58667]"
+              className="flex items-center gap-1.5 rounded-xl bg-[#1e40af] px-3.5 py-1.5 text-[12.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
             >
               <span>Lancer le pipeline Cross-Review (3 agents)</span>
               <ArrowRight className="h-3.5 w-3.5" />
