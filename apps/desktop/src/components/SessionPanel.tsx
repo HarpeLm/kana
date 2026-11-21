@@ -3,9 +3,12 @@ import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { useClickOutside } from "../hooks/useClickOutside";
 import ConversationMenuItem, { MenuDivider } from "./ConversationMenuItem";
 import {
+  Bot,
+  Box,
   Check,
   Circle,
   CircleDot,
+  Container,
   FileDiff,
   FolderPlus,
   Copy,
@@ -17,14 +20,24 @@ import {
   GitPullRequest,
   GitPullRequestClosed,
   Laptop,
+  Plus,
+  Server,
+  Shield,
   SquareTerminal,
+  Trash2,
   X,
 } from "lucide-react";
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
-import type { Conversation } from "../lib/conversations";
+import type { Conversation, EnvironmentKind } from "../lib/conversations";
 import { createPullRequest, discardWork, githubUrl, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
 import { pickFiles } from "../lib/attachments";
-import { NO_PROJECT } from "../lib/projects";
+import {
+  NO_PROJECT,
+  addProjectMemory,
+  getProjectMemory,
+  removeProjectMemory,
+  useProjectMemoryVersion,
+} from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import { isArtifactPath } from "../lib/fileKinds";
 import { artifactTitle } from "../lib/artifactRefs";
@@ -150,10 +163,47 @@ interface SessionPanelProps {
   /** Donne un dossier de plus à l'agent (il le lit à partir de son chemin). */
   onAddFolder: (path: string) => void;
   canAddFolder: boolean;
+  /** Modifie l'environnement d'exécution (local, sandbox OS, SSH, Docker, DevContainer). */
+  onChangeEnvironment: (environment: Conversation["environment"]) => void;
+  /** Sous-agents parallèles rattachés à cette conversation. */
+  subagents: Array<{
+    conversation: Conversation;
+    status: "running" | "done" | "error" | "idle";
+  }>;
+  /** Lance un sous-agent parallèle lié au fil courant. */
+  onSpawnSubagent: (roleLabel: string, prompt: string, readOnly?: boolean) => void;
+  /** Ouvre le fil d'un sous-agent. */
+  onOpenSubagent: (id: string) => void;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile, onOpenTerminal, onArtifactMenu, onAddFolder, canAddFolder }: SessionPanelProps) {
+export default function SessionPanel({
+  conversation,
+  messages,
+  plan,
+  summary,
+  pulls,
+  workPath,
+  onOpenDiff,
+  onOpenLink,
+  onRefresh,
+  context: reportedContext,
+  agentId,
+  onOpenRelay,
+  started,
+  onCompact,
+  canCompact,
+  onDiscarded,
+  onOpenFile,
+  onOpenTerminal,
+  onArtifactMenu,
+  onAddFolder,
+  canAddFolder,
+  onChangeEnvironment,
+  subagents,
+  onSpawnSubagent,
+  onOpenSubagent,
+}: SessionPanelProps) {
   const [folderMenu, setFolderMenu] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
   useClickOutside(folderRef, folderMenu, () => setFolderMenu(false));
@@ -169,6 +219,9 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
   const [error, setError] = useState("");
   const [allFiles, setAllFiles] = useState(false);
   const [allCommits, setAllCommits] = useState(false);
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [subagentDraft, setSubagentDraft] = useState("");
+  useProjectMemoryVersion();
 
   const noProject = conversation.projectPath === NO_PROJECT;
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
@@ -206,6 +259,21 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
 
   const worktree = conversation.worktree;
   const projectPath = conversation.projectPath && conversation.projectPath !== NO_PROJECT ? conversation.projectPath : undefined;
+  const memoryNotes = projectPath ? getProjectMemory(projectPath) : [];
+  const env = conversation.environment ?? { kind: "local" as const, sandbox: false };
+  const envKind: EnvironmentKind = env.kind ?? "local";
+  const envIcon =
+    envKind === "ssh" ? (
+      <Server className="h-4 w-4" strokeWidth={1.7} />
+    ) : envKind === "docker" ? (
+      <Container className="h-4 w-4" strokeWidth={1.7} />
+    ) : envKind === "devcontainer" ? (
+      <Box className="h-4 w-4" strokeWidth={1.7} />
+    ) : env.sandbox ? (
+      <Shield className="h-4 w-4 text-[#8ce09b]" strokeWidth={1.7} />
+    ) : (
+      <Laptop className="h-4 w-4" strokeWidth={1.7} />
+    );
   const mergeBlocked = !worktree || !projectPath
     ? "Cette conversation ne travaille pas dans un dossier de travail à part"
     : !summary
@@ -274,7 +342,82 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
       <div className={`flex min-h-0 flex-col overflow-hidden rounded-2xl bg-[#232321] ${anyFilled ? "flex-1" : ""}`}>
         <div className={`flex min-h-0 flex-col overflow-y-auto p-4 ${anyFilled ? "flex-1" : ""}`}>
         <Section title="Environnement" compact>
-          <Row icon={<Laptop className="h-4 w-4" strokeWidth={1.7} />}>Cet ordinateur</Row>
+          <div className="space-y-2 px-1 pb-1.5">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[#9a9992]">
+                {envIcon}
+              </span>
+              <select
+                aria-label="Environnement d'exécution"
+                value={envKind}
+                onChange={(e) => {
+                  const nextKind = e.target.value as EnvironmentKind;
+                  if (nextKind === "local") {
+                    onChangeEnvironment({ kind: "local", sandbox: env.sandbox ?? false });
+                  } else {
+                    onChangeEnvironment({ kind: nextKind, target: envKind === nextKind ? env.target ?? "" : "" });
+                  }
+                }}
+                className="min-w-0 flex-1 rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[13px] text-[#ecebe4] outline-none focus:border-[#55554f]"
+              >
+                <option value="local">Cet ordinateur</option>
+                <option value="ssh">SSH distant</option>
+                <option value="docker">Conteneur Docker</option>
+                <option value="devcontainer">DevContainer</option>
+              </select>
+            </div>
+
+            {envKind === "local" && (
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-1 text-[12.5px] text-[#cfcec6] hover:bg-[#2a2a28]">
+                <input
+                  type="checkbox"
+                  checked={!!env.sandbox}
+                  onChange={(e) =>
+                    onChangeEnvironment({
+                      kind: "local",
+                      sandbox: e.target.checked,
+                      readOnly: env.readOnly,
+                    })
+                  }
+                  className="h-3.5 w-3.5 accent-[#d97757]"
+                />
+                <span>Sandbox OS isolé</span>
+              </label>
+            )}
+
+            {envKind === "ssh" && (
+              <input
+                type="text"
+                aria-label="Cible SSH"
+                value={env.target ?? ""}
+                onChange={(e) => onChangeEnvironment({ kind: "ssh", target: e.target.value })}
+                placeholder="user@host:/chemin"
+                className="w-full rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#55554f] select-text"
+              />
+            )}
+
+            {envKind === "docker" && (
+              <input
+                type="text"
+                aria-label="Conteneur Docker"
+                value={env.target ?? ""}
+                onChange={(e) => onChangeEnvironment({ kind: "docker", target: e.target.value })}
+                placeholder="nom-du-conteneur"
+                className="w-full rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#55554f] select-text"
+              />
+            )}
+
+            {envKind === "devcontainer" && (
+              <input
+                type="text"
+                aria-label="Dossier DevContainer"
+                value={env.target ?? ""}
+                onChange={(e) => onChangeEnvironment({ kind: "devcontainer", target: e.target.value })}
+                placeholder="/chemin/du/workspace"
+                className="w-full rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#55554f] select-text"
+              />
+            )}
+          </div>
           <div ref={folderRef} className="relative">
             <Row icon={<FolderClosed className="h-4 w-4" strokeWidth={1.7} />} onClick={noProject ? undefined : () => setFolderMenu((v) => !v)}>
               {noProject ? "Aucun dossier" : conversation.project}
@@ -399,6 +542,171 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
               </Row>
             );
           })}
+        </Section>
+
+        <Section title="Mémoire du projet" count={memoryNotes.length} compact>
+          {!projectPath ? (
+            <Empty>Associe un projet pour partager des notes entre sessions.</Empty>
+          ) : (
+            <div className="space-y-2 px-1">
+              {memoryNotes.length === 0 ? (
+                <p className="text-[12.5px] text-[#6f6e68]">Aucune note persistante enregistrée.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {memoryNotes.map((note, idx) => (
+                    <li
+                      key={`${idx}-${note}`}
+                      className="flex items-start justify-between gap-2 rounded-lg bg-[#1c1c1a] px-2.5 py-1.5 text-[12.5px] text-[#dcdbd3]"
+                    >
+                      <span className="min-w-0 flex-1 break-words select-text">{note}</span>
+                      <button
+                        type="button"
+                        aria-label="Supprimer la note"
+                        onClick={() => removeProjectMemory(projectPath, idx)}
+                        className="shrink-0 rounded p-0.5 text-[#7e7d76] transition hover:bg-[#2f2f2c] hover:text-[#f87171]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!memoryDraft.trim()) return;
+                  addProjectMemory(projectPath, memoryDraft);
+                  setMemoryDraft("");
+                }}
+                className="flex items-center gap-1.5"
+              >
+                <input
+                  type="text"
+                  value={memoryDraft}
+                  onChange={(e) => setMemoryDraft(e.target.value)}
+                  placeholder="Ajouter une note projet…"
+                  aria-label="Nouvelle note projet"
+                  className="min-w-0 flex-1 rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#55554f] select-text"
+                />
+                <button
+                  type="submit"
+                  disabled={!memoryDraft.trim()}
+                  className="flex shrink-0 items-center gap-1 rounded-lg bg-[#333331] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  <span>Ajouter</span>
+                </button>
+              </form>
+            </div>
+          )}
+        </Section>
+
+        <Section title="Sous-agents parallèles" count={subagents.length} compact>
+          <div className="space-y-2 px-1">
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() =>
+                  onSpawnSubagent(
+                    "Recherche",
+                    `Explore en lecture seule les fichiers liés à « ${conversation.title} » et résume les points importants.`,
+                    true,
+                  )
+                }
+                className="rounded-lg bg-[#2e2e2b] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36]"
+              >
+                Recherche (lecture seule)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onSpawnSubagent(
+                    "Tests",
+                    `Exécute les tests du projet en arrière-plan pour « ${conversation.title} » et signale les éventuels échecs.`,
+                    false,
+                  )
+                }
+                className="rounded-lg bg-[#2e2e2b] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36]"
+              >
+                Tests en arrière-plan
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onSpawnSubagent(
+                    "Worker",
+                    `Travaille dans un worktree isolé sur une sous-tâche parallèle de « ${conversation.title} ».`,
+                    false,
+                  )
+                }
+                className="rounded-lg bg-[#2e2e2b] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3a3a36]"
+              >
+                Worker (worktree isolé)
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!subagentDraft.trim()) return;
+                onSpawnSubagent("Sous-agent", subagentDraft, false);
+                setSubagentDraft("");
+              }}
+              className="flex items-center gap-1.5"
+            >
+              <input
+                type="text"
+                value={subagentDraft}
+                onChange={(e) => setSubagentDraft(e.target.value)}
+                placeholder="Consigne du sous-agent…"
+                aria-label="Tâche du sous-agent"
+                className="min-w-0 flex-1 rounded-lg border border-[#343431] bg-[#1a1a18] px-2.5 py-1 text-[12.5px] text-[#ecebe4] placeholder-[#6f6e68] outline-none focus:border-[#55554f] select-text"
+              />
+              <button
+                type="submit"
+                disabled={!subagentDraft.trim()}
+                className="shrink-0 rounded-lg bg-[#333331] px-2.5 py-1 text-[12px] text-[#ecebe4] transition hover:bg-[#3d3d3a] disabled:opacity-40"
+              >
+                Lancer
+              </button>
+            </form>
+
+            {subagents.length > 0 && (
+              <div className="space-y-1">
+                {subagents.map(({ conversation: sub, status }) => {
+                  const statusLabel =
+                    status === "running"
+                      ? "En cours…"
+                      : status === "error"
+                        ? "Erreur"
+                        : status === "done"
+                          ? "Terminé"
+                          : "En attente";
+                  const statusTone =
+                    status === "running"
+                      ? "text-[#4a9bff]"
+                      : status === "error"
+                        ? "text-[#f87171]"
+                        : status === "done"
+                          ? "text-[#3fb950]"
+                          : "text-[#8c8b83]";
+                  return (
+                    <Row
+                      key={sub.id}
+                      onClick={() => onOpenSubagent(sub.id)}
+                      icon={<Bot className="h-4 w-4" strokeWidth={1.7} />}
+                      trailing={<span className={`shrink-0 text-[11.5px] ${statusTone}`}>{statusLabel}</span>}
+                    >
+                      <span className="mr-1.5 rounded bg-[#2e2e2b] px-1.5 py-0.5 text-[11px] text-[#b8b7ae]">
+                        {sub.roleLabel ?? "Sous-agent"}
+                      </span>
+                      {sub.title}
+                    </Row>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </Section>
 
         {started && (
