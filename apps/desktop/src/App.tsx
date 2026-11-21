@@ -12,6 +12,7 @@ import { useChat, type PreparedThread } from "./hooks/useChat";
 import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
 import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
+import { OpenArtifactContext } from "./lib/artifactRefs";
 import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
 import { createWorktree, removeWorktree } from "./lib/worktree";
@@ -425,6 +426,7 @@ export default function App({ startup }: { startup: Startup }) {
           <ScheduledView />
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
+            <OpenArtifactContext.Provider value={openFile}>
             <ChatView
               agentLabel={agentLabel}
               chat={chat}
@@ -447,6 +449,7 @@ export default function App({ startup }: { startup: Startup }) {
                 />
               }
             />
+            </OpenArtifactContext.Provider>
             {showRightPanel && (
               <SessionPanel
                 conversation={selected}
