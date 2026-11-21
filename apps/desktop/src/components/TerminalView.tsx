@@ -131,7 +131,7 @@ export default function TerminalView({ id, active, ref }: TerminalViewProps) {
             terminal.current?.clear();
             void start();
           }}
-          className="absolute right-4 top-3 rounded-md bg-[#2b2b29] px-2 py-1 text-[12px] text-[#e69b80] transition hover:bg-[#383835]"
+          className="absolute right-4 top-3 rounded-md bg-[#2b2b29] px-2 py-1 text-[12px] text-[#93c5fd] transition hover:bg-[#383835]"
         >
           Relancer
         </button>
