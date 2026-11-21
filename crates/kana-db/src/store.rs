@@ -81,6 +81,9 @@ impl Store {
             "model_id TEXT",
             "extra_folders TEXT",
             "acp_session_id TEXT",
+            "environment TEXT",
+            "parent_id TEXT",
+            "role_label TEXT",
         ] {
             let _ = conn.execute(&format!("ALTER TABLE conversations ADD COLUMN {column}"), []);
         }
@@ -97,7 +100,7 @@ impl Store {
         let mut statement = conn.prepare(
             "SELECT id, title, project, agent_id, pinned, unread, archived, opened_at,
                     worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id, extra_folders,
-                    acp_session_id
+                    acp_session_id, environment, parent_id, role_label
              FROM conversations ORDER BY position",
         )?;
         let rows = statement.query_map([], |row| {
@@ -119,6 +122,9 @@ impl Store {
                 model_id: row.get(14)?,
                 extra_folders: row.get(15)?,
                 acp_session_id: row.get(16)?,
+                environment: row.get(17)?,
+                parent_id: row.get(18)?,
+                role_label: row.get(19)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -134,8 +140,8 @@ impl Store {
                 "INSERT INTO conversations
                     (id, position, title, project, agent_id, pinned, unread, archived, opened_at,
                      worktree, branch, forked_from, fork_context, project_path, use_worktree, model_id, extra_folders,
-                     acp_session_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                     acp_session_id, environment, parent_id, role_label)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
                  ON CONFLICT(id) DO UPDATE SET
                     position = excluded.position, title = excluded.title, project = excluded.project,
                     agent_id = excluded.agent_id, pinned = excluded.pinned, unread = excluded.unread,
@@ -144,13 +150,15 @@ impl Store {
                     forked_from = excluded.forked_from, fork_context = excluded.fork_context,
                     project_path = excluded.project_path, use_worktree = excluded.use_worktree,
                     model_id = excluded.model_id, extra_folders = excluded.extra_folders,
-                    acp_session_id = excluded.acp_session_id",
+                    acp_session_id = excluded.acp_session_id, environment = excluded.environment,
+                    parent_id = excluded.parent_id, role_label = excluded.role_label",
             )?;
             for (position, c) in items.iter().enumerate() {
                 upsert.execute(params![
                     c.id, position as i64, c.title, c.project, c.agent_id, c.pinned, c.unread,
                     c.archived, c.opened_at, c.worktree, c.branch, c.forked_from, c.fork_context,
                     c.project_path, c.use_worktree, c.model_id, c.extra_folders, c.acp_session_id,
+                    c.environment, c.parent_id, c.role_label,
                 ])?;
             }
         }
@@ -269,6 +277,9 @@ mod tests {
             model_id: Some("m".into()),
             extra_folders: Some("[\"/b\"]".into()),
             acp_session_id: None,
+            environment: None,
+            parent_id: None,
+            role_label: None,
         }
     }
 
