@@ -24,7 +24,12 @@ export function useSessionSummary(active: boolean, path: string | undefined, ref
   }, [path]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      // Rien à montrer (conversation pas commencée, panneau fermé) : on n'affiche pas les restes d'une autre.
+      setSummary(null);
+      setPulls([]);
+      return;
+    }
     void refresh();
     const timer = setInterval(() => void refresh(), POLL_MS);
     const onFocus = () => void refresh();
