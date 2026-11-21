@@ -44,7 +44,13 @@ pub enum AcpEvent {
         output: Option<String>,
     },
     /// Les jetons que le dernier tour a consommés (annoncés avec la fin du tour).
-    TurnUsage { input_tokens: u64, output_tokens: u64, total_tokens: u64 },
+    TurnUsage {
+        input_tokens: u64,
+        output_tokens: u64,
+        total_tokens: u64,
+        cache_read_tokens: u64,
+        cache_write_tokens: u64,
+    },
     /// L'occupation de la fenêtre de contexte de l'agent : `used` jetons sur `size`.
     Context { used: u64, size: u64 },
     /// Le plan complet de l'agent : chaque mise à jour remplace la précédente.
@@ -144,8 +150,26 @@ impl AcpEvent {
         let usage = result.get("usage")?;
         let input = usage["inputTokens"].as_u64().unwrap_or(0);
         let output = usage["outputTokens"].as_u64().unwrap_or(0);
+        let cache_read = usage["cacheReadTokens"]
+            .as_u64()
+            .or_else(|| usage["cacheReadInputTokens"].as_u64())
+            .or_else(|| usage["cachedTokens"].as_u64())
+            .or_else(|| usage["cache_read_tokens"].as_u64())
+            .unwrap_or(0);
+        let cache_write = usage["cacheWriteTokens"]
+            .as_u64()
+            .or_else(|| usage["cacheCreationInputTokens"].as_u64())
+            .or_else(|| usage["cacheWriteInputTokens"].as_u64())
+            .or_else(|| usage["cache_write_tokens"].as_u64())
+            .unwrap_or(0);
         let total = usage["totalTokens"].as_u64().unwrap_or(input + output);
-        (total > 0).then_some(Self::TurnUsage { input_tokens: input, output_tokens: output, total_tokens: total })
+        (total > 0 || cache_read > 0 || cache_write > 0).then_some(Self::TurnUsage {
+            input_tokens: input,
+            output_tokens: output,
+            total_tokens: total,
+            cache_read_tokens: cache_read,
+            cache_write_tokens: cache_write,
+        })
     }
 
     /// Convertit les paramètres d'une requête `session/request_permission`.
@@ -252,7 +276,27 @@ mod tests {
         let result = json!({ "stopReason": "end_turn", "usage": { "inputTokens": 100, "outputTokens": 20 } });
         assert_eq!(
             AcpEvent::turn_usage(&result),
-            Some(AcpEvent::TurnUsage { input_tokens: 100, output_tokens: 20, total_tokens: 120 })
+            Some(AcpEvent::TurnUsage {
+                input_tokens: 100,
+                output_tokens: 20,
+                total_tokens: 120,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            })
+        );
+        let cached = json!({
+            "stopReason": "end_turn",
+            "usage": { "inputTokens": 100, "outputTokens": 20, "cacheReadInputTokens": 400, "cacheCreationInputTokens": 50 }
+        });
+        assert_eq!(
+            AcpEvent::turn_usage(&cached),
+            Some(AcpEvent::TurnUsage {
+                input_tokens: 100,
+                output_tokens: 20,
+                total_tokens: 120,
+                cache_read_tokens: 400,
+                cache_write_tokens: 50,
+            })
         );
         assert_eq!(AcpEvent::turn_usage(&json!({ "stopReason": "end_turn" })), None);
     }
