@@ -10,6 +10,8 @@ import SidePane from "./SidePane";
 import ToolbarButton from "./ToolbarButton";
 
 interface ArtifactDockProps {
+  /** Un artéfact supprimé : son onglet se ferme ; `id` change à chaque demande. */
+  closeRequest?: { id: number; path: string } | null;
   /** Un commentaire sur un passage d'un artéfact : l'agent le corrige. */
   onComment?: (path: string, note: { comment: string; html: string; text: string; heading: string }) => void;
   /** Un artéfact à ouvrir ; `id` change à chaque demande. */
@@ -40,8 +42,14 @@ function MenuItem({ icon, children, onClick, trailing }: { icon: ReactNode; chil
  * Volet Artéfacts : le titre de l'artéfact ouvert en haut, avec un menu (changer d'artéfact, afficher le code,
  * exporter…), et en dessous la page, modifiable à même le texte et enregistrée toute seule.
  */
-export default function ArtifactDock({ openRequest, known, root, visible, maximized, width, dragging, onResizeStart, onToggleMaximize, onClose, onComment }: ArtifactDockProps) {
+export default function ArtifactDock({ openRequest, known, root, visible, maximized, width, dragging, onResizeStart, onToggleMaximize, onClose, onComment, closeRequest }: ArtifactDockProps) {
   const files = useOpenFiles(root);
+  const closedRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!closeRequest || closedRequest.current === closeRequest.id) return;
+    closedRequest.current = closeRequest.id;
+    files.close(closeRequest.path);
+  }, [closeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const handled = useRef<number | null>(null);
   useEffect(() => {
     if (!openRequest || handled.current === openRequest.id) return;
