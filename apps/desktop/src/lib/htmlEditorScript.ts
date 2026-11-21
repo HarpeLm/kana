@@ -228,6 +228,12 @@ export const EDITOR_SCRIPT = String.raw`
 
   // Les liens et boutons de la page ne naviguent pas pendant l'édition.
   document.addEventListener('click', function (e) {
+    // Surligner du texte (glisser sur un libellé) ne coche pas la case : seul un vrai clic la coche.
+    var sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && e.target.closest && e.target.closest('label') && !(e.target.matches && e.target.matches('input'))) {
+      e.preventDefault();
+      return;
+    }
     var a = e.target.closest && e.target.closest('a,button,form');
     if (a && a.id !== 'kana-trash' && a.id !== 'kana-grab' && a.id !== 'kana-note') e.preventDefault();
   }, true);
