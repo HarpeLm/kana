@@ -66,6 +66,8 @@ async fn main() {
                     AcpEvent::Done { stop_reason } => return println!("\n[{t:.1}s fin : {stop_reason}]"),
                     AcpEvent::Error { message } => return eprintln!("[erreur] {message}"),
                     AcpEvent::Plan { entries } => eprintln!("[{t:.1}s plan : {} étapes]", entries.len()),
+                    AcpEvent::TurnUsage { total_tokens, .. } => eprintln!("[{t:.1}s jetons du tour : {total_tokens}]"),
+                    AcpEvent::Context { used, size } => eprintln!("[{t:.1}s contexte : {used}/{size}]"),
                     AcpEvent::Closed => return,
                 }
             }
