@@ -44,7 +44,7 @@ export default function SidebarNav(p: SidebarNavProps) {
         onClick={p.onToggleSearch}
         active={p.searching}
       />
-      <Row label="Artéfacts" icon={<ArtifactsIcon className={ICON} />} onClick={p.onArtifacts} />
+      <Row label="Artéfacts" icon={<ArtifactsIcon className={ICON} />} onClick={p.onArtifacts} active={p.view === "artifacts"} />
       <Row
         label="Tâches planifiées"
         icon={<Clock className={ICON} strokeWidth={1.6} />}
