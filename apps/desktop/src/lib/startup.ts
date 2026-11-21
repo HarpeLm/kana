@@ -1,7 +1,12 @@
 import { makeConversation, SEED_CONVERSATIONS, type Conversation, DEFAULT_AGENT } from "./conversations";
 import { inTauri } from "./env";
 import { launchProject, loadProjects, saveProjects, type Project } from "./projects";
-import { loadLocalConversations, loadStoredConversations, saveStoredConversations } from "./store";
+import {
+  hydrateSharedSettings,
+  loadLocalConversations,
+  loadStoredConversations,
+  saveStoredConversations,
+} from "./store";
 
 export interface Startup {
   conversations: Conversation[];
@@ -18,6 +23,7 @@ const isUnused = (c: Conversation) => c.title === "Nouvelle conversation" && !c.
  * lancement avec la base), les projets, et une session neuve sur laquelle s'ouvrir.
  */
 export async function loadInitial(): Promise<Startup> {
+  await hydrateSharedSettings().catch(() => {});
   let conversations: Conversation[] = [];
   try {
     conversations = await loadStoredConversations();
