@@ -14,7 +14,7 @@
   <img alt="Rust" src="https://img.shields.io/badge/Rust-2024-b7410e?logo=rust&logoColor=white" />
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24c8db?logo=tauri&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black" />
-  <img alt="Licence" src="https://img.shields.io/badge/licence-AGPL--3.0-blue" />
+  <img alt="Licence" src="https://img.shields.io/badge/licence-MIT%20%2F%20Apache--2.0-blue" />
 </p>
 
 <p align="center">
@@ -102,6 +102,12 @@ npm run test:e2e            # écran dans le navigateur (Playwright)
 
 Tout cela tourne à chaque push avec GitHub Actions.
 
+## Contribuer
+
+Les contributions sont les bienvenues : voir [CONTRIBUTING.md](CONTRIBUTING.md). Merci de lire aussi le [code de conduite](CODE_OF_CONDUCT.md). Pour signaler une faille de sécurité, voir [SECURITY.md](SECURITY.md).
+
 ## Licence
 
-AGPL-3.0-only.
+Kana est distribué, au choix, sous licence [Apache 2.0](LICENSE-APACHE) ou [MIT](LICENSE-MIT).
+
+Sauf indication contraire de votre part, toute contribution soumise volontairement pour être incluse dans Kana est publiée sous cette double licence, sans condition supplémentaire.
