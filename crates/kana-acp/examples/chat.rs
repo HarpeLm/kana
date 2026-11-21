@@ -40,7 +40,10 @@ async fn main() {
                 break;
             }
             AcpEvent::Closed => break,
-            AcpEvent::ToolCall { .. } | AcpEvent::Plan { .. } => {}
+            AcpEvent::ToolCall { .. }
+            | AcpEvent::Plan { .. }
+            | AcpEvent::TurnUsage { .. }
+            | AcpEvent::Context { .. } => {}
         }
     }
 }
