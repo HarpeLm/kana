@@ -31,6 +31,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Kana — le poste de pilotage de vos agents de code",
+    "longDescription": "Kana réunit Claude Code, Codex, Gemini CLI et OpenCode dans une seule application : conversations, dossiers de travail git, navigateur intégré, artéfacts et relais entre fournisseurs.",
+    "copyright": "© Kana"
   }
 }
