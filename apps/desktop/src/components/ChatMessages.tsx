@@ -16,6 +16,8 @@ interface ChatMessagesProps {
   onSend: (text: string) => void;
   /** Bifurquer la conversation à partir d'un message. */
   onFork: (messageId: string) => void;
+  /** Restaurer le code et la conversation avant ce message utilisateur (`/rewind`). */
+  onRewind?: (messageId: string) => void;
 }
 
 function AgentMessage({
@@ -58,7 +60,7 @@ function AgentMessage({
   );
 }
 
-export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onSend, onFork }: ChatMessagesProps) {
+export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, onSend, onFork, onRewind }: ChatMessagesProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   // On suit la fin de la conversation tant qu'on y est : dès qu'on remonte, la lecture n'est plus ramenée en bas.
@@ -84,7 +86,14 @@ export default function ChatMessages({ messages, agentLabel, onOpenLink, busy, o
         )}
         {messages.map((message) =>
           message.role === "user" ? (
-            <UserMessage key={message.id} message={message} busy={busy} onSend={onSend} onFork={() => onFork(message.id)} />
+            <UserMessage
+              key={message.id}
+              message={message}
+              busy={busy}
+              onSend={onSend}
+              onFork={() => onFork(message.id)}
+              onRewind={onRewind ? () => onRewind(message.id) : undefined}
+            />
           ) : message.role === "notice" ? (
             <p key={message.id} className="text-[15px] text-[#8a8982]">
               {message.text}
