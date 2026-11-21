@@ -16,8 +16,8 @@ const view = EditorView.theme(
       // Le lissage « antialiased » de l'app amincit le texte clair sur fond sombre : ici on le rétablit.
       "-webkit-font-smoothing": "subpixel-antialiased",
     },
-    ".cm-content": { caretColor: "#d97757", padding: "8px 0", fontWeight: "500" },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#d97757" },
+    ".cm-content": { caretColor: "#3b82f6", padding: "8px 0", fontWeight: "500" },
+    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#3b82f6" },
     ".cm-gutters": { backgroundColor: "#181817", color: "#8b8a83", border: "none" },
     ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 16px", minWidth: "44px" },
     ".cm-activeLine": { backgroundColor: ACTIVE },
