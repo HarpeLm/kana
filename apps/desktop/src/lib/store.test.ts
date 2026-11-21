@@ -59,6 +59,7 @@ describe("store shared settings", () => {
       "kana-project-memory",
       "kana-scheduled-tasks",
       "kana-scheduled-runs",
+      "kana-cloud-config",
       "kana-usage",
       "kana-locale",
     ]);
