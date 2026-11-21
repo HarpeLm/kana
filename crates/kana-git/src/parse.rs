@@ -215,4 +215,29 @@ rename to b.txt
     fn empty_text_gives_no_files() {
         assert!(parse_diff("").is_empty());
     }
+
+    #[test]
+    fn large_multi_file_diff_parsing_stays_within_budget() {
+        let mut big_diff = String::new();
+        for f in 0..60 {
+            big_diff.push_str(&format!(
+                "diff --git a/src/file_{f}.rs b/src/file_{f}.rs\nindex 1111111..2222222 100644\n--- a/src/file_{f}.rs\n+++ b/src/file_{f}.rs\n"
+            ));
+            for h in 0..5 {
+                let start_line = h * 15 + 1;
+                big_diff.push_str(&format!(
+                    "@@ -{start_line},4 +{start_line},5 @@\n fn step_{h}() {{\n-    old_call();\n+    new_call();\n+    verify();\n }}\n"
+                ));
+            }
+        }
+        let start = std::time::Instant::now();
+        let parsed = parse_diff(&big_diff);
+        let elapsed = start.elapsed();
+        assert_eq!(parsed.len(), 60);
+        assert!(parsed.iter().all(|f| f.hunks.len() == 5 && f.additions == 10 && f.deletions == 5));
+        assert!(
+            elapsed < std::time::Duration::from_millis(250),
+            "parse_diff sur 60 fichiers / 300 hunks a dépassé le budget : {elapsed:?}"
+        );
+    }
 }
