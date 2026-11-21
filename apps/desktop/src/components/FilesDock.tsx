@@ -194,7 +194,7 @@ export default function FilesDock({
                     .join("\n");
                   onSendDiagnostics(`Corrige ces erreurs dans \`${path}\` :\n\n${lines}`);
                 }}
-                className="shrink-0 rounded bg-[#d97757] px-2 py-0.5 text-[11px] font-medium text-[#181817] hover:bg-[#e38768]"
+                className="shrink-0 rounded bg-[#1e40af] px-2 py-0.5 text-[11px] font-medium text-[#f8fafc] hover:bg-[#2563eb]"
               >
                 Envoyer à l'agent
               </button>
@@ -277,7 +277,7 @@ export default function FilesDock({
                         `Diagnostics LSP / Compilateur détectés dans le dépôt :\n\n${lines}\n\nCorrige ces erreurs de compilation/typage et vérifie les tests.`,
                       );
                     }}
-                    className="flex items-center gap-1 rounded-md bg-[#d97757] px-2.5 py-0.5 text-[11.5px] font-medium text-[#181817] transition hover:bg-[#e38768]"
+                    className="flex items-center gap-1 rounded-md bg-[#1e40af] px-2.5 py-0.5 text-[11.5px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb]"
                   >
                     <Send className="h-3 w-3" />
                     <span>Envoyer les erreurs à l'agent</span>
