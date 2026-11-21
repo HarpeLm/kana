@@ -49,6 +49,7 @@ const SAMPLE_SUMMARY: BranchSummary = {
   changed: [
     { path: "src/main.rs", additions: 8, deletions: 0, status: "modified" },
     { path: "src/panneau.rs", additions: 3, deletions: 0, status: "added" },
+    { path: "artefacts/plan.html", additions: 40, deletions: 0, status: "added" },
   ],
   commits: [{ hash: "a1b2c3d", subject: "ajoute le panneau" }],
   dirty: true,
