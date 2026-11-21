@@ -163,6 +163,12 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     [patch],
   );
 
+  /** Le dossier de travail a été supprimé : le prochain message en crée un neuf. */
+  const clearWorktree = useCallback(
+    (id: string) => patch(id, (c) => ({ ...c, worktree: undefined, branch: undefined })),
+    [patch],
+  );
+
   /** Le résumé de la conversation d'origine a été donné à l'agent : on ne le redonne pas. */
   const clearForkContext = useCallback(
     (id: string) => patch(id, (c) => ({ ...c, forkContext: undefined })),
@@ -219,6 +225,7 @@ export function useConversations(initial: Conversation[], initialSelectedId: str
     duplicate,
     remove,
     attachWorktree,
+    clearWorktree,
     clearForkContext,
     setProject,
     setUseWorktree,
