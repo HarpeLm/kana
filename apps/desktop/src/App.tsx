@@ -533,7 +533,7 @@ export default function App({ startup }: { startup: Startup }) {
             if (chat.busy) return;
             const where = note.heading ? ` (section « ${note.heading} »)` : "";
             void send(
-              `Commentaire sur l'artéfact \`${file}\`${where} :\n\n> ${note.text.replace(/\n+/g, " ")}\n\nHTML du passage :\n\`\`\`html\n${note.html}\n\`\`\`\n\n${note.comment}\n\nModifie uniquement ce passage dans le fichier, sans toucher au reste de la page.`,
+              `Commentaire sur l'artéfact \`${file}\`${where} :\n\n> ${note.text}\n\n${note.comment}\n\nModifie uniquement ce passage dans le fichier, sans toucher au reste de la page.`,
             );
           }}
           openRequest={fileRequest}
