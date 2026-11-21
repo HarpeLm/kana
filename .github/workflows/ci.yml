@@ -42,3 +42,93 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Screen tests (Playwright)
         run: npm run test:e2e
+
+  release-matrix:
+    name: Build & Package (${{ matrix.platform }})
+    needs: [rust, interface]
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin --bundles dmg,app
+          - platform: ubuntu-latest
+            args: --bundles deb,appimage
+          - platform: windows-latest
+            args: --bundles msi,nsis
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Dépendances système Linux (WebKitGTK & AppImage)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Installation frontend
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build Tauri signée & notarisée (macOS / Linux / Windows)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tagName: v__VERSION__
+          releaseName: "Kana v__VERSION__"
+          releaseBody: "Distribution multi-plateformes Kana (macOS DMG notarisé + Homebrew Cask, Linux AppImage/ DEB, Windows MSI/EXE + manifeste Auto-Updater Tauri)."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+      - name: Génération de la formule Homebrew Cask (kana.rb)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p dist/homebrew-cask
+          cat << 'EOF' > dist/homebrew-cask/kana.rb
+          cask "kana" do
+            version "0.1.0"
+            sha256 :no_check
+
+            url "https://github.com/HarpePluie/kana/releases/download/v#{version}/Kana_#{version}_universal.dmg"
+            name "Kana"
+            desc "Poste de pilotage multi-agents ACP (Claude, Codex, Gemini, OpenCode)"
+            homepage "https://github.com/HarpePluie/kana"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            app "Kana.app"
+            binary "#{appdir}/Kana.app/Contents/MacOS/Kana", target: "kana"
+
+            zap trash: [
+              "~/.kana",
+              "~/Library/Application Support/com.kana.desktop",
+              "~/Library/Caches/com.kana.desktop",
+            ]
+          end
+          EOF
+      - name: Publication de l'artéfact Homebrew Cask
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-cask-kana
+          path: dist/homebrew-cask/kana.rb
