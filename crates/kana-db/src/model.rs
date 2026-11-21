@@ -77,6 +77,16 @@ pub struct StoredMessage {
     pub ended_at: Option<i64>,
 }
 
+/// Résultat d'une recherche plein texte dans les messages enregistrés.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredMessageHit {
+    pub conversation_id: String,
+    pub message_id: String,
+    pub role: String,
+    pub snippet: String,
+}
+
 /// Un projet : un dossier de l'ordinateur où les agents travaillent.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
