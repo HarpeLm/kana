@@ -2,9 +2,11 @@ import { useRef, useState, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
 import ToolbarButton from "./ToolbarButton";
-import { ArtifactsIcon } from "./icons";
+import { ArtifactsIcon, SideChatIcon } from "./icons";
 
 interface MoreMenuProps {
+  showSideChat: boolean;
+  onSideChat: () => void;
   showArtifacts: boolean;
   onArtifacts: () => void;
   keepAwake: boolean;
@@ -13,6 +15,7 @@ interface MoreMenuProps {
 
 interface MenuItem {
   label: string;
+  shortcut?: string;
   icon: ReactNode;
   active: boolean;
   onClick: () => void;
@@ -26,6 +29,13 @@ export default function MoreMenu(props: MoreMenuProps) {
 
   const iconClass = "h-[18px] w-[18px]";
   const items: MenuItem[] = [
+    {
+      label: "Conversation annexe",
+      shortcut: "⌘;",
+      icon: <SideChatIcon className={iconClass} />,
+      active: props.showSideChat,
+      onClick: props.onSideChat,
+    },
     {
       label: "Artéfacts",
       icon: <ArtifactsIcon className={iconClass} />,
@@ -59,6 +69,7 @@ export default function MoreMenu(props: MoreMenuProps) {
                 {item.icon}
               </span>
               <span className="flex-1 truncate">{item.label}</span>
+              {item.shortcut && <span className="text-[12px] text-[#8c8b83]">{item.shortcut}</span>}
             </button>
           ))}
 
