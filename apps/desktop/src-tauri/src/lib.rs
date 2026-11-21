@@ -32,6 +32,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             attachment_commands::image_preview,
+            attachment_commands::save_clipboard_image,
             db_commands::db_load_conversations,
             db_commands::db_save_conversations,
             db_commands::db_load_messages,
