@@ -1,5 +1,6 @@
 import { sectionsOf, type Conversation } from "./conversations";
 import type { ArtifactEntry } from "./artifactIndex";
+import type { ScheduledTask } from "./schedule";
 
 export type SearchTab = "all" | "sessions" | "projects" | "artifacts" | "scheduled";
 
@@ -25,7 +26,7 @@ export const ACTION_OPEN_RELAY = "action:open-relay";
 export interface SearchItem {
   /** `conversation:<id>`, `project:<nom>` ou `action:<nom>`. */
   id: string;
-  kind: "conversation" | "project" | "action" | "artifact";
+  kind: "conversation" | "project" | "action" | "artifact" | "scheduled";
   title: string;
   /** Texte discret à côté du titre (le projet, le nombre de conversations). */
   hint?: string;
@@ -70,6 +71,13 @@ const artifactItem = (a: ArtifactEntry): SearchItem => ({
   artifact: a,
 });
 
+const scheduledItem = (t: ScheduledTask): SearchItem => ({
+  id: `scheduled:${t.id}`,
+  kind: "scheduled",
+  title: t.title,
+  hint: `${t.interval} · ${t.agentId}${t.enabled ? "" : " · en pause"}`,
+});
+
 function projectItems(names: string[], conversations: Conversation[]): SearchItem[] {
   return names.map((name) => {
     const count = conversations.filter((c) => c.project === name).length;
@@ -88,12 +96,16 @@ export function buildSections(
   query: string,
   tab: SearchTab,
   artifacts: ArtifactEntry[] = [],
+  scheduledTasks: ScheduledTask[] = [],
 ): SearchSection[] {
-  // Les tâches planifiées n'existent pas encore.
-  if (tab === "scheduled") return [];
-
   const needle = query.trim().toLowerCase();
   const matches = (text: string) => text.toLowerCase().includes(needle);
+  if (tab === "scheduled") {
+    const list = scheduledTasks.filter(
+      (t) => !needle || matches(t.title) || matches(t.prompt) || matches(t.agentId),
+    );
+    return list.length > 0 ? [{ name: "Tâches planifiées", items: list.map(scheduledItem) }] : [];
+  }
   if (tab === "artifacts") {
     const list = artifacts.filter((a) => !needle || matches(a.title) || matches(a.project));
     return list.length > 0 ? [{ name: needle ? "Artéfacts" : "Récents", items: list.map(artifactItem) }] : [];
@@ -116,6 +128,9 @@ export function buildSections(
     const list = tab === "all" ? recent.filter((c) => !c.unread).slice(0, RECENT_COUNT) : recent;
     add("Récents", list.map(conversationItem));
     if (tab === "all") add("Artéfacts", artifacts.slice(0, 4).map(artifactItem));
+    if (tab === "all" && scheduledTasks.length > 0) {
+      add("Tâches planifiées", scheduledTasks.slice(0, 4).map(scheduledItem));
+    }
     if (tab === "all") add("Actions", ACTIONS);
     return sections;
   }
@@ -127,6 +142,14 @@ export function buildSections(
     add("Projets", projectItems(projects.filter(matches), conversations));
   }
   if (tab === "all") add("Artéfacts", artifacts.filter((a) => matches(a.title)).map(artifactItem));
+  if (tab === "all") {
+    add(
+      "Tâches planifiées",
+      scheduledTasks
+        .filter((t) => matches(t.title) || matches(t.prompt))
+        .map(scheduledItem),
+    );
+  }
   if (tab === "all") add("Actions", ACTIONS.filter((a) => matches(a.title) || (a.hint ? matches(a.hint) : false)));
   return sections;
 }
