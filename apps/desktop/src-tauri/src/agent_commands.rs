@@ -1,6 +1,6 @@
 //! Commandes Tauri qui relient l'interface aux agents ACP.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use kana_acp::{
     AcpClient, AcpError, AcpEvent, AgentSpec, ExecutionTarget, McpServerConfig, SandboxPolicy,
@@ -102,6 +102,85 @@ pub(crate) fn apply_environment(spec: AgentSpec, env: Option<AgentEnvironmentPar
     spec.with_sandbox(sandbox)
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserMcpServerParam {
+    pub name: String,
+    pub transport: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub args: Option<Vec<String>>,
+    #[serde(default)]
+    pub env: Option<BTreeMap<String, String>>,
+    #[serde(default)]
+    pub oauth_token: Option<String>,
+    #[serde(default)]
+    pub headers: Option<BTreeMap<String, String>>,
+}
+
+pub(crate) fn user_mcp_to_configs(params: Option<Vec<UserMcpServerParam>>) -> Vec<McpServerConfig> {
+    let Some(items) = params else { return Vec::new() };
+    let mut configs = Vec::new();
+    for item in items {
+        let name = item.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let kind = item.transport.trim().to_ascii_lowercase();
+        let mut config = match kind.as_str() {
+            "stdio" => {
+                let Some(cmd) = item.command.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+                    continue;
+                };
+                let mut cfg = McpServerConfig::stdio(name, cmd, item.args.unwrap_or_default());
+                if let Some(env) = item.env {
+                    for (k, v) in env {
+                        if !k.trim().is_empty() {
+                            cfg = cfg.with_env(k.trim(), &v);
+                        }
+                    }
+                }
+                cfg
+            }
+            "sse" => {
+                let Some(url) = item.url.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+                    continue;
+                };
+                McpServerConfig::sse(name, url)
+            }
+            _ => {
+                let Some(url) = item.url.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+                    continue;
+                };
+                McpServerConfig::http(name, url)
+            }
+        };
+        if kind != "stdio" {
+            let mut has_auth = false;
+            if let Some(headers) = item.headers {
+                for (k, v) in headers {
+                    let key = k.trim();
+                    if key.is_empty() {
+                        continue;
+                    }
+                    if key.eq_ignore_ascii_case("authorization") {
+                        has_auth = true;
+                    }
+                    config = config.with_header(key, &v);
+                }
+            }
+            if !has_auth && let Some(token) = item.oauth_token.as_deref() {
+                config = config.with_bearer_token(token);
+            }
+        }
+        configs.push(config);
+    }
+    configs
+}
+
 /// Lance l'agent d'un fil s'il ne tourne pas déjà.
 #[tauri::command]
 pub async fn start_agent(
@@ -114,6 +193,7 @@ pub async fn start_agent(
     effort: Option<String>,
     resume_session_id: Option<String>,
     environment: Option<AgentEnvironmentParam>,
+    mcp_servers: Option<Vec<UserMcpServerParam>>,
 ) -> Result<StartedSession, String> {
     if let Some(existing) = sessions.get(&thread_id).await {
         return Ok(StartedSession {
@@ -123,8 +203,8 @@ pub async fn start_agent(
     }
     let spec = apply_environment(spec_for(&agent)?, environment);
     let cwd = cwd.map(PathBuf::from).unwrap_or_else(project_dir);
-    // Les outils pour naviguer dans le Globe, proposés à chaque agent.
-    let mcp: Vec<McpServerConfig> = app
+    // Les outils pour naviguer dans le Globe, proposés à chaque agent, suivis des serveurs MCP utilisateur.
+    let mut mcp: Vec<McpServerConfig> = app
         .state::<AgentState>()
         .mcp()
         .map(|info| {
@@ -132,6 +212,7 @@ pub async fn start_agent(
                 .with_header("Authorization", &format!("Bearer {}", info.token))]
         })
         .unwrap_or_default();
+    mcp.extend(user_mcp_to_configs(mcp_servers));
     let (client, mut events) =
         AcpClient::spawn_or_resume(&spec, &cwd, &mcp, resume_session_id.as_deref()).await.map_err(|error| match error {
             AcpError::AuthRequired(_) => {
@@ -354,5 +435,70 @@ mod tests {
                 folder: "/Users/me/proj".into(),
             }
         );
+    }
+
+    #[test]
+    fn converts_user_mcp_servers_for_all_transports() {
+        let mut env = BTreeMap::new();
+        env.insert("API_KEY".into(), "secret".into());
+        let mut headers = BTreeMap::new();
+        headers.insert("X-Team".into(), "core".into());
+
+        let configs = user_mcp_to_configs(Some(vec![
+            UserMcpServerParam {
+                name: "fs".into(),
+                transport: "stdio".into(),
+                url: None,
+                command: Some("npx".into()),
+                args: Some(vec!["-y".into(), "@mcp/fs".into()]),
+                env: Some(env),
+                oauth_token: None,
+                headers: None,
+            },
+            UserMcpServerParam {
+                name: "linear".into(),
+                transport: "sse".into(),
+                url: Some("https://mcp.linear.app/sse".into()),
+                command: None,
+                args: None,
+                env: None,
+                oauth_token: Some("tok-123".into()),
+                headers: Some(headers),
+            },
+            UserMcpServerParam {
+                name: "docs".into(),
+                transport: "http".into(),
+                url: Some("https://docs.example/mcp".into()),
+                command: None,
+                args: None,
+                env: None,
+                oauth_token: None,
+                headers: None,
+            },
+            UserMcpServerParam {
+                name: " ".into(),
+                transport: "http".into(),
+                url: Some("https://ignored.example".into()),
+                command: None,
+                args: None,
+                env: None,
+                oauth_token: None,
+                headers: None,
+            },
+        ]));
+
+        assert_eq!(configs.len(), 3);
+        assert_eq!(
+            configs[0],
+            McpServerConfig::stdio("fs", "npx", vec!["-y".into(), "@mcp/fs".into()])
+                .with_env("API_KEY", "secret")
+        );
+        assert_eq!(
+            configs[1],
+            McpServerConfig::sse("linear", "https://mcp.linear.app/sse")
+                .with_header("X-Team", "core")
+                .with_bearer_token("tok-123")
+        );
+        assert_eq!(configs[2], McpServerConfig::http("docs", "https://docs.example/mcp"));
     }
 }
