@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { tr, useLocale } from "../lib/i18n";
 import Toolbar from "./Toolbar";
 
 interface HeaderProps {
@@ -10,8 +11,12 @@ interface HeaderProps {
 }
 
 export default function Header({ leading, children, toolbar }: HeaderProps) {
+  const locale = useLocale();
   return (
-    <header className="flex h-[44px] shrink-0 items-center justify-between gap-3 border-b border-[#262623] px-3">
+    <header
+      aria-label={tr("En-tête", "Header", locale)}
+      className="flex h-[44px] shrink-0 items-center justify-between gap-3 border-b border-[#262623] px-3"
+    >
       <div className="flex min-w-0 items-center gap-2">
         {leading}
         {children}
