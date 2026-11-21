@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Check, ClipboardCheck, HelpCircle } from "lucide-react";
 import { extractStructuredQuestion, type ChatState, type StructuredQuestion } from "../lib/chatState";
+import { skillsAsCommands, useExtensibilityVersion } from "../lib/extensibility";
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
@@ -146,9 +147,12 @@ interface ChatViewProps {
   onRemoveQueued?: (index: number) => void;
   onSteerQueued?: (index: number) => void;
   workPath?: string;
+  projectPath?: string;
   onAnswer: (requestId: string, optionId: string | null) => void;
   onOpenLink: (url: string) => void;
   onFork: (messageId: string) => void;
+  onRewind?: (messageId: string) => void;
+  onOpenExtensibility?: (tab: "mcp" | "plugins") => void;
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
   onApprovePlan?: (targetMode: PermissionMode) => void;
@@ -168,9 +172,12 @@ export default function ChatView({
   onRemoveQueued,
   onSteerQueued,
   workPath,
+  projectPath,
   onAnswer,
   onOpenLink,
   onFork,
+  onRewind,
+  onOpenExtensibility,
   mode,
   onModeChange,
   onApprovePlan,
@@ -180,6 +187,8 @@ export default function ChatView({
 }: ChatViewProps) {
   const [targetMode, setTargetMode] = useState<PermissionMode>("auto");
   const [dismissedQuestions, setDismissedQuestions] = useState<Set<string>>(() => new Set());
+  useExtensibilityVersion();
+  const mergedCommands = [...chat.commands, ...skillsAsCommands(projectPath)];
 
   const dismissQuestion = (messageId: string) => {
     setDismissedQuestions((prev) => {
@@ -209,7 +218,7 @@ export default function ChatView({
         <Composer
           agentLabel={agentLabel}
           busy={chat.busy}
-          commands={chat.commands}
+          commands={mergedCommands}
           queued={chat.queued}
           onSend={onSend}
           onStop={onStop}
@@ -221,6 +230,7 @@ export default function ChatView({
           footerLeft={<EnvironmentRow session={newSession} />}
           modelPicker={modelPicker}
           placeholder="Décrivez une tâche ou posez une question."
+          onOpenExtensibility={onOpenExtensibility}
         />
       </main>
     );
@@ -240,6 +250,7 @@ export default function ChatView({
         busy={chat.busy}
         onSend={onSend}
         onFork={onFork}
+        onRewind={onRewind}
       />
 
       {chat.permissions.length > 0 && (
@@ -304,7 +315,7 @@ export default function ChatView({
       <Composer
         agentLabel={agentLabel}
         busy={chat.busy}
-        commands={chat.commands}
+        commands={mergedCommands}
         queued={chat.queued}
         onSend={onSend}
         onStop={onStop}
@@ -314,6 +325,7 @@ export default function ChatView({
         mode={mode}
         onModeChange={onModeChange}
         modelPicker={modelPicker}
+        onOpenExtensibility={onOpenExtensibility}
       />
     </main>
   );
