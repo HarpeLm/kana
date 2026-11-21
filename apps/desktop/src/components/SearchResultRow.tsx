@@ -1,7 +1,32 @@
 import { useEffect, useRef } from "react";
 import { ArtifactsIcon } from "./icons";
-import { CornerDownLeft, Folder, MessageSquare, Plus, Settings } from "lucide-react";
-import { ACTION_NEW, ACTION_SETTINGS, type SearchItem } from "../lib/searchItems";
+import {
+  CornerDownLeft,
+  Files,
+  Folder,
+  GitCompare,
+  Globe,
+  MessageSquare,
+  PanelRight,
+  Plus,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+  Terminal,
+} from "lucide-react";
+import {
+  ACTION_CYCLE_MODE,
+  ACTION_NEW,
+  ACTION_OPEN_RELAY,
+  ACTION_SETTINGS,
+  ACTION_TOGGLE_ARTIFACTS,
+  ACTION_TOGGLE_BROWSER,
+  ACTION_TOGGLE_DIFF,
+  ACTION_TOGGLE_FILES,
+  ACTION_TOGGLE_SESSION,
+  ACTION_TOGGLE_TERMINAL,
+  type SearchItem,
+} from "../lib/searchItems";
 
 interface SearchResultRowProps {
   item: SearchItem;
@@ -14,10 +39,17 @@ interface SearchResultRowProps {
 const ICON = "h-[18px] w-[18px] shrink-0 text-[#c4c3bc]";
 
 function ItemIcon({ item }: { item: SearchItem }) {
-  if (item.kind === "artifact") return <ArtifactsIcon className={ICON} />;
+  if (item.kind === "artifact" || item.id === ACTION_TOGGLE_ARTIFACTS) return <ArtifactsIcon className={ICON} />;
   if (item.kind === "project") return <Folder className={ICON} strokeWidth={1.6} />;
   if (item.id === ACTION_NEW) return <Plus className={ICON} strokeWidth={1.6} />;
   if (item.id === ACTION_SETTINGS) return <Settings className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_TOGGLE_TERMINAL) return <Terminal className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_TOGGLE_DIFF) return <GitCompare className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_TOGGLE_FILES) return <Files className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_TOGGLE_BROWSER) return <Globe className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_TOGGLE_SESSION) return <PanelRight className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_CYCLE_MODE) return <ShieldCheck className={ICON} strokeWidth={1.6} />;
+  if (item.id === ACTION_OPEN_RELAY) return <RefreshCw className={ICON} strokeWidth={1.6} />;
   return <MessageSquare className={ICON} strokeWidth={1.6} />;
 }
 
