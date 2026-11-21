@@ -12,6 +12,8 @@ interface FileViewerProps {
   onSave: (path: string) => void;
   onOverwrite: (path: string) => void;
   onReload: (path: string) => void;
+  /** Un commentaire sur un passage d'une page : à transmettre à l'agent. */
+  onComment?: (path: string, note: { comment: string; html: string; text: string; heading: string }) => void;
 }
 
 /** Zone de gauche du volet : un éditeur par onglet ouvert (les autres restent montés, masqués). */
@@ -24,6 +26,7 @@ export default function FileViewer({
   onSave,
   onOverwrite,
   onReload,
+  onComment,
 }: FileViewerProps) {
   if (tabs.length === 0) {
     return (
@@ -54,6 +57,7 @@ export default function FileViewer({
                 onSave={() => onSave(tab.path)}
                 onOverwrite={() => onOverwrite(tab.path)}
                 onReload={() => onReload(tab.path)}
+                onComment={onComment && ((note) => onComment(tab.path, note))}
               />
             )}
           </div>
