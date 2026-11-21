@@ -91,3 +91,11 @@ export const discardWork = (projectPath: string, worktree: string, branch: strin
   inTauri
     ? invoke("discard_worktree", { projectPath, worktree, branch })
     : Promise.reject(new Error("Disponible dans l'app Kana seulement."));
+
+/** L'adresse web (GitHub) du dépôt d'un dossier, ou `null` s'il n'a pas de dépôt distant. */
+export async function githubUrl(path?: string): Promise<string | null> {
+  if (!inTauri) return "https://github.com/exemple/depot";
+  const raw: string = await invoke("git_remote_url", { path: path ?? null });
+  const m = raw.match(/github\.com[:/]([^/\s]+)\/(.+?)(?:\.git)?\/?$/);
+  return m ? `https://github.com/${m[1]}/${m[2]}` : null;
+}
