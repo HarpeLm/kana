@@ -16,6 +16,7 @@ import {
   type ChatState,
 } from "../lib/chatState";
 import { imagePathsIn } from "../lib/attachments";
+import { buildResumeContext } from "../lib/fork";
 import { loadStoredMessages, saveStoredMessages } from "../lib/store";
 import { autoAnswer, promptFor, type PermissionMode } from "../lib/permissionMode";
 
@@ -24,6 +25,7 @@ export interface ChatObserver {
   onTurnUsage?: (threadId: string, usage: { input: number; output: number; total: number }) => void;
   onDone?: (threadId: string) => void;
   onError?: (threadId: string, message: string) => void;
+  onSession?: (threadId: string, sessionId: string) => void;
 }
 
 /** Ce qu'il faut préparer avant d'envoyer le premier message d'un fil. */
@@ -38,6 +40,8 @@ export interface PreparedThread {
   model?: string;
   /** Niveau d'effort choisi pour ce fournisseur. */
   effort?: string;
+  /** Session ACP précédente à tenter de reprendre via `session/load`. */
+  acpSessionId?: string;
 }
 
 /** Un outil resté « en cours » quand l'app s'est arrêtée n'a jamais fini : on le montre comme interrompu. */
@@ -65,7 +69,12 @@ export function useChat(
     observerRef.current = observer;
   });
   const [chats, setChats] = useState<Record<string, ChatState>>({});
+  const chatsRef = useRef(chats);
+  useEffect(() => {
+    chatsRef.current = chats;
+  });
   const loaded = useRef(new Set<string>());
+  const loading = useRef(new Map<string, Promise<ChatMessage[]>>());
   const saved = useRef(new Map<string, ChatMessage[]>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const prepareRef = useRef(prepare);
@@ -77,9 +86,9 @@ export function useChat(
   useEffect(() => {
     if (loaded.current.has(threadId)) return;
     loaded.current.add(threadId);
-    loadStoredMessages(threadId)
+    const pending = loadStoredMessages(threadId)
       .then((messages) => {
-        if (messages.length === 0) return;
+        if (messages.length === 0) return messages;
         const restored = settled(messages);
         saved.current.set(threadId, restored);
         setChats((all) => {
@@ -88,8 +97,13 @@ export function useChat(
           if (current && current.messages.length > 0) return all;
           return { ...all, [threadId]: { ...(current ?? EMPTY_CHAT), messages: restored } };
         });
+        return restored;
       })
-      .catch(() => {});
+      .catch(() => [] as ChatMessage[])
+      .finally(() => {
+        loading.current.delete(threadId);
+      });
+    loading.current.set(threadId, pending);
   }, [threadId]);
 
   // Chaque fil modifié est enregistré, un court instant après son dernier changement.
@@ -106,8 +120,6 @@ export function useChat(
       );
     }
   }, [chats]);
-  // Les agents à qui on a déjà donné les consignes de Kana (par conversation).
-  const introduced = useRef(new Set<string>());
   const modeRef = useRef(mode);
   useEffect(() => {
     modeRef.current = mode;
@@ -149,17 +161,21 @@ export function useChat(
 
   const send = useCallback(
     async (text: string) => {
+      let priorMessages = chatsRef.current[threadId]?.messages ?? [];
+      if (priorMessages.length === 0) {
+        const pending = loading.current.get(threadId);
+        if (pending) priorMessages = await pending;
+      }
       update(threadId, (chat) => addUserMessage(chat, text));
       try {
-        const { cwd, preface, carried, model, effort } = await prepareRef.current(threadId);
-        // Les consignes ne partent qu'une fois par agent lancé, pas à chaque message.
-        const key = `${threadId}:${agentId}`;
-        const intro = carried || !introduced.current.has(key) ? preface : undefined;
-        introduced.current.add(key);
-        await startAgent(threadId, agentId, cwd, model, effort);
+        const { cwd, preface, carried, model, effort, acpSessionId } = await prepareRef.current(threadId);
+        const started = await startAgent(threadId, agentId, cwd, model, effort, acpSessionId);
+        observerRef.current?.onSession?.(threadId, started.sessionId);
         // En plan, l'agent passe dans son propre mode lecture seule quand il en a un ; sinon Kana refuse les modifications (voir autoAnswer).
         await setPlanMode(threadId, modeRef.current === "plan").catch(() => false);
-        await sendPrompt(threadId, promptFor(modeRef.current, intro ? `${intro}${text}` : text), imagePathsIn(text));
+        const resume = !started.resumed && !carried ? buildResumeContext(priorMessages) : "";
+        const prefix = !started.resumed ? `${preface ?? ""}${resume}` : carried ? (preface ?? "") : "";
+        await sendPrompt(threadId, promptFor(modeRef.current, `${prefix}${text}`), imagePathsIn(text));
       } catch (error) {
         update(threadId, (chat) => addError(chat, String(error)));
         observerRef.current?.onError?.(threadId, String(error));
