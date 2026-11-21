@@ -179,3 +179,77 @@ async fn mcp_server_is_not_sent_to_an_agent_without_http_support() {
     .unwrap();
     assert_eq!(client.session_id(), "sans-mcp");
 }
+
+#[tokio::test]
+async fn resumes_session_with_load_and_suppresses_replayed_history() {
+    // initialize = 1, session/load = 2, session/prompt = 3.
+    let script = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}'
+read line
+case "$line" in *'"method":"session/load"'*'"sessionId":"old-s1"'*|*'"sessionId":"old-s1"'*'"method":"session/load"'*)
+  echo '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-s1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Ancien"}}}}'
+  echo '{"jsonrpc":"2.0","id":2,"result":{}}'
+  ;;
+esac
+read line
+echo '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"old-s1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Nouveau"}}}}'
+echo '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}'
+cat > /dev/null
+"#;
+    let (client, mut events) = AcpClient::spawn_or_resume(
+        &shell_agent(script),
+        &std::env::temp_dir(),
+        &[],
+        Some("old-s1"),
+    )
+    .await
+    .unwrap();
+    assert!(client.resumed());
+    assert_eq!(client.session_id(), "old-s1");
+
+    client.prompt("suite").await.unwrap();
+
+    assert_eq!(next(&mut events).await, AcpEvent::Message { text: "Nouveau".into() });
+    assert_eq!(next(&mut events).await, AcpEvent::Done { stop_reason: "end_turn".into() });
+}
+
+#[tokio::test]
+async fn falls_back_to_session_new_when_load_session_fails() {
+    // initialize = 1, session/load = 2 (échec), session/new = 3.
+    let script = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}'
+read line; echo '{"jsonrpc":"2.0","id":2,"error":{"code":-32002,"message":"Session not found"}}'
+read line
+case "$line" in *'"method":"session/new"'*) echo '{"jsonrpc":"2.0","id":3,"result":{"sessionId":"neuve"}}';; esac
+"#;
+    let (client, _events) = AcpClient::spawn_or_resume(
+        &shell_agent(script),
+        &std::env::temp_dir(),
+        &[],
+        Some("old-s1"),
+    )
+    .await
+    .unwrap();
+    assert!(!client.resumed());
+    assert_eq!(client.session_id(), "neuve");
+}
+
+#[tokio::test]
+async fn skips_session_load_when_capability_is_absent() {
+    // Sans loadSession, l'agent reçoit directement session/new sur id=2.
+    let script = r#"
+read line; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+read line
+case "$line" in *'"method":"session/new"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"neuve"}}';; esac
+"#;
+    let (client, _events) = AcpClient::spawn_or_resume(
+        &shell_agent(script),
+        &std::env::temp_dir(),
+        &[],
+        Some("old-s1"),
+    )
+    .await
+    .unwrap();
+    assert!(!client.resumed());
+    assert_eq!(client.session_id(), "neuve");
+}
