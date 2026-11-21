@@ -12,6 +12,7 @@ import { useChat, type PreparedThread } from "./hooks/useChat";
 import { useRelayFlow } from "./hooks/useRelayFlow";
 import { detectProblem } from "./lib/limits";
 import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage";
+import { isArtifactPath } from "./lib/fileKinds";
 import { OpenArtifactContext } from "./lib/artifactRefs";
 import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
@@ -30,6 +31,7 @@ import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
 import DiffDock from "./components/DiffDock";
 import FilesDock from "./components/FilesDock";
+import ArtifactDock from "./components/ArtifactDock";
 import ConversationTitle from "./components/ConversationTitle";
 import Header from "./components/Header";
 import NavButtons from "./components/NavButtons";
@@ -304,6 +306,10 @@ export default function App({ startup }: { startup: Startup }) {
   const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
   // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
   const sessionSummary = useSessionSummary(showRightPanel && chat.messages.length > 0, workPath, chat.busy);
+  const artifactPaths = (sessionSummary.summary?.changed ?? [])
+    .filter((f) => isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path)))
+    .map((f) => f.path);
+
 
   const nav = {
     onToggleSidebar: toggle(setShowSidebar),
@@ -498,9 +504,9 @@ export default function App({ startup }: { startup: Startup }) {
           }}
         />
 
-        <FilesDock
+        <ArtifactDock
           key={"art-" + (workPath ?? "depot")}
-          variant="artifacts"
+          known={artifactPaths}
           root={workPath}
           openRequest={fileRequest}
           visible={showArtDock && !terminalFills}
