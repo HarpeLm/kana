@@ -65,12 +65,14 @@ fn rpc_error_message(error: &Value) -> String {
 }
 
 fn on_notification(shared: &Shared, method: &str, params: &Value) {
-    if shared.suppress_updates.load(Ordering::SeqCst) {
-        return;
-    }
     if method == "session/update"
         && let Some(event) = AcpEvent::from_update(&params["update"])
     {
+        if shared.suppress_updates.load(Ordering::SeqCst)
+            && !matches!(event, AcpEvent::AvailableCommands { .. })
+        {
+            return;
+        }
         let _ = shared.events.send(event);
     }
 }
