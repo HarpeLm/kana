@@ -26,6 +26,8 @@ export interface Conversation {
   useWorktree?: boolean;
   /** Modèle choisi (identifiant de l'agent) ; absent : celui que l'agent propose par défaut. */
   modelId?: string;
+  /** Dossiers ajoutés à la session, en plus du dossier de travail. */
+  extraFolders?: string[];
 }
 
 export const DEFAULT_PROJECT = "kana";
