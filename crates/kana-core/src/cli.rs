@@ -33,6 +33,12 @@ pub enum CliCommand {
         suite: String,
         mode: String,
         json: bool,
+        dataset: Option<String>,
+        agent: Option<String>,
+        docker: bool,
+        limit: Option<usize>,
+        output: Option<String>,
+        live: bool,
     },
     /// Exécute les tâches planifiées échues en mode daemon (`kana daemon ...`).
     Daemon {
@@ -151,6 +157,12 @@ fn parse_bench_args(args: &[&str]) -> Result<CliCommand, String> {
     let mut suite = String::from("all");
     let mut mode = String::from("compare");
     let mut json = false;
+    let mut dataset: Option<String> = None;
+    let mut agent: Option<String> = None;
+    let mut docker = false;
+    let mut limit: Option<usize> = None;
+    let mut output: Option<String> = None;
+    let mut live = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -184,6 +196,56 @@ fn parse_bench_args(args: &[&str]) -> Result<CliCommand, String> {
                 }
                 mode = val;
             }
+            "--dataset" => {
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| "option `--dataset` : chemin vers le fichier JSON/JSONL manquant".to_string())?
+                    .trim();
+                if val.is_empty() {
+                    return Err("option `--dataset` : chemin vide".to_string());
+                }
+                dataset = Some(val.to_string());
+            }
+            "-a" | "--agent" => {
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| "option `--agent` : identifiant d'agent manquant (claude|codex|gemini|opencode)".to_string())?
+                    .trim()
+                    .to_lowercase();
+                if val.is_empty() {
+                    return Err("option `--agent` : identifiant d'agent vide".to_string());
+                }
+                agent = Some(val);
+            }
+            "--docker" => docker = true,
+            "--live" => live = true,
+            "--limit" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| "option `--limit` : nombre entier positif attendu".to_string())?;
+                let parsed = raw
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|_| format!("option `--limit` invalide : '{raw}' (entier positif attendu)"))?;
+                if parsed == 0 {
+                    return Err("option `--limit` : la limite doit être supérieure à 0".to_string());
+                }
+                limit = Some(parsed);
+            }
+            "-o" | "--output" => {
+                i += 1;
+                let val = args
+                    .get(i)
+                    .ok_or_else(|| "option `--output` : chemin du fichier predictions.jsonl manquant".to_string())?
+                    .trim();
+                if val.is_empty() {
+                    return Err("option `--output` : chemin vide".to_string());
+                }
+                output = Some(val.to_string());
+            }
             "--json" => json = true,
             other => {
                 return Err(format!("option inconnue pour `kana bench` : '{other}'"));
@@ -192,7 +254,17 @@ fn parse_bench_args(args: &[&str]) -> Result<CliCommand, String> {
         i += 1;
     }
 
-    Ok(CliCommand::Bench { suite, mode, json })
+    Ok(CliCommand::Bench {
+        suite,
+        mode,
+        json,
+        dataset,
+        agent,
+        docker,
+        limit,
+        output,
+        live,
+    })
 }
 
 fn parse_daemon_args(args: &[&str]) -> Result<CliCommand, String> {
@@ -429,6 +501,12 @@ pub fn format_cli_help() -> String {
         "OPTIONS DE `kana bench` :",
         "  -s, --suite <NOM>                     all | swe-bench | terminal-bench | webarena (défaut : all)",
         "  -m, --mode <MODE>                     single | cross-review | compare (défaut : compare)",
+        "      --dataset <FICHIER>               Dataset JSON/JSONL SWE-bench Verified ou Terminal-Bench",
+        "  -a, --agent <ID>                      Agent ACP à évaluer : claude, codex, gemini, opencode",
+        "      --docker                          Exécute l'agent et les tests dans le conteneur Docker de la tâche",
+        "      --limit <N>                       Limite le nombre d'instances exécutées",
+        "  -o, --output <FICHIER>                Écrit les prédictions au format SWE-bench predictions.jsonl",
+        "      --live                            Exécute réellement les agents ACP (sinon mode dry-run)",
         "      --json                            Sortie structurée JSON du rapport comparatif",
         "",
         "OPTIONS DE `kana daemon` :",
@@ -839,6 +917,12 @@ mod tests {
                 suite: "all".into(),
                 mode: "compare".into(),
                 json: false,
+                dataset: None,
+                agent: None,
+                docker: false,
+                limit: None,
+                output: None,
+                live: false,
             }
         );
 
@@ -857,6 +941,12 @@ mod tests {
                 suite: "swe-bench".into(),
                 mode: "cross-review".into(),
                 json: true,
+                dataset: None,
+                agent: None,
+                docker: false,
+                limit: None,
+                output: None,
+                live: false,
             }
         );
 
@@ -885,6 +975,78 @@ mod tests {
         let swe_only = run_public_benchmark_harness("swe-bench", "single");
         assert_eq!(swe_only.total_tasks, 3);
         assert!(swe_only.tasks.iter().all(|t| t.suite == PublicBenchSuite::SweBench));
+    }
+
+    #[test]
+    fn parses_bench_dataset_docker_live_options() {
+        let cmd = parse_cli_args(&vec_str(&[
+            "bench",
+            "--dataset",
+            "swebench_verified.jsonl",
+            "--agent",
+            "codex",
+            "--docker",
+            "--live",
+            "--limit",
+            "5",
+            "--output",
+            "predictions.jsonl",
+            "--json",
+        ]))
+        .unwrap();
+
+        assert_eq!(
+            cmd,
+            CliCommand::Bench {
+                suite: "all".into(),
+                mode: "compare".into(),
+                json: true,
+                dataset: Some("swebench_verified.jsonl".into()),
+                agent: Some("codex".into()),
+                docker: true,
+                limit: Some(5),
+                output: Some("predictions.jsonl".into()),
+                live: true,
+            }
+        );
+
+        let short_flags = parse_cli_args(&vec_str(&[
+            "bench",
+            "--dataset",
+            "tasks.json",
+            "-a",
+            "Gemini",
+            "-o",
+            "out.jsonl",
+        ]))
+        .unwrap();
+        assert_eq!(
+            short_flags,
+            CliCommand::Bench {
+                suite: "all".into(),
+                mode: "compare".into(),
+                json: false,
+                dataset: Some("tasks.json".into()),
+                agent: Some("gemini".into()),
+                docker: false,
+                limit: None,
+                output: Some("out.jsonl".into()),
+                live: false,
+            }
+        );
+
+        assert!(parse_cli_args(&vec_str(&["bench", "--dataset"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["bench", "--agent"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["bench", "--limit", "0"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["bench", "--limit", "abc"])).is_err());
+        assert!(parse_cli_args(&vec_str(&["bench", "--output"])).is_err());
+
+        let help = format_cli_help();
+        assert!(help.contains("--dataset"));
+        assert!(help.contains("--docker"));
+        assert!(help.contains("--live"));
+        assert!(help.contains("--limit"));
+        assert!(help.contains("--output"));
     }
 
     #[test]
