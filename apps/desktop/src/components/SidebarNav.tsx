@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Briefcase, Clock, Plus, Search } from "lucide-react";
 import type { View } from "../data";
+import { tr, useLocale } from "../lib/i18n";
 import { ArtifactsIcon } from "./icons";
 
 interface SidebarNavProps {
@@ -35,24 +36,25 @@ function Row({ label, icon, onClick, active }: RowProps) {
 
 /** Actions rapides en haut de la barre latérale. */
 export default function SidebarNav(p: SidebarNavProps) {
+  const locale = useLocale();
   return (
     <nav className="space-y-0.5 px-2 pt-1">
-      <Row label="Créer" icon={<Plus className={ICON} strokeWidth={1.6} />} onClick={p.onCreate} />
+      <Row label={tr("Créer", "New", locale)} icon={<Plus className={ICON} strokeWidth={1.6} />} onClick={p.onCreate} />
       <Row
-        label="Rechercher"
+        label={tr("Rechercher", "Search", locale)}
         icon={<Search className={ICON} strokeWidth={1.6} />}
         onClick={p.onToggleSearch}
         active={p.searching}
       />
-      <Row label="Artéfacts" icon={<ArtifactsIcon className={ICON} />} onClick={p.onArtifacts} active={p.view === "artifacts"} />
+      <Row label={tr("Artéfacts", "Artifacts", locale)} icon={<ArtifactsIcon className={ICON} />} onClick={p.onArtifacts} active={p.view === "artifacts"} />
       <Row
-        label="Tâches planifiées"
+        label={tr("Tâches planifiées", "Scheduled tasks", locale)}
         icon={<Clock className={ICON} strokeWidth={1.6} />}
         onClick={p.onScheduled}
         active={p.view === "scheduled"}
       />
       <Row
-        label="Personnalisation"
+        label={tr("Personnalisation", "Customize", locale)}
         icon={<Briefcase className={ICON} strokeWidth={1.6} />}
         onClick={p.onCustomize}
         active={p.view === "settings"}
