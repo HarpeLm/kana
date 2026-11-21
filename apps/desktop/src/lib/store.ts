@@ -28,15 +28,39 @@ function parseFolders(raw: string | null | undefined): string[] | undefined {
   }
 }
 
+function parseEnvironment(raw: string | null | undefined): Conversation["environment"] {
+  try {
+    const parsed = JSON.parse(raw ?? "null");
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      ["local", "ssh", "docker", "devcontainer"].includes(parsed.kind)
+    ) {
+      return {
+        kind: parsed.kind,
+        target: typeof parsed.target === "string" ? parsed.target : undefined,
+        sandbox: typeof parsed.sandbox === "boolean" ? parsed.sandbox : undefined,
+        readOnly: typeof parsed.readOnly === "boolean" ? parsed.readOnly : undefined,
+      };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Les conversations enregistrées dans la base (liste vide si rien n'y a encore été rangé). */
 export async function loadStoredConversations(): Promise<Conversation[]> {
   if (!inTauri) return loadLocalConversations() ?? [];
   const rows = await invoke<
     Array<
-      Omit<Conversation, "openedAt" | "extraFolders" | "acpSessionId"> & {
+      Omit<Conversation, "openedAt" | "extraFolders" | "acpSessionId" | "environment" | "parentId" | "roleLabel"> & {
         openedAt: number | null;
         extraFolders: string | null;
         acpSessionId?: string | null;
+        environment?: string | null;
+        parentId?: string | null;
+        roleLabel?: string | null;
       }
     >
   >("db_load_conversations");
@@ -52,6 +76,9 @@ export async function loadStoredConversations(): Promise<Conversation[]> {
     modelId: row.modelId ?? undefined,
     extraFolders: parseFolders(row.extraFolders),
     acpSessionId: row.acpSessionId ?? undefined,
+    environment: parseEnvironment(row.environment),
+    parentId: row.parentId ?? undefined,
+    roleLabel: row.roleLabel ?? undefined,
   }));
 }
 
@@ -79,6 +106,9 @@ export async function saveStoredConversations(items: Conversation[]): Promise<vo
       modelId: c.modelId ?? null,
       extraFolders: c.extraFolders?.length ? JSON.stringify(c.extraFolders) : null,
       acpSessionId: c.acpSessionId ?? null,
+      environment: c.environment ? JSON.stringify(c.environment) : null,
+      parentId: c.parentId ?? null,
+      roleLabel: c.roleLabel ?? null,
     })),
   });
 }
