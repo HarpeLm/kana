@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { Conversation } from "../lib/conversations";
 import type { ArtifactEntry } from "../lib/artifactIndex";
+import { tr, useLocale } from "../lib/i18n";
 import { relativeTime } from "../lib/relativeTime";
 import { loadScheduledTasks } from "../lib/schedule";
+import { searchStoredMessages, type StoredMessageHit } from "../lib/store";
 import ArtifactThumb from "./ArtifactThumb";
 import {
   ACTION_NEW,
@@ -42,14 +44,38 @@ export default function SearchPalette({
   onOpenSettings,
   onClose,
 }: SearchPaletteProps) {
+  const locale = useLocale();
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<SearchTab>("all");
   const [index, setIndex] = useState(0);
+  const [messageHits, setMessageHits] = useState<StoredMessageHit[]>([]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setMessageHits([]);
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(() => {
+      void searchStoredMessages(trimmed, 15)
+        .then((hits) => {
+          if (active) setMessageHits(hits);
+        })
+        .catch(() => {
+          if (active) setMessageHits([]);
+        });
+    }, 60);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
 
   const scheduledTasks = useMemo(() => loadScheduledTasks(), []);
   const sections = useMemo(
-    () => buildSections(conversations, query, tab, artifacts, scheduledTasks),
-    [conversations, query, tab, artifacts, scheduledTasks],
+    () => buildSections(conversations, query, tab, artifacts, scheduledTasks, messageHits),
+    [conversations, query, tab, artifacts, scheduledTasks, messageHits],
   );
   const items = useMemo(() => sections.flatMap((s) => s.items), [sections]);
 
@@ -61,6 +87,8 @@ export default function SearchPalette({
       onOpenArtifact(item.artifact);
     } else if (item.kind === "scheduled") {
       onOpenScheduled?.();
+    } else if (item.kind === "message" && item.conversationId) {
+      onOpenConversation(item.conversationId);
     } else if (item.kind === "conversation") {
       onOpenConversation(item.id.slice("conversation:".length));
     } else if (item.kind === "project") {
@@ -129,7 +157,7 @@ export default function SearchPalette({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Rechercher"
+        aria-label={tr("Rechercher", "Search", locale)}
         className="flex max-h-[70vh] w-full flex-col overflow-hidden rounded-2xl border border-[#3a3a37] bg-[#2b2b29] shadow-[0_20px_50px_rgba(0,0,0,0.6)]"
       >
         <div className="space-y-3 border-b border-[#343430] px-6 pb-3 pt-4">
@@ -138,13 +166,13 @@ export default function SearchPalette({
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher"
-              aria-label="Rechercher"
+              placeholder={tr("Rechercher", "Search", locale)}
+              aria-label={tr("Rechercher", "Search", locale)}
               className="min-w-0 flex-1 bg-transparent text-[16px] text-[#f0efe9] placeholder-[#8a8982] outline-none select-text"
             />
             <button
               onClick={onClose}
-              title="Fermer"
+              title={tr("Fermer", "Close", locale)}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-[#c4c3bc] transition hover:bg-[#383835] hover:text-[#f0efe9]"
             >
               <X className="h-[18px] w-[18px]" strokeWidth={1.6} />
@@ -157,8 +185,8 @@ export default function SearchPalette({
           {items.length === 0 && (
             <p className="px-4 py-8 text-center text-[14px] text-[#8a8982]">
               {tab === "artifacts" || tab === "scheduled"
-                ? "Rien à afficher pour l'instant."
-                : "Aucun résultat."}
+                ? tr("Rien à afficher pour l'instant.", "Nothing to show yet.", locale)
+                : tr("Aucun résultat.", "No results.", locale)}
             </p>
           )}
           {sections.map((section) => (
