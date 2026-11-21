@@ -22,6 +22,7 @@ import {
 import type { ChatMessage, PlanItem, ToolCall } from "../lib/chatState";
 import type { Conversation } from "../lib/conversations";
 import { createPullRequest, discardWork, githubUrl, mergeWork, type BranchSummary, type PullRequest } from "../lib/forge";
+import { pickFiles } from "../lib/attachments";
 import { NO_PROJECT } from "../lib/projects";
 import { toolCommand, toolLabel } from "../lib/toolLabel";
 import { isArtifactPath } from "../lib/fileKinds";
@@ -143,10 +144,13 @@ interface SessionPanelProps {
   onOpenFile: (path: string) => void;
   /** Ouvre le terminal du dossier de travail. */
   onOpenTerminal: () => void;
+  /** Donne un dossier de plus à l'agent (il le lit à partir de son chemin). */
+  onAddFolder: (path: string) => void;
+  canAddFolder: boolean;
 }
 
 /** Panneau de droite : où la session travaille et ce qu'elle a produit, tout dans une seule carte. */
-export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile, onOpenTerminal }: SessionPanelProps) {
+export default function SessionPanel({ conversation, messages, plan, summary, pulls, workPath, onOpenDiff, onOpenLink, onRefresh, context: reportedContext, agentId, onOpenRelay, started, onCompact, canCompact, onDiscarded, onOpenFile, onOpenTerminal, onAddFolder, canAddFolder }: SessionPanelProps) {
   const [folderMenu, setFolderMenu] = useState(false);
   const folderRef = useRef<HTMLDivElement>(null);
   useClickOutside(folderRef, folderMenu, () => setFolderMenu(false));
@@ -300,6 +304,14 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
                     setFolderMenu(false);
                     const dir = workPath ?? conversation.projectPath;
                     if (dir) void navigator.clipboard?.writeText(dir).catch(() => {});
+                  }}
+                />
+                <ConversationMenuItem
+                  label="Ajouter un dossier…"
+                  disabled={!canAddFolder}
+                  onClick={() => {
+                    setFolderMenu(false);
+                    void pickFiles(true).then(([path]) => path && onAddFolder(path)).catch(() => {});
                   }}
                 />
                 <MenuDivider />
