@@ -480,6 +480,7 @@ export default function App({ startup }: { startup: Startup }) {
                 onCompact={compactSession}
                 canCompact={!chat.busy && chat.messages.length > 0}
                 onOpenFile={openFile}
+                onOpenTerminal={() => setShowTerminal(true)}
                 onDiscarded={() => {
                   stopAgent(selected.id).catch(() => {});
                   conversations.clearWorktree(selected.id);
