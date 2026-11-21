@@ -126,7 +126,7 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
                   <span className="block truncate text-[#ecebe4]">
                     {orphan.repo_name} · <span className="font-mono text-[12px]">{orphan.branch}</span>
                   </span>
-                  <span className={`block text-[12px] ${orphan.dirty || orphan.ahead > 0 ? "text-[#e69b80]" : "text-[#8c8b83]"}`}>
+                  <span className={`block text-[12px] ${orphan.dirty || orphan.ahead > 0 ? "text-[#93c5fd]" : "text-[#8c8b83]"}`}>
                     {describe(orphan, locale)}
                   </span>
                 </span>
@@ -136,7 +136,7 @@ export default function OrphanCleaner({ knownIds, projects }: OrphanCleanerProps
           <button
             onClick={() => setConfirming(true)}
             disabled={busy || removable.length === 0}
-            className="rounded-lg bg-[#d97757] px-3 py-1.5 text-[12px] font-medium text-[#181817] transition hover:bg-[#e38768] disabled:opacity-40"
+            className="rounded-lg bg-[#1e40af] px-3 py-1.5 text-[12px] font-medium text-[#f8fafc] transition hover:bg-[#2563eb] disabled:opacity-40"
           >
             {tr(`Nettoyer ce qui est sûr (${removable.length})`, `Clean safe items (${removable.length})`, locale)}
           </button>
