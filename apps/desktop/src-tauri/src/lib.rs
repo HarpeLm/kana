@@ -281,10 +281,52 @@ pub fn run_cli(cmd: kana_core::CliCommand) -> i32 {
             println!("{}", kana_core::advisor_recommendation(subject));
             0
         }
-        kana_core::CliCommand::Bench { suite, mode, json } => {
-            let report = kana_core::run_public_benchmark_harness(&suite, &mode);
-            println!("{}", kana_core::format_bench_report(&report, json));
-            0
+        kana_core::CliCommand::Bench {
+            suite,
+            mode,
+            json,
+            dataset,
+            agent,
+            docker,
+            limit,
+            output,
+            live,
+        } => {
+            if let Some(dataset_path) = dataset {
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        eprintln!("impossible d'initialiser le runtime Tokio : {e}");
+                        return 1;
+                    }
+                };
+                rt.block_on(async move {
+                    match run_bench_dataset(
+                        &dataset_path,
+                        agent.as_deref().unwrap_or("claude"),
+                        docker,
+                        limit,
+                        output.as_deref(),
+                        live,
+                        json,
+                    )
+                    .await
+                    {
+                        Ok(summary) => {
+                            println!("{summary}");
+                            0
+                        }
+                        Err(e) => {
+                            eprintln!("erreur `kana bench` : {e}");
+                            1
+                        }
+                    }
+                })
+            } else {
+                let report = kana_core::run_public_benchmark_harness(&suite, &mode);
+                println!("{}", kana_core::format_bench_report(&report, json));
+                0
+            }
         }
         kana_core::CliCommand::Daemon {
             once,
@@ -638,6 +680,258 @@ async fn run_daemon_tick(home: &std::path::Path, json: bool) -> Result<usize, St
     Ok(executed)
 }
 
+async fn run_bench_dataset(
+    dataset_path: &str,
+    agent_id: &str,
+    docker: bool,
+    limit: Option<usize>,
+    output_path: Option<&str>,
+    live: bool,
+    json: bool,
+) -> Result<String, String> {
+    let raw = std::fs::read_to_string(dataset_path)
+        .map_err(|e| format!("impossible de lire le dataset '{dataset_path}' : {e}"))?;
+    let mut tasks = kana_core::parse_bench_dataset(&raw)?;
+    if let Some(max_items) = limit {
+        tasks.truncate(max_items);
+    }
+
+    let model_name_or_path = format!("kana/{agent_id}");
+    let home = agent_spec::default_cwd();
+    let mut predictions: Vec<kana_core::BenchPrediction> = Vec::with_capacity(tasks.len());
+    let mut planned_details: Vec<serde_json::Value> = Vec::with_capacity(tasks.len());
+
+    for (idx, task) in tasks.iter().enumerate() {
+        let started = std::time::Instant::now();
+        let prompt = kana_core::build_bench_prompt(task);
+
+        let local_repo = task
+            .repo
+            .as_deref()
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_dir());
+        let temp_dir = if local_repo.is_none() {
+            let dir = std::env::temp_dir().join(format!(
+                "kana-bench-{}-{}",
+                std::process::id(),
+                idx
+            ));
+            let _ = std::fs::create_dir_all(&dir);
+            Some(dir)
+        } else {
+            None
+        };
+        let workdir = local_repo
+            .or_else(|| temp_dir.clone())
+            .unwrap_or_else(agent_spec::project_dir);
+
+        let docker_args = if docker {
+            match (task.docker_image.as_deref(), task.test_cmd.as_deref()) {
+                (Some(img), Some(cmd)) if !img.trim().is_empty() && !cmd.trim().is_empty() => {
+                    Some(kana_core::build_docker_bench_args(
+                        img.trim(),
+                        &workdir.to_string_lossy(),
+                        cmd.trim(),
+                    ))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        let prediction = if live {
+            let shared_ctx = load_cli_shared_context(&home, &workdir);
+            let mut err_msg: Option<String> = None;
+
+            match agent_spec::spec_for(agent_id) {
+                Ok(mut spec) => {
+                    if docker
+                        && let Some(img) = task
+                            .docker_image
+                            .as_deref()
+                            .filter(|s| !s.trim().is_empty())
+                    {
+                        spec = spec.with_target(kana_acp::ExecutionTarget::Docker {
+                            container: img.trim().to_string(),
+                            workdir: Some("/workspace".to_string()),
+                        });
+                    }
+                    let full_prompt = if shared_ctx.memory_preface.is_empty() {
+                        prompt.clone()
+                    } else {
+                        format!("{}{}", shared_ctx.memory_preface, prompt)
+                    };
+                    match kana_acp::AcpClient::spawn_with_mcp(
+                        &spec,
+                        &workdir,
+                        &shared_ctx.mcp_servers,
+                    )
+                    .await
+                    {
+                        Ok((client, mut events)) => {
+                            if let Err(e) = client.prompt(&full_prompt).await {
+                                err_msg = Some(e.to_string());
+                            } else {
+                                while let Some(ev) = events.recv().await {
+                                    match ev {
+                                        kana_acp::AcpEvent::Permission {
+                                            request_id,
+                                            title,
+                                            options,
+                                        } => {
+                                            let choices: Vec<kana_core::PermissionChoice> = options
+                                                .iter()
+                                                .map(|o| kana_core::PermissionChoice {
+                                                    id: o.id.clone(),
+                                                    name: o.name.clone(),
+                                                    kind: o.kind.clone(),
+                                                })
+                                                .collect();
+                                            let answer = kana_core::auto_answer_with_rules(
+                                                shared_ctx.permission_mode,
+                                                &title,
+                                                &choices,
+                                                &shared_ctx.rules,
+                                            );
+                                            client.resolve_permission(&request_id, answer).await;
+                                        }
+                                        kana_acp::AcpEvent::Error { message } => {
+                                            err_msg = Some(message);
+                                            break;
+                                        }
+                                        kana_acp::AcpEvent::Done { .. }
+                                        | kana_acp::AcpEvent::Closed => break,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => err_msg = Some(e.to_string()),
+                    }
+                }
+                Err(e) => err_msg = Some(e),
+            }
+
+            let model_patch = std::process::Command::new("git")
+                .args(["diff"])
+                .current_dir(&workdir)
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
+
+            let mut test_exit_code: Option<i32> = None;
+            if let Some(cmd) = task.test_cmd.as_deref().filter(|s| !s.trim().is_empty()) {
+                let status = if let Some(ref args) = docker_args {
+                    std::process::Command::new("docker").args(args).status()
+                } else {
+                    std::process::Command::new("sh")
+                        .args(["-lc", cmd.trim()])
+                        .current_dir(&workdir)
+                        .status()
+                };
+                match status {
+                    Ok(st) => test_exit_code = st.code().or(Some(1)),
+                    Err(e) => {
+                        if err_msg.is_none() {
+                            err_msg = Some(format!("échec exécution test_cmd : {e}"));
+                        }
+                    }
+                }
+            }
+
+            let resolved = err_msg.is_none() && test_exit_code.map(|c| c == 0).unwrap_or(true);
+            kana_core::BenchPrediction {
+                instance_id: task.instance_id.clone(),
+                model_name_or_path: model_name_or_path.clone(),
+                model_patch,
+                resolved,
+                duration_ms: started.elapsed().as_millis() as u64,
+                test_exit_code,
+                error: err_msg,
+            }
+        } else {
+            kana_core::BenchPrediction {
+                instance_id: task.instance_id.clone(),
+                model_name_or_path: model_name_or_path.clone(),
+                model_patch: String::new(),
+                resolved: false,
+                duration_ms: started.elapsed().as_millis() as u64,
+                test_exit_code: None,
+                error: None,
+            }
+        };
+
+        planned_details.push(serde_json::json!({
+            "instance_id": task.instance_id,
+            "prompt_len": prompt.len(),
+            "docker_args": docker_args,
+            "resolved": prediction.resolved,
+            "test_exit_code": prediction.test_exit_code,
+            "error": prediction.error,
+        }));
+        predictions.push(prediction);
+
+        if let Some(dir) = temp_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    if let Some(out_path) = output_path {
+        let jsonl = kana_core::format_predictions_jsonl(&predictions);
+        std::fs::write(out_path, jsonl)
+            .map_err(|e| format!("impossible d'écrire '{out_path}' : {e}"))?;
+    }
+
+    let resolved_count = predictions.iter().filter(|p| p.resolved).count();
+    let total = predictions.len();
+    let mode_label = if live { "live" } else { "dry-run" };
+
+    if json {
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "ok": true,
+            "dataset": dataset_path,
+            "agent": agent_id,
+            "mode": mode_label,
+            "docker": docker,
+            "total": total,
+            "resolved": resolved_count,
+            "output": output_path,
+            "predictions": predictions,
+            "details": planned_details,
+        }))
+        .unwrap_or_else(|_| "{}".to_string()))
+    } else {
+        let mut lines = vec![
+            format!(
+                "=== Runner dataset Kana (`kana bench`) — {} ({mode_label}, agent: {agent_id}, docker: {}) ===",
+                dataset_path,
+                if docker { "oui" } else { "non" }
+            ),
+            format!("• Instances traitées : {total} · Résolues : {resolved_count}/{total}"),
+        ];
+        if let Some(out) = output_path {
+            lines.push(format!("• Prédictions écrites : {out}"));
+        }
+        for pred in &predictions {
+            let badge = if pred.resolved {
+                "PASS"
+            } else if !live {
+                "DRY-RUN"
+            } else {
+                "FAIL"
+            };
+            lines.push(format!(
+                "- {} -> {} ({} ms)",
+                pred.instance_id, badge, pred.duration_ms
+            ));
+        }
+        Ok(lines.join("\n"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -736,5 +1030,51 @@ mod tests {
         assert_eq!(ctx.rules[0].policy, kana_core::PermissionPolicy::Deny);
 
         let _ = std::fs::remove_dir_all(&tmp_home);
+    }
+
+    #[tokio::test]
+    async fn runs_bench_dataset_dry_run_with_limit_docker_and_predictions_output() {
+        let tmp_dir = std::env::temp_dir().join(format!("kana-bench-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::create_dir_all(&tmp_dir).unwrap();
+
+        let dataset_file = tmp_dir.join("dataset.jsonl");
+        let output_file = tmp_dir.join("predictions.jsonl");
+        std::fs::write(
+            &dataset_file,
+            "{\"instance_id\":\"django__django-16408\",\"repo\":\"django/django\",\"problem_statement\":\"Fix query\",\"docker_image\":\"swebench/django:latest\",\"test_cmd\":\"pytest -q\"}\n\
+             {\"instance_id\":\"tb-2\",\"prompt\":\"Fix script\",\"test_cmd\":\"bash test.sh\"}\n",
+        )
+        .unwrap();
+
+        let json_summary = run_bench_dataset(
+            dataset_file.to_str().unwrap(),
+            "codex",
+            true,
+            Some(1),
+            Some(output_file.to_str().unwrap()),
+            false,
+            true,
+        )
+        .await
+        .unwrap();
+
+        let parsed: serde_json::Value = serde_json::from_str(&json_summary).unwrap();
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["mode"], "dry-run");
+        assert_eq!(parsed["agent"], "codex");
+        assert_eq!(parsed["docker"], true);
+        assert_eq!(parsed["total"], 1);
+        assert_eq!(parsed["predictions"][0]["instance_id"], "django__django-16408");
+        assert_eq!(parsed["predictions"][0]["model_name_or_path"], "kana/codex");
+        assert!(parsed["details"][0]["docker_args"].is_array());
+
+        let preds_content = std::fs::read_to_string(&output_file).unwrap();
+        let lines: Vec<&str> = preds_content.lines().collect();
+        assert_eq!(lines.len(), 1);
+        let pred: kana_core::BenchPrediction = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(pred.instance_id, "django__django-16408");
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
 }
