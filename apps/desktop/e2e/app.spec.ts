@@ -495,15 +495,9 @@ test("sessionPanel : mémoire projet, environnement distant/sandbox et sous-agen
 
   await panel.getByLabel("Environnement d'exécution").selectOption("local");
 
-  // Sous-agent parallèle en lecture seule
-  await panel.getByRole("button", { name: "Recherche (lecture seule)" }).click();
-  await expect(panel.getByText("Terminé").first()).toBeVisible();
-
-  const subRow = panel.getByRole("button", { name: /Recherche.*Explore en lecture seule/ });
-  await expect(subRow).toBeVisible();
-  await subRow.click();
-
-  await expect(page.locator("header").getByText(/Recherche · /)).toBeVisible();
+  // Aucun sous-agent n'est affiché par défaut tant qu'aucun n'a été lancé
+  await expect(panel.getByText("Sous-agents parallèles")).toHaveCount(0);
+  await expect(panel.getByText("Sous-agents")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -902,6 +896,11 @@ test("/advisor & Cross-Review, Diagnostics LSP dans FilesDock et Cache local des
   await expect(panel.getByText("Étape 2 · Cross-Review du Diff")).toBeVisible();
   await expect(panel.getByText("Étape 3 · Vérification & Globe")).toBeVisible();
   await expect(page.locator("main").getByText(/Pipeline Cross-Review Multi-Fournisseurs/).first()).toBeVisible();
+
+  // Les sous-agents lancés apparaissent imbriqués sous la conversation parente dans la barre latérale
+  const nestedSubagents = page.locator('[aria-label^="Sous-agents de "]');
+  await expect(nestedSubagents).toBeVisible();
+  await expect(nestedSubagents.getByRole("button").first()).toBeVisible();
 
   // 2. Diagnostics LSP & Compilateur dans FilesDock + envoi des erreurs à l'agent
   await page.getByRole("banner").getByRole("button", { name: "Fichiers" }).click();
