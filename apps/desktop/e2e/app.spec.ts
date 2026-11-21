@@ -250,3 +250,155 @@ test("le menu Plus ouvre le volet Artéfacts et bascule Maintenir l'ordinateur a
   await expect(page.getByRole("region", { name: "Artéfacts" })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("raccourcis globaux et palette Cmd+K : ouvrir la palette, basculer un volet et cycler le mode", async ({ page }) => {
+  const errors = watchErrors(page);
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  const main = page.locator("main");
+
+  // Cmd+K depuis le compositeur ouvre la palette et exécute une action rapide.
+  const composer = page.getByRole("textbox").last();
+  await composer.focus();
+  await page.keyboard.press(`${mod}+k`);
+  const dialog = page.getByRole("dialog", { name: "Rechercher" });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByPlaceholder("Rechercher").fill("diff");
+  await dialog.getByRole("option", { name: /Afficher \/ masquer le diff/ }).click();
+  await expect(dialog).toHaveCount(0);
+  const diffPane = page.getByRole("region", { name: "Diff" });
+  await expect(diffPane).toHaveCSS("opacity", "1");
+
+  // Cmd+Shift+D referme le volet Diff.
+  await page.keyboard.press(`${mod}+Shift+d`);
+  await expect(diffPane).toHaveCSS("opacity", "0");
+
+  // Cmd+Shift+M cycle le mode d'autorisation : Demander -> Plan -> Approuver à ma place.
+  await expect(main.getByRole("button", { name: /Demander l'approbation/ })).toBeVisible();
+  await page.keyboard.press(`${mod}+Shift+m`);
+  await expect(main.getByRole("button", { name: /^Plan/ })).toBeVisible();
+  await page.keyboard.press(`${mod}+Shift+m`);
+  await expect(main.getByRole("button", { name: /Approuver à ma place/ })).toBeVisible();
+
+  // Alt+ArrowDown / Alt+ArrowUp navigue entre les fils visibles.
+  await expect(page.locator("header").getByText("Nouvelle conversation")).toBeVisible();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.locator("header").getByText("Essai")).toBeVisible();
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect(page.locator("header").getByText("Nouvelle conversation")).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("mode Plan : bouton direct « Approuver le plan et passer en exécution »", async ({ page }) => {
+  const errors = watchErrors(page);
+  const main = page.locator("main");
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+
+  // Passe en mode Plan via le menu du compositeur.
+  await main.getByRole("button", { name: /Demander l'approbation/ }).click();
+  await main.getByRole("button", { name: /^Plan\b/ }).click();
+  await expect(main.getByRole("button", { name: /^Plan/ })).toBeVisible();
+
+  const box = page.getByRole("textbox").last();
+  await box.fill("Prépare un plan d'action");
+  await box.press("Enter");
+  await expect(page.getByText(/Tu as écrit « Prépare un plan d'action »\./)).toBeVisible();
+
+  const planBanner = page.getByRole("region", { name: "Validation du plan" });
+  await expect(planBanner).toBeVisible();
+  const modeSelect = planBanner.getByRole("combobox", { name: "Mode d'approbation pour l'exécution" });
+  await expect(modeSelect).toHaveValue("auto");
+
+  await planBanner.getByRole("button", { name: "Approuver le plan et passer en exécution" }).click();
+  await expect(planBanner).toHaveCount(0);
+  await expect(main.getByRole("button", { name: /Approuver à ma place/ })).toBeVisible();
+  await expect(
+    page.getByText(/Tu as écrit « Le plan est approuvé : passe en exécution et applique les modifications\. »\./),
+  ).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test("widget de question structurée à choix multiples : sélection, validation et ignorer", async ({ page }) => {
+  const errors = watchErrors(page);
+
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "kana-messages-c1",
+      JSON.stringify([
+        { id: "m-u1", role: "user", text: "Quel stockage choisir ?", thought: "", tools: [] },
+        {
+          id: "m-a1",
+          role: "agent",
+          text: '```question\n{"question":"Quels moteurs activer ?","options":["SQLite","PostgreSQL","DuckDB"],"multiSelect":true}\n```',
+          thought: "",
+          tools: [],
+        },
+      ]),
+    );
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  const card = page.getByRole("region", { name: "Question de l'agent" });
+  await expect(card).toBeVisible();
+  await expect(card.getByText("Quels moteurs activer ?")).toBeVisible();
+
+  await card.getByRole("button", { name: "SQLite" }).click();
+  await card.getByRole("button", { name: "DuckDB" }).click();
+  await card.getByRole("button", { name: "Valider la réponse" }).click();
+
+  await expect(card).toHaveCount(0);
+  await expect(page.getByText(/Tu as écrit « SQLite, DuckDB »\./)).toBeVisible();
+
+  // Teste aussi une question détectée par heuristique ? + liste et le bouton Ignorer.
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "kana-messages-c1",
+      JSON.stringify([
+        { id: "m-u2", role: "user", text: "Suite ?", thought: "", tools: [] },
+        {
+          id: "m-a2",
+          role: "agent",
+          text: "Souhaites-tu déployer maintenant ?\n- Oui, maintenant\n- Plus tard",
+          thought: "",
+          tools: [],
+        },
+      ]),
+    );
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Essai" }).click();
+
+  await expect(card).toBeVisible();
+  await expect(card.getByText("Souhaites-tu déployer maintenant ?")).toBeVisible();
+  await card.getByRole("button", { name: "Ignorer" }).click();
+  await expect(card).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
+test("réglages : options de Notifications système et son", async ({ page }) => {
+  const errors = watchErrors(page);
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+  await page.keyboard.press(`${mod}+,`);
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+
+  const enabledCheckbox = page.getByLabel("Notifications système");
+  const soundCheckbox = page.getByLabel("Son de notification");
+
+  await expect(enabledCheckbox).toBeChecked();
+  await expect(soundCheckbox).toBeChecked();
+  await expect(soundCheckbox).toBeEnabled();
+
+  await enabledCheckbox.uncheck();
+  await expect(enabledCheckbox).not.toBeChecked();
+  await expect(soundCheckbox).toBeDisabled();
+
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-notifications") ?? "null"));
+  expect(stored).toEqual({ enabled: false, sound: true });
+
+  expect(errors).toEqual([]);
+});
