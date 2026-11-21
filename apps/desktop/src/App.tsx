@@ -30,7 +30,7 @@ import { buildForkContext } from "./lib/fork";
 import { activeMcpServersFor, loadActiveRulesPreface, toMcpServerParams } from "./lib/extensibility";
 import { setPlanMode, stopAgent } from "./lib/acp";
 import { notifyOs, setKeepAwake } from "./lib/settings";
-import { createWorktree, removeWorktree } from "./lib/worktree";
+import { createWorktree, handoffToLocal, handoffToWorktree, removeWorktree } from "./lib/worktree";
 import { MODES, loadMode, saveMode, type PermissionMode } from "./lib/permissionMode";
 import {
   ACTION_CYCLE_MODE,
@@ -911,6 +911,39 @@ export default function App({ startup }: { startup: Startup }) {
                 }}
                 onOpenAdvisor={() => setAdvisorModal({ open: true, query: "" })}
                 crossReview={crossReviewMap[selected.id] ?? null}
+                onHandoffToWorktree={async () => {
+                  const projectPath = selected.projectPath;
+                  if (!projectPath || projectPath === NO_PROJECT) return;
+                  const report = await handoffToWorktree(selected.id, projectPath, true);
+                  await stopAgent(selected.id).catch(() => {});
+                  const branch = report.branch ?? `kana/${selected.id}`;
+                  conversations.attachWorktree(selected.id, report.target_path, branch);
+                  setUseWorktree(selected.id, true);
+                  if (chat.messages.length > 0) {
+                    const history = chat.messages.filter((m) => m.role !== "error");
+                    const from = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
+                    conversations.relayTo(selected.id, selected.agentId, history.length > 0 ? buildRelayContext(history, from) : "");
+                  }
+                  void sessionSummary.refresh();
+                  return report;
+                }}
+                onHandoffToLocal={async () => {
+                  const projectPath = selected.projectPath;
+                  const wt = selected.worktree;
+                  const branch = sessionSummary.summary?.branch ?? selected.branch;
+                  if (!projectPath || projectPath === NO_PROJECT || !wt || !branch) return;
+                  const report = await handoffToLocal(projectPath, wt, branch);
+                  await stopAgent(selected.id).catch(() => {});
+                  conversations.clearWorktree(selected.id);
+                  setUseWorktree(selected.id, false);
+                  if (chat.messages.length > 0) {
+                    const history = chat.messages.filter((m) => m.role !== "error");
+                    const from = AGENTS.find((a) => a.id === selected.agentId)?.name ?? selected.agentId;
+                    conversations.relayTo(selected.id, selected.agentId, history.length > 0 ? buildRelayContext(history, from) : "");
+                  }
+                  void sessionSummary.refresh();
+                  return report;
+                }}
               />
             )}
           </div>
