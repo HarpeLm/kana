@@ -20,9 +20,9 @@ export default function SidebarResizer({ dragging, onPointerDown, edge = "right"
       }`}
     >
       <div
-        className={`mx-auto h-full w-[2px] transition-colors ${
-          dragging ? "bg-[#3d8bfd]" : "bg-transparent group-hover:bg-[#3d8bfd]"
-        }`}
+        className={`h-full w-[2px] transition-colors ${
+          edge === "right" ? "ml-auto" : "mr-auto"
+        } ${dragging ? "bg-[#3d8bfd]" : "bg-transparent group-hover:bg-[#3d8bfd]"}`}
       />
     </div>
   );
