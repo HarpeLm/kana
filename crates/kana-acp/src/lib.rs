@@ -11,8 +11,9 @@ mod protocol;
 mod reader;
 
 pub use agents::{
-    AgentSpec, ExecutionTarget, SandboxPolicy, api_key_env, bwrap_args, effective_command, preset,
-    seatbelt_profile,
+    AdapterCacheInfo, AgentSpec, ExecutionTarget, SandboxPolicy, adapter_cache_dir, api_key_env,
+    bwrap_args, effective_command, inspect_adapter_cache, preset, seatbelt_profile,
+    with_cached_adapter,
 };
 pub use auth::AuthMethod;
 pub use client::AcpClient;
