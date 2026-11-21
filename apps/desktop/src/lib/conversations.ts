@@ -1,3 +1,12 @@
+export type EnvironmentKind = "local" | "ssh" | "docker" | "devcontainer";
+
+export interface ConversationEnvironment {
+  kind: EnvironmentKind;
+  target?: string;
+  sandbox?: boolean;
+  readOnly?: boolean;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -30,6 +39,12 @@ export interface Conversation {
   extraFolders?: string[];
   /** Identifiant de la session ACP en cours, pour reprendre après redémarrage. */
   acpSessionId?: string;
+  /** Environnement d'exécution : local, sandbox OS, SSH, Docker ou DevContainer. */
+  environment?: ConversationEnvironment;
+  /** Identifiant de la conversation parente si celle-ci est un sous-agent parallèle. */
+  parentId?: string;
+  /** Rôle du sous-agent parallèle (« Recherche », « Tests », « Worker »...). */
+  roleLabel?: string;
 }
 
 export const DEFAULT_PROJECT = "kana";
