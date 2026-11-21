@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ClipboardList, Hand, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
-import { MODES, type PermissionMode } from "../lib/permissionMode";
+import { tr, useLocale } from "../lib/i18n";
+import { getModes, type PermissionMode } from "../lib/permissionMode";
 
 const icons = { ask: Hand, plan: ClipboardList, auto: ShieldCheck, full: ShieldAlert };
 
@@ -14,6 +15,8 @@ interface ModeMenuProps {
 
 /** Choix du mode d'autorisation, sous la zone de saisie. « Accès complet » reste en orange. */
 export default function ModeMenu({ mode, onChange, align = "left" }: ModeMenuProps) {
+  const locale = useLocale();
+  const modes = getModes(locale);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useClickOutside(root, open, () => setOpen(false));
@@ -27,10 +30,10 @@ export default function ModeMenu({ mode, onChange, align = "left" }: ModeMenuPro
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const mode = MODES[Number(event.key) - 1];
-      if (mode) {
+      const picked = modes[Number(event.key) - 1];
+      if (picked) {
         event.preventDefault();
-        choose(mode.id);
+        choose(picked.id);
       } else if (event.key === "Escape") {
         setOpen(false);
       }
@@ -39,7 +42,7 @@ export default function ModeMenu({ mode, onChange, align = "left" }: ModeMenuPro
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const current = modes.find((m) => m.id === mode) ?? modes[0];
   const Icon = icons[current.id];
   const full = mode === "full";
 
@@ -57,8 +60,10 @@ export default function ModeMenu({ mode, onChange, align = "left" }: ModeMenuPro
       </button>
       {open && (
         <div className={`absolute bottom-full z-30 mb-2 w-[600px] ${align === "right" ? "right-0" : "left-0"} max-w-[calc(100vw-3rem)] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl`}>
-          <p className="px-3 pb-0.5 pt-1.5 text-[12px] text-[#9a9992]">Comment les actions de l'agent doivent-elles être approuvées ?</p>
-          {MODES.map((item, index) => {
+          <p className="px-3 pb-0.5 pt-1.5 text-[12px] text-[#9a9992]">
+            {tr("Comment les actions de l'agent doivent-elles être approuvées ?", "How should agent actions be approved?", locale)}
+          </p>
+          {modes.map((item, index) => {
             const ItemIcon = icons[item.id];
             const danger = item.id === "full";
             return (
