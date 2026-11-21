@@ -242,6 +242,8 @@ export function prioritizeQueuedMessage(chat: ChatState, index: number): ChatSta
 }
 
 export const DEFAULT_COMMANDS: AvailableCommand[] = [
+  { name: "advisor", description: "Conseiller interactif : choisir quoi mettre, pour quel usage, pourquoi et quel pipeline d'agents lancer" },
+  { name: "cross-review", description: "Pipeline multi-fournisseurs : Agent A implémente → Agent B relit le diff → Agent C vérifie" },
   { name: "compact", description: "Compacter la session et économiser le contexte" },
   { name: "rewind", description: "Revenir au tour précédent (code et conversation)" },
   { name: "plan", description: "Planifier sans modifier les fichiers" },
