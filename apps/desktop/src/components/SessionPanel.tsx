@@ -124,7 +124,7 @@ interface SessionPanelProps {
   onOpenLink: (url: string) => void;
   onRefresh: () => void;
   /** Occupation de la fenêtre de contexte de l'agent, si l'agent la donne. */
-  context: { used: number; size: number } | null;
+  context: { used: number; size: number; estimated?: boolean } | null;
   /** Fournisseur de la conversation. */
   agentId: string;
   onOpenRelay: () => void;
@@ -274,7 +274,7 @@ export default function SessionPanel({ conversation, messages, plan, summary, pu
             <div className="flex items-baseline justify-between text-[13px] text-[#ecebe4]">
               <span>Contexte</span>
               <span className="text-[#8c8b83]">
-                {context ? `${formatTokens(context.used)} / ${formatTokens(context.size)} jetons` : "pas encore mesuré"}
+                {context ? `${context.estimated ? "≈ " : ""}${formatTokens(context.used)} / ${formatTokens(context.size)} jetons` : "pas encore mesuré"}
               </span>
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#30302d]">
