@@ -14,7 +14,7 @@ export default function ApiKeyField({ variable, hasKey, onSave, onRemove }: ApiK
     return (
       <div className="flex items-center justify-between text-[12px] text-[#9a9992]">
         <span>Clé d'API enregistrée dans le Trousseau ({variable})</span>
-        <button onClick={onRemove} className="text-[#e69b80] hover:text-[#f0b49e]">
+        <button onClick={onRemove} className="text-[#93c5fd] hover:text-[#bfdbfe]">
           Supprimer
         </button>
       </div>
