@@ -9,6 +9,12 @@ export interface PermissionOption {
   kind: string;
 }
 
+export interface AvailableCommand {
+  name: string;
+  description: string;
+  hint?: string | null;
+}
+
 export type AcpEvent =
   | { kind: "message"; text: string }
   | { kind: "thought"; text: string }
@@ -23,6 +29,7 @@ export type AcpEvent =
   | { kind: "turn_usage"; input_tokens: number; output_tokens: number; total_tokens: number }
   | { kind: "context"; used: number; size: number }
   | { kind: "plan"; entries: { content: string; status: string }[] }
+  | { kind: "available_commands"; commands: AvailableCommand[] }
   | { kind: "permission"; request_id: string; title: string; options: PermissionOption[] }
   | { kind: "done"; stop_reason: string }
   | { kind: "error"; message: string }
@@ -83,7 +90,11 @@ export function sendPrompt(threadId: string, text: string, images: string[] = []
 }
 
 export function cancelPrompt(threadId: string): Promise<void> {
-  return inTauri ? invoke("cancel_prompt", { threadId }) : Promise.resolve();
+  if (!inTauri) {
+    mock.cancelPrompt(threadId);
+    return Promise.resolve();
+  }
+  return invoke("cancel_prompt", { threadId });
 }
 
 export function answerPermission(
