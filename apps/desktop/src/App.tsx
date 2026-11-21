@@ -26,6 +26,7 @@ import { OpenArtifactContext } from "./lib/artifactRefs";
 import { buildRelayContext } from "./lib/fork";
 import { OpenFileContext } from "./lib/fileRefs";
 import { buildForkContext } from "./lib/fork";
+import { activeMcpServersFor, loadActiveRulesPreface, toMcpServerParams } from "./lib/extensibility";
 import { setPlanMode, stopAgent } from "./lib/acp";
 import { notifyOs, setKeepAwake } from "./lib/settings";
 import { createWorktree, removeWorktree } from "./lib/worktree";
@@ -55,6 +56,7 @@ import BrowserApprovalDialog from "./components/BrowserApprovalDialog";
 import BrowserDock from "./components/BrowserDock";
 import ConfirmDialog from "./components/ConfirmDialog";
 import DiffDock from "./components/DiffDock";
+import ExtensibilityModal, { type ExtensibilityTab } from "./components/ExtensibilityModal";
 import FilesDock from "./components/FilesDock";
 import ArtifactDock from "./components/ArtifactDock";
 import ConversationTitle from "./components/ConversationTitle";
@@ -80,6 +82,10 @@ export default function App({ startup }: { startup: Startup }) {
   /** Conversation dont le dossier de travail est gardé car il contient du travail non enregistré. */
   const [keptWorktree, setKeptWorktree] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [extensibility, setExtensibility] = useState<{ open: boolean; tab: ExtensibilityTab }>({
+    open: false,
+    tab: "mcp",
+  });
   const conversations = useConversations(startup.conversations, startup.selectedId);
   const projectList = useProjects(startup.projects);
   const { selected } = conversations;
@@ -125,18 +131,22 @@ export default function App({ startup }: { startup: Startup }) {
       const carried = conversation.forkContext;
       if (carried) clearForkContext(threadId);
       const memory = buildProjectMemoryPreface(projectPath);
+      const rules = await loadActiveRulesPreface(cwd ?? projectPath);
+      const mcpServers = toMcpServerParams(activeMcpServersFor(projectPath));
       const folders = conversation.extraFolders?.length
         ? `Dossiers supplémentaires auxquels tu as accès, en plus du dossier de travail (lis-les au besoin, ne les modifie que si je le demande) :\n${conversation.extraFolders.map((f) => `- ${f}`).join("\n")}\n\n`
         : "";
-      const preface = `${ARTIFACT_GUIDE}${memory}${folders}${carried ?? ""}`;
+      const preface = `${ARTIFACT_GUIDE}${memory}${rules}${folders}${carried ?? ""}`;
       return {
         cwd,
+        projectPath,
         preface,
         carried: !!carried,
         model: conversation.modelId,
         effort: chosenEffort(conversation.agentId),
         acpSessionId: conversation.acpSessionId,
         environment: conversation.environment,
+        mcpServers,
       };
     },
     [attachWorktree, clearForkContext, findById],
@@ -202,7 +212,7 @@ export default function App({ startup }: { startup: Startup }) {
       if (agent && problem) markProblem(agent, problem, message);
     },
   };
-  const { chat, chats, send, sendToThread, stop, answer, seed, removeQueued, steerQueued } = useChat(
+  const { chat, chats, send, sendToThread, stop, answer, seed, removeQueued, steerQueued, rewind } = useChat(
     selected.id,
     selected.agentId,
     permissionMode,
@@ -266,8 +276,17 @@ export default function App({ startup }: { startup: Startup }) {
     onToggleWorktree: (value: boolean) => setUseWorktree(selected.id, value),
   };
 
+  const handleRewind = async (messageId?: string) => {
+    const done = await rewind(messageId);
+    if (done) void sessionSummary.refresh();
+  };
+
   // Le premier message donne son titre à la conversation et remet son projet en tête des récents.
   const sendMessage = (text: string, modeOverride?: PermissionMode) => {
+    if (text.trim() === "/rewind") {
+      void handleRewind();
+      return;
+    }
     if (selected.title === "Nouvelle conversation") {
       const provisional = autoTitle(text);
       conversations.rename(selected.id, provisional);
@@ -549,6 +568,7 @@ export default function App({ startup }: { startup: Startup }) {
       deleting !== undefined ||
       artifactToDelete !== null ||
       browserAgent.approval !== null ||
+      extensibility.open ||
       document.querySelector('[role="alertdialog"]') !== null;
     if (blockedByModal) return;
 
@@ -725,9 +745,12 @@ export default function App({ startup }: { startup: Startup }) {
               onRemoveQueued={removeQueued}
               onSteerQueued={steerQueued}
               workPath={workPath}
+              projectPath={selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined}
               onAnswer={answer}
               onOpenLink={openInGlobe}
               onFork={forkFrom}
+              onRewind={(id) => void handleRewind(id)}
+              onOpenExtensibility={(tab) => setExtensibility({ open: true, tab })}
               mode={permissionMode}
               onModeChange={changeMode}
               onApprovePlan={approvePlan}
@@ -819,6 +842,28 @@ export default function App({ startup }: { startup: Startup }) {
                   conversations.clearWorktree(selected.id);
                   void sessionSummary.refresh();
                 }}
+                onResolveConflicts={(branch, base, conflicts) => {
+                  const details = conflicts.length
+                    ? conflicts.map((c) => `### \`${c.path}\`\n\`\`\`\n${c.snippet}\n\`\`\``).join("\n\n")
+                    : "(Aucun détail disponible.)";
+                  void send(
+                    `La fusion de \`${branch}\` dans \`${base}\` a des conflits.\n\nFichiers concernés :\n\n${details}\n\nDans ton dossier de travail actuel, fusionne ou rebase \`${base}\` dans \`${branch}\`, résous proprement les conflits et vérifie les tests.`,
+                  );
+                }}
+                onImportPrFeedback={(feedback) => {
+                  const comments = feedback.reviewComments.length
+                    ? `Commentaires de review :\n${feedback.reviewComments.map((c) => `- ${c}`).join("\n")}`
+                    : "Aucun commentaire de review.";
+                  const checks = feedback.failedChecks.length
+                    ? `Vérifications CI en échec :\n${feedback.failedChecks.map((c) => `- ${c}`).join("\n")}`
+                    : "Aucune vérification CI en échec.";
+                  const logs = feedback.failedLogExcerpt
+                    ? `\n\nExtrait des logs CI en échec :\n\`\`\`\n${feedback.failedLogExcerpt}\n\`\`\``
+                    : "";
+                  void send(
+                    `Feedback importé depuis ${feedback.forge === "gitlab" ? "la MR" : "la PR"} #${feedback.prNumber} (« ${feedback.title} ») :\n\n${comments}\n\n${checks}${logs}\n\nCorrige les points signalés et vérifie les tests.`,
+                  );
+                }}
               />
             )}
           </div>
@@ -878,6 +923,12 @@ export default function App({ startup }: { startup: Startup }) {
           dragging={diffPanel.dragging}
           onResizeStart={diffPanel.startDrag}
           onClose={() => setShowDiff(false)}
+          onComment={(file, target, comment) => {
+            const where = target.lineNo != null ? ` (ligne ${target.lineNo})` : "";
+            void send(
+              `Commentaire de review sur \`${file}\`${where} dans \`${target.hunkHeader}\` :\n\n\`\`\`\n${target.text}\n\`\`\`\n\n${comment}\n\nApplique cette correction uniquement sur ce passage.`,
+            );
+          }}
         />
 
         {browserOpened && (
@@ -958,6 +1009,14 @@ export default function App({ startup }: { startup: Startup }) {
           onAnswer={(allow) => browserAgent.answer(browserAgent.approval!.requestId, allow)}
         />
       )}
+
+      <ExtensibilityModal
+        open={extensibility.open}
+        initialTab={extensibility.tab}
+        projectPath={selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined}
+        ruleRoot={workPath ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined)}
+        onClose={() => setExtensibility((prev) => ({ ...prev, open: false }))}
+      />
 
       {deleting && (
         <ConfirmDialog
