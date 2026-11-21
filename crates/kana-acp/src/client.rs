@@ -16,7 +16,7 @@ use tokio::{
 };
 
 use crate::{
-    agents::AgentSpec,
+    agents::{AgentSpec, effective_command},
     auth::AuthMethod,
     error::AcpError,
     event::AcpEvent,
@@ -120,8 +120,9 @@ impl AcpClient {
         mcp: &[McpServerConfig],
         resume_session_id: Option<&str>,
     ) -> Result<(Self, mpsc::UnboundedReceiver<AcpEvent>), AcpError> {
-        let mut child = Command::new(&spec.command)
-            .args(&spec.args)
+        let (program, args) = effective_command(spec, cwd);
+        let mut child = Command::new(&program)
+            .args(&args)
             .envs(spec.env.iter().map(|(name, value)| (name, value)))
             .current_dir(cwd)
             .stdin(Stdio::piped())
