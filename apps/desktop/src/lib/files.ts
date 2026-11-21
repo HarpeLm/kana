@@ -34,6 +34,52 @@ export interface FilePreview {
   text: string;
 }
 
+export interface CodeDiagnostic {
+  file: string;
+  line: number;
+  column: number;
+  severity: "error" | "warning" | "info";
+  code?: string | null;
+  message: string;
+  source: string;
+}
+
+const SAMPLE_DIAGNOSTICS: CodeDiagnostic[] = [
+  {
+    file: "crates/kana-acp/src/client.rs",
+    line: 54,
+    column: 12,
+    severity: "error",
+    code: "E0308",
+    message: "mismatched types: expected `Result<SessionId, AcpError>`, found `Option<String>`",
+    source: "rustc",
+  },
+  {
+    file: "apps/desktop/src/App.tsx",
+    line: 60,
+    column: 9,
+    severity: "error",
+    code: "TS2322",
+    message: "Type 'string | undefined' is not assignable to type 'string'.",
+    source: "tsc",
+  },
+  {
+    file: "crates/kana-git/src/lib.rs",
+    line: 18,
+    column: 5,
+    severity: "warning",
+    code: "unused_imports",
+    message: "unused import: `std::collections::BTreeMap`",
+    source: "rustc",
+  },
+];
+
+/** Charge les diagnostics compilateur et LSP (`rustc`, `cargo`, `tsc`) du dépôt. */
+export function loadDiagnostics(root?: string): Promise<CodeDiagnostic[]> {
+  if (inTauri) return invoke("git_diagnostics", { path: root ?? null });
+  return Promise.resolve(SAMPLE_DIAGNOSTICS);
+}
+
 // Dans un navigateur sans Tauri : quelques fichiers d'exemple, modifiables en mémoire.
 const SAMPLE_FILES = [
   "artefacts/plan.html",
