@@ -26,8 +26,8 @@ interface ArtifactDockProps {
 
 function MenuItem({ icon, children, onClick, trailing }: { icon: ReactNode; children: ReactNode; onClick: () => void; trailing?: ReactNode }) {
   return (
-    <button onClick={onClick} className="flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-[15px] text-[#e8e7e1] transition hover:bg-[#3a3a37]">
-      <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center text-[#c4c3bb]">{icon}</span>
+    <button onClick={onClick} className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px] text-[#e8e7e1] transition hover:bg-[#3a3a37]">
+      <span className="flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#c4c3bb]">{icon}</span>
       <span className="flex-1 truncate">{children}</span>
       {trailing}
     </button>
@@ -96,17 +96,17 @@ export default function ArtifactDock({ openRequest, known, root, visible, maximi
           <div className="relative min-w-0" ref={menuRef}>
             <button
               onClick={() => setMenu((v) => !v)}
-              className="flex h-8 max-w-full items-center gap-1.5 rounded-lg px-2.5 text-[15px] text-[#ecebe5] transition hover:bg-[#2b2b29]"
+              className="flex h-8 max-w-full items-center gap-1.5 rounded-lg px-2.5 text-[14px] text-[#ecebe5] transition hover:bg-[#2b2b29]"
             >
               <span className="truncate">{path ? artifactTitle(path) : "Artéfacts"}</span>
               <ChevronDown className="h-4 w-4 shrink-0 text-[#8c8b83]" strokeWidth={1.8} />
             </button>
 
             {menu && (
-              <div className="absolute left-0 top-full z-50 mt-1.5 w-[300px] rounded-2xl border border-[#3a3a37] bg-[#2d2d2b] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.55)]">
+              <div className="absolute left-0 top-full z-50 mt-1.5 w-[250px] rounded-xl border border-[#3a3a37] bg-[#2d2d2b] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.55)]">
                 <div className="relative">
                   <MenuItem
-                    icon={<Copy className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+                    icon={<Copy className="h-[16px] w-[16px]" strokeWidth={1.6} />}
                     onClick={() => setSubmenu((v) => !v)}
                     trailing={
                       <>
@@ -126,7 +126,7 @@ export default function ArtifactDock({ openRequest, known, root, visible, maximi
                             files.open(choice, true);
                             closeMenu();
                           }}
-                          className="flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-[15px] text-[#e8e7e1] hover:bg-[#3a3a37]"
+                          className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px] text-[#e8e7e1] hover:bg-[#3a3a37]"
                         >
                           <span className="flex-1 truncate">{artifactTitle(choice)}</span>
                           {choice === path && <Check className="h-4 w-4 text-[#8ab4f8]" strokeWidth={2} />}
@@ -136,13 +136,13 @@ export default function ArtifactDock({ openRequest, known, root, visible, maximi
                   )}
                 </div>
                 <div className="mx-2 my-1.5 h-px bg-[#41413d]" />
-                {updatedAt && <p className="px-3 py-1 text-[14px] text-[#8c8b83]">Mise à jour : {relativeTime(updatedAt).toLowerCase()}</p>}
-                <MenuItem icon={<Download className="h-[18px] w-[18px]" strokeWidth={1.6} />} onClick={exportFile}>
+                {updatedAt && <p className="px-2.5 py-1 text-[13px] text-[#8c8b83]">Mise à jour : {relativeTime(updatedAt).toLowerCase()}</p>}
+                <MenuItem icon={<Download className="h-[16px] w-[16px]" strokeWidth={1.6} />} onClick={exportFile}>
                   Exporter
                 </MenuItem>
                 {path && hasRenderedView(path) && (
                   <MenuItem
-                    icon={<Code2 className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+                    icon={<Code2 className="h-[16px] w-[16px]" strokeWidth={1.6} />}
                     onClick={() => {
                       setSourcePaths((current) => {
                         const next = new Set(current);
@@ -156,7 +156,7 @@ export default function ArtifactDock({ openRequest, known, root, visible, maximi
                   </MenuItem>
                 )}
                 <MenuItem
-                  icon={<Copy className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+                  icon={<Copy className="h-[16px] w-[16px]" strokeWidth={1.6} />}
                   onClick={() => {
                     if (path) void navigator.clipboard?.writeText(path).catch(() => {});
                     closeMenu();
@@ -165,7 +165,7 @@ export default function ArtifactDock({ openRequest, known, root, visible, maximi
                   Copier le chemin
                 </MenuItem>
                 <MenuItem
-                  icon={<RefreshCw className="h-[18px] w-[18px]" strokeWidth={1.6} />}
+                  icon={<RefreshCw className="h-[16px] w-[16px]" strokeWidth={1.6} />}
                   onClick={() => {
                     if (path) void files.reload(path);
                     closeMenu();
