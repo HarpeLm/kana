@@ -212,7 +212,7 @@ export default function ChatView({
   if (chat.messages.length === 0 && !chat.busy) {
     return (
       <main className="flex flex-1 flex-col justify-center overflow-y-auto pb-14">
-        <NewSessionCenter session={newSession} />
+        <NewSessionCenter />
         {relayBanner && <RelayBanner {...relayBanner} />}
         <Composer
           agentLabel={agentLabel}
