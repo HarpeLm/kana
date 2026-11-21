@@ -20,6 +20,7 @@ interface SearchPaletteProps {
   onOpenConversation: (id: string) => void;
   artifacts: ArtifactEntry[];
   onOpenArtifact: (item: ArtifactEntry) => void;
+  onArtifactMenu: (item: ArtifactEntry, x: number, y: number) => void;
   onCreate: () => void;
   onOpenSettings: () => void;
   onClose: () => void;
@@ -30,6 +31,7 @@ export default function SearchPalette({
   conversations,
   artifacts,
   onOpenArtifact,
+  onArtifactMenu,
   onOpenConversation,
   onCreate,
   onOpenSettings,
@@ -161,6 +163,14 @@ export default function SearchPalette({
                     active={at === index}
                     onHover={() => setIndex(at)}
                     onChoose={() => choose(item)}
+                    onContextMenu={
+                      item.artifact
+                        ? (e) => {
+                            e.preventDefault();
+                            onArtifactMenu(item.artifact!, e.clientX, e.clientY);
+                          }
+                        : undefined
+                    }
                   />
                 );
               })}
