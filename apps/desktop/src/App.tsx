@@ -23,6 +23,7 @@ import { clearProblem, markProblem, recordTokens, recordTurn } from "./lib/usage
 import { isArtifactPath } from "./lib/fileKinds";
 import { ARTIFACT_GUIDE } from "./lib/agentGuide";
 import { OpenArtifactContext } from "./lib/artifactRefs";
+import { OpenFileContext } from "./lib/fileRefs";
 import { buildForkContext } from "./lib/fork";
 import { stopAgent } from "./lib/acp";
 import { createWorktree, removeWorktree } from "./lib/worktree";
@@ -213,6 +214,18 @@ export default function App({ startup }: { startup: Startup }) {
   const openFile = (path: string) => {
     setFileRequest((r) => ({ id: (r?.id ?? 0) + 1, path }));
     setShowArtDock(true);
+  };
+
+  // Un fichier local cité par l'agent s'ouvre dans le volet Fichiers (chemin relatif au dossier de travail).
+  const [filesRequest, setFilesRequest] = useState<{ id: number; path: string } | null>(null);
+  const openLocalFile = (raw: string) => {
+    let path = raw;
+    for (const base of [workPath, selected.projectPath]) {
+      if (base && base !== "none" && path.startsWith(`${base}/`)) path = path.slice(base.length + 1);
+    }
+    path = path.replace(/^\.\//, "");
+    setFilesRequest((r) => ({ id: (r?.id ?? 0) + 1, path }));
+    setShowFiles(true);
   };
 
   // Tous les artéfacts : relus quand on ouvre la galerie ou la recherche.
@@ -482,6 +495,7 @@ export default function App({ startup }: { startup: Startup }) {
         ) : view === "workspace" ? (
           <div className="flex flex-1 overflow-hidden">
             <OpenArtifactContext.Provider value={openFile}>
+            <OpenFileContext.Provider value={openLocalFile}>
             <ChatView
               agentLabel={agentLabel}
               chat={chat}
@@ -512,6 +526,7 @@ export default function App({ startup }: { startup: Startup }) {
                 </>
               }
             />
+            </OpenFileContext.Provider>
             </OpenArtifactContext.Provider>
             {showRightPanel && (
               <SessionPanel
@@ -558,6 +573,7 @@ export default function App({ startup }: { startup: Startup }) {
           // Un autre dossier de travail repart d'un volet neuf : ses fichiers ouverts ne sont pas les mêmes.
           key={workPath ?? "depot"}
           root={workPath}
+          openRequest={filesRequest}
           visible={showFiles && !terminalFills}
           maximized={filesMaximized}
           width={filesPanel.width}
