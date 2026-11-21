@@ -96,3 +96,68 @@ test("une nouvelle conversation reçoit un titre propre dès le premier message"
   await box.press("Enter");
   await expect(page.getByText("Dire ceque l'on a fait pour l'instant").first()).toBeVisible();
 });
+
+test("le chat : un message, la réponse de l'agent, puis /compact remplacé par une ligne", async ({ page }) => {
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+  const box = page.getByRole("textbox").last();
+  await box.fill("Bonjour Kana");
+  await box.press("Enter");
+  await expect(page.getByText("Bonjour Kana").first()).toBeVisible();
+  await expect(page.getByText(/agent simulé/)).toBeVisible();
+
+  // La réponse à /compact n'est pas montrée : une seule ligne grise la remplace.
+  await box.fill("/compact");
+  await box.press("Enter");
+  await expect(page.getByText("Session compactée", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Tu as écrit « \/compact »/)).toHaveCount(0);
+});
+
+test("le chat : une conversation vide invite à écrire et la saisie est vidée après l'envoi", async ({ page }) => {
+  await nav(page).getByRole("button", { name: "Créer" }).click();
+  const box = page.getByRole("textbox").last();
+  await box.fill("Salut");
+  await box.press("Enter");
+  await expect(box).toHaveValue("");
+});
+
+/** Ouvre l'artéfact « Plan » dans son volet, via la recherche. */
+async function openPlan(page: Page) {
+  await nav(page).getByRole("button", { name: "Rechercher" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rechercher" });
+  await dialog.getByRole("tab", { name: "Artéfacts" }).click();
+  await dialog.getByRole("option", { name: /Plan/ }).click();
+  const frame = page.frameLocator("iframe[title='Page']");
+  await expect(frame.getByText("Plan de la refonte")).toBeVisible();
+  return frame;
+}
+
+/** Affiche le code de la page, pour vérifier ce qui a été réellement écrit dans le fichier. */
+async function showCode(page: Page) {
+  // Le titre du volet (et pas le bouton « Plan et tâches » de l'en-tête).
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await page.getByText("Afficher le code").click();
+  return page.locator(".cm-content");
+}
+
+test("l'éditeur d'artéfacts : un texte modifié sur place est enregistré tout seul dans le fichier", async ({ page }) => {
+  const frame = await openPlan(page);
+  await frame.getByText("Dessiner trois maquettes différentes").click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" (version corrigée)");
+  // Enregistrement automatique : un instant après la dernière frappe.
+  await page.waitForTimeout(1500);
+  const code = await showCode(page);
+  await expect(code).toContainText("Dessiner trois maquettes différentes (version corrigée)");
+  // Le reste de la page, script compris, est conservé tel quel.
+  await expect(code).toContainText("Ajouté par un script");
+});
+
+test("l'éditeur d'artéfacts : supprimer une ligne puis annuler", async ({ page }) => {
+  const frame = await openPlan(page);
+  const line = frame.getByText("Choisir une maquette avec l'équipe");
+  await line.hover();
+  await frame.locator("#kana-trash").click();
+  await expect(line).toHaveCount(0);
+  await page.getByRole("button", { name: "Annuler" }).click();
+  await expect(frame.getByText("Choisir une maquette avec l'équipe")).toBeVisible();
+});
