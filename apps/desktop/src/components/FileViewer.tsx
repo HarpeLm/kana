@@ -12,6 +12,8 @@ interface FileViewerProps {
   onSave: (path: string) => void;
   onOverwrite: (path: string) => void;
   onReload: (path: string) => void;
+  /** Une ligne à montrer dans un fichier (lien « fichier:42 »). */
+  goTo?: { id: number; path: string; line: number } | null;
   /** Un commentaire sur un passage d'une page : à transmettre à l'agent. */
   onComment?: (path: string, note: { comment: string; html: string; text: string; heading: string }) => void;
 }
@@ -27,6 +29,7 @@ export default function FileViewer({
   onOverwrite,
   onReload,
   onComment,
+  goTo,
 }: FileViewerProps) {
   if (tabs.length === 0) {
     return (
@@ -57,6 +60,7 @@ export default function FileViewer({
                 onSave={() => onSave(tab.path)}
                 onOverwrite={() => onOverwrite(tab.path)}
                 onReload={() => onReload(tab.path)}
+                goTo={goTo && goTo.path === tab.path ? goTo : null}
                 onComment={onComment && ((note) => onComment(tab.path, note))}
               />
             )}
