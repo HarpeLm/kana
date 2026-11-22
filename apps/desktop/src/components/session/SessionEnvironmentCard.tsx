@@ -190,24 +190,6 @@ export default function SessionEnvironmentCard({
         )}
       </div>
 
-      {envKind === "local" && (
-        <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1 text-[12.5px] text-[#cfcec6] hover:bg-[#2a2a28]">
-          <input
-            type="checkbox"
-            checked={!!env.sandbox}
-            onChange={(e) =>
-              onChangeEnvironment({
-                kind: "local",
-                sandbox: e.target.checked,
-                readOnly: env.readOnly,
-              })
-            }
-            className="h-3.5 w-3.5 accent-[#2563eb]"
-          />
-          <span>Sandbox OS isolé</span>
-        </label>
-      )}
-
       {envKind === "ssh" && (
         <input
           type="text"
