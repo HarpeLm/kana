@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useClickOutside } from "../hooks/useClickOutside";
 import type { Conversation } from "../lib/conversations";
 import type { ConversationActions } from "./conversationActions";
 import ConversationMenuItem, { MenuDivider } from "./ConversationMenuItem";
@@ -29,6 +31,7 @@ export default function ConversationMenu({
   onClose,
 }: ConversationMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(ref, true, onClose);
   const [position, setPosition] = useState({ top: anchor.bottom + GAP, left: anchor.left });
   const [sectionsOpen, setSectionsOpen] = useState(false);
   const id = conversation.id;
@@ -76,11 +79,11 @@ export default function ConversationMenu({
 
   const otherSections = sections.filter((s) => s !== conversation.project);
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       style={{ position: "fixed", ...position }}
-      className="z-50 w-[220px] rounded-xl border border-[#3a3a37] bg-[#2b2b29] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.55)]"
+      className="z-50 w-[220px] rounded-xl border border-white/[0.09] bg-[#1e1f22]/90 p-1.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_34px_rgba(0,0,0,0.6)]"
     >
       <ConversationMenuItem
         label={conversation.pinned ? "Désépingler" : "Épingler"}
@@ -148,6 +151,7 @@ export default function ConversationMenu({
         onClick={run(() => actions.onDelete(id))}
         onMouseEnter={() => setSectionsOpen(false)}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
