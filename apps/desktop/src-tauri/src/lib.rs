@@ -52,6 +52,7 @@ pub fn run() {
             project_commands::create_project,
             project_commands::scratch_dir,
             project_commands::describe_folder,
+            project_commands::reveal_in_finder,
             worktree_commands::create_worktree,
             worktree_commands::remove_worktree,
             worktree_commands::merge_worktree,
