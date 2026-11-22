@@ -13,6 +13,8 @@ interface ConversationMenuProps {
   actions: ConversationActions;
   /** Rectangle du bouton (ou point du clic droit) qui a ouvert le menu : le menu s'y aligne. */
   anchor: DOMRect;
+  /** Lecture en direct du rectangle d'ancrage, pour que le menu suive le défilement ou le redimensionnement. */
+  getAnchor?: () => DOMRect | null;
   /** Faux pour la conversation ouverte : on ne la marque pas « non lue » pendant qu'on la lit. */
   canMarkUnread: boolean;
   onClose: () => void;
@@ -27,6 +29,7 @@ export default function ConversationMenu({
   sections,
   actions,
   anchor,
+  getAnchor,
   canMarkUnread,
   onClose,
 }: ConversationMenuProps) {
@@ -35,16 +38,45 @@ export default function ConversationMenu({
   const [position, setPosition] = useState({ top: anchor.bottom + GAP, left: anchor.left });
   const [sectionsOpen, setSectionsOpen] = useState(false);
   const id = conversation.id;
+  const getAnchorRef = useRef(getAnchor);
+  getAnchorRef.current = getAnchor;
 
-  // Une fois mesuré : sous le bouton s'il y a la place, sinon au-dessus ; toujours dans la fenêtre.
+  // Une fois mesuré : sous le bouton s'il y a la place, sinon au-dessus ; suit l'ancre en temps réel.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const fitsBelow = anchor.bottom + GAP + el.offsetHeight <= window.innerHeight - EDGE;
-    setPosition({
-      top: fitsBelow ? anchor.bottom + GAP : Math.max(EDGE, anchor.top - GAP - el.offsetHeight),
-      left: Math.min(Math.max(EDGE, anchor.left), window.innerWidth - el.offsetWidth - EDGE),
-    });
+
+    const computePos = (rect: DOMRect) => {
+      const fitsBelow = rect.bottom + GAP + el.offsetHeight <= window.innerHeight - EDGE;
+      return {
+        top: fitsBelow ? rect.bottom + GAP : Math.max(EDGE, rect.top - GAP - el.offsetHeight),
+        left: Math.min(Math.max(EDGE, rect.left), window.innerWidth - el.offsetWidth - EDGE),
+      };
+    };
+
+    const initial = computePos(getAnchorRef.current?.() ?? anchor);
+    setPosition(initial);
+    el.style.top = `${initial.top}px`;
+    el.style.left = `${initial.left}px`;
+
+    let frame = 0;
+    let lastTop = initial.top;
+    let lastLeft = initial.left;
+
+    const track = () => {
+      const rect = getAnchorRef.current?.() ?? anchor;
+      const next = computePos(rect);
+      if (Math.abs(next.top - lastTop) >= 0.25 || Math.abs(next.left - lastLeft) >= 0.25) {
+        lastTop = next.top;
+        lastLeft = next.left;
+        el.style.top = `${next.top}px`;
+        el.style.left = `${next.left}px`;
+      }
+      frame = window.requestAnimationFrame(track);
+    };
+
+    frame = window.requestAnimationFrame(track);
+    return () => window.cancelAnimationFrame(frame);
   }, [anchor]);
 
   const run = (action: () => void) => () => {
