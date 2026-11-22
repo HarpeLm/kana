@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronRight } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
@@ -13,6 +13,8 @@ import {
 interface SidebarViewMenuProps {
   /** Le bouton qui a ouvert le menu : le menu se pose dessous, par-dessus le reste de l'app. */
   anchor: DOMRect;
+  /** Élément d'ancrage pour suivre en direct le défilement ou le redimensionnement de la barre latérale. */
+  anchorEl?: HTMLElement | null;
   view: SidebarView;
   onChange: (view: SidebarView) => void;
   onReset: () => void;
@@ -36,10 +38,33 @@ function Option({ label, selected, onClick }: { label: string; selected: boolean
 }
 
 /** Menu d'affichage de la liste : regrouper, trier, filtrer, nouvelle section, tout déplier. */
-export default function SidebarViewMenu({ anchor, view, onChange, onReset, onNewSection, onShowAll, onClose }: SidebarViewMenuProps) {
+export default function SidebarViewMenu({
+  anchor,
+  anchorEl,
+  view,
+  onChange,
+  onReset,
+  onNewSection,
+  onShowAll,
+  onClose,
+}: SidebarViewMenuProps) {
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<Open>(null);
   useClickOutside(root, true, onClose);
+
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el || !anchorEl) return;
+    let frame = 0;
+    const track = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      el.style.left = `${Math.max(8, rect.left - 4)}px`;
+      el.style.top = `${rect.bottom + 6}px`;
+      frame = window.requestAnimationFrame(track);
+    };
+    frame = window.requestAnimationFrame(track);
+    return () => window.cancelAnimationFrame(frame);
+  }, [anchorEl]);
 
   // Le sous-menu s'ouvre sur le côté dès qu'on survole la ligne, sans clic.
   const row = (key: Exclude<Open, null>, title: string, value: string, options: ReactNode) => (
