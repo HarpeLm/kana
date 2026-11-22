@@ -493,10 +493,9 @@ test("sessionPanel : mémoire projet, environnement distant/sandbox et sous-agen
   const memory = await page.evaluate(() => JSON.parse(localStorage.getItem("kana-project-memory") ?? "{}"));
   expect(memory["/tmp/kana"]).toEqual(["Toujours lancer cargo test"]);
 
-  // Environnement : sandbox OS puis SSH distant
-  const sandboxCheckbox = panel.getByLabel("Sandbox OS isolé");
-  await sandboxCheckbox.check();
-  await expect(sandboxCheckbox).toBeChecked();
+  // Environnement : plus de case « Sandbox OS isolé », la branche Git s'affiche à la place
+  await expect(panel.getByLabel("Sandbox OS isolé")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: /main|kana\// })).toBeVisible();
 
   await panel.getByRole("button", { name: /Environnement d'exécution/ }).click();
   await panel.getByRole("menuitem", { name: "SSH distant" }).click();
