@@ -1,7 +1,6 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import type { Conversation } from "../lib/conversations";
-import { useClickOutside } from "../hooks/useClickOutside";
 import type { ConversationActions } from "./conversationActions";
 import ConversationMenu from "./ConversationMenu";
 import RenameInput from "./RenameInput";
@@ -23,9 +22,7 @@ export default function ConversationRow({
 }: ConversationRowProps) {
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const menuOpen = menuAnchor !== null;
-  const ref = useRef<HTMLDivElement>(null);
   const closeMenu = () => setMenuAnchor(null);
-  useClickOutside(ref, menuOpen, closeMenu);
 
   if (editing) {
     return (
@@ -39,7 +36,6 @@ export default function ConversationRow({
 
   return (
     <div
-      ref={ref}
       className="group relative"
       draggable
       onDragStart={(e) => {
