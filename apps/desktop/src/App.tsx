@@ -182,7 +182,7 @@ export default function App({ startup }: { startup: Startup }) {
     onRemoveProject: (project: Project) => projectList.remove(project.path),
     onToggleWorktree: (value: boolean) => setUseWorktree(selected.id, value),
     onOpenAdvisor: () => crossReview.openAdvisor(""),
-    onOpenGlobe: () => docks.setShowBrowser(true),
+    onOpenGlobe: docks.openBrowser,
     onOpenRelay: () => setView("relay"),
   };
 
@@ -616,7 +616,7 @@ export default function App({ startup }: { startup: Startup }) {
                   onCompact={compactSession}
                   canCompact={!chat.busy && chat.messages.length > 0}
                   onOpenFile={openFile}
-                  onOpenTerminal={() => docks.setShowTerminal(true)}
+                  onOpenTerminal={docks.openTerminal}
                   onArtifactMenu={(path, x, y) => setArtifactMenu({ x, y, root: workPath, path })}
                   onOpenFolder={() => void openFolder()}
                   canAddFolder={!chat.busy}
