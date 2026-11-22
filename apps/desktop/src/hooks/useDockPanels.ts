@@ -97,6 +97,16 @@ export function useDockPanels() {
     setTerminalOpened(true);
   };
 
+  const openTerminal = () => {
+    setShowTerminal(true);
+    setTerminalOpened(true);
+  };
+
+  const openBrowser = () => {
+    setShowBrowser(true);
+    setBrowserOpened(true);
+  };
+
   return {
     showSidebar,
     setShowSidebar,
@@ -138,5 +148,7 @@ export function useDockPanels() {
     openRequest,
     openInGlobe,
     toggleTerminal,
+    openTerminal,
+    openBrowser,
   };
 }
