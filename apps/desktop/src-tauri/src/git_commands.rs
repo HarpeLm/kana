@@ -11,6 +11,17 @@ fn start_dir(path: Option<String>) -> Result<PathBuf, String> {
         .ok_or_else(|| "dossier de départ introuvable".to_string())
 }
 
+/// Dossier racine pour la lecture, l'écriture et le listage de fichiers (y compris les artéfacts) :
+/// le dossier demandé, sinon le dossier neutre `~/.kana/scratch` utilisé quand aucun dossier n'est associé.
+fn file_dir(path: Option<String>) -> Result<PathBuf, String> {
+    if let Some(p) = path.filter(|s| !s.trim().is_empty() && s.trim() != "none") {
+        return Ok(PathBuf::from(p));
+    }
+    let scratch = crate::agent_spec::default_cwd().join(".kana").join("scratch");
+    std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
+    Ok(scratch)
+}
+
 /// Les changements du dépôt.
 #[tauri::command]
 pub async fn git_diff(path: Option<String>) -> Result<DiffReport, String> {
@@ -21,27 +32,27 @@ pub async fn git_diff(path: Option<String>) -> Result<DiffReport, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Les fichiers du dépôt (ceux que `.gitignore` écarte sont exclus).
+/// Les fichiers du dépôt (ceux que `.gitignore` écarte sont exclus), ou du dossier neutre.
 #[tauri::command]
 pub async fn repo_files(path: Option<String>) -> Result<FileList, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        kana_git::list_files(&start_dir(path)?).map_err(|e| e.to_string())
+        kana_git::list_files(&file_dir(path)?).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-/// Le début d'un fichier du dépôt, pour l'aperçu.
+/// Le début d'un fichier du dépôt ou du dossier neutre, pour l'aperçu.
 #[tauri::command]
 pub async fn read_repo_file(path: Option<String>, file: String) -> Result<FilePreview, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        kana_git::read_preview(&start_dir(path)?, &file).map_err(|e| e.to_string())
+        kana_git::read_preview(&file_dir(path)?, &file).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-/// Enregistre un fichier existant du dépôt. Si `expected_modified` ne correspond plus à la date du
+/// Enregistre un fichier existant du dépôt ou du dossier neutre. Si `expected_modified` ne correspond plus à la date du
 /// fichier, rien n'est écrit : il a été modifié ailleurs. Renvoie la nouvelle date de modification.
 #[tauri::command]
 pub async fn write_repo_file(
@@ -51,7 +62,7 @@ pub async fn write_repo_file(
     expected_modified: Option<u64>,
 ) -> Result<u64, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        kana_git::write_text(&start_dir(path)?, &file, &content, expected_modified)
+        kana_git::write_text(&file_dir(path)?, &file, &content, expected_modified)
             .map_err(|e| e.to_string())
     })
     .await
@@ -104,11 +115,11 @@ pub async fn git_remote_url(path: Option<String>) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Met un fichier du dépôt à la corbeille.
+/// Met un fichier du dépôt ou du dossier neutre à la corbeille.
 #[tauri::command]
 pub async fn delete_repo_file(path: Option<String>, file: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        kana_git::trash_file(&start_dir(path)?, &file).map_err(|e| e.to_string())
+        kana_git::trash_file(&file_dir(path)?, &file).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
