@@ -5,7 +5,7 @@ import { skillsAsCommands, useExtensibilityVersion } from "../lib/extensibility"
 import type { PermissionMode } from "../lib/permissionMode";
 import ChatMessages from "./ChatMessages";
 import Composer from "./Composer";
-import { EnvironmentRow, NewSessionCenter, NewSessionQuickActions, type NewSessionProps } from "./NewSession";
+import { EnvironmentRow, NewSessionCenter, type NewSessionProps } from "./NewSession";
 import PermissionPrompt from "./PermissionPrompt";
 import RelayBanner, { type RelayBannerProps } from "./RelayBanner";
 
@@ -208,52 +208,55 @@ export default function ChatView({
     onSend(PLAN_APPROVAL_PROMPT);
   };
 
-  // Une conversation vide centre l'accroche et le Composer au milieu de l'écran (style Codex / Antigravity).
-  if (chat.messages.length === 0 && !chat.busy) {
-    return (
-      <main className="flex flex-1 flex-col justify-center overflow-y-auto pb-14">
-        <NewSessionCenter />
-        {relayBanner && <RelayBanner {...relayBanner} />}
-        <Composer
-          agentLabel={agentLabel}
-          busy={chat.busy}
-          commands={mergedCommands}
-          queued={chat.queued}
-          onSend={onSend}
-          onStop={onStop}
-          onRemoveQueued={onRemoveQueued}
-          onSteerQueued={onSteerQueued}
-          workPath={workPath}
-          mode={mode}
-          onModeChange={onModeChange}
-          footerLeft={<EnvironmentRow session={newSession} />}
-          modelPicker={modelPicker}
-          placeholder="Décrivez une tâche ou posez une question."
-          onOpenExtensibility={onOpenExtensibility}
-        />
-        <NewSessionQuickActions session={newSession} onSend={onSend} />
-      </main>
-    );
-  }
-
-  const canApprovePlan = mode === "plan" && !chat.busy && chat.messages.some((m) => m.role === "agent");
-  const detectedQuestion = extractStructuredQuestion(chat.messages, chat.busy);
+  const isEmpty = chat.messages.length === 0 && !chat.busy;
+  const canApprovePlan = !isEmpty && mode === "plan" && !chat.busy && chat.messages.some((m) => m.role === "agent");
+  const detectedQuestion = !isEmpty ? extractStructuredQuestion(chat.messages, chat.busy) : null;
   const activeQuestion =
     detectedQuestion && !dismissedQuestions.has(detectedQuestion.messageId) ? detectedQuestion : null;
 
+  // Un seul arbre persistant : le Composer glisse fluidement du centre vers le bas sans jamais se démonter.
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
-      <ChatMessages
-        messages={chat.messages}
-        agentLabel={agentLabel}
-        onOpenLink={onOpenLink}
-        busy={chat.busy}
-        onSend={onSend}
-        onFork={onFork}
-        onRewind={onRewind}
+      {/* Zone messages (vide et repliée au démarrage, puis occupe tout l'espace en douceur) */}
+      <div
+        className={`flex min-h-0 flex-col transition-[flex-grow,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          isEmpty ? "grow-0 basis-0 overflow-hidden opacity-0" : "flex-1 opacity-100"
+        }`}
+      >
+        {!isEmpty && (
+          <ChatMessages
+            messages={chat.messages}
+            agentLabel={agentLabel}
+            onOpenLink={onOpenLink}
+            busy={chat.busy}
+            onSend={onSend}
+            onFork={onFork}
+            onRewind={onRewind}
+          />
+        )}
+      </div>
+
+      {/* Espaceur supérieur pour centrer le Composer quand la session est vide */}
+      <div
+        aria-hidden="true"
+        className={`transition-[flex-grow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          isEmpty ? "flex-1" : "grow-0 basis-0"
+        }`}
       />
 
-      {chat.permissions.length > 0 && (
+      {/* Accroche de bienvenue : s'estompe et se replie doucement dès le premier message */}
+      <div
+        aria-hidden={!isEmpty}
+        className={`overflow-hidden transition-[max-height,opacity,transform] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          isEmpty
+            ? "max-h-[220px] translate-y-0 opacity-100"
+            : "pointer-events-none max-h-0 -translate-y-4 opacity-0"
+        }`}
+      >
+        <NewSessionCenter />
+      </div>
+
+      {!isEmpty && chat.permissions.length > 0 && (
         <div className="px-6 pb-2">
           <div className="mx-auto max-w-[740px] space-y-2">
             {chat.permissions.map((request) => (
@@ -324,8 +327,18 @@ export default function ChatView({
         workPath={workPath}
         mode={mode}
         onModeChange={onModeChange}
+        footerLeft={isEmpty ? <EnvironmentRow session={newSession} /> : undefined}
         modelPicker={modelPicker}
+        placeholder={isEmpty ? "Décrivez une tâche ou posez une question." : undefined}
         onOpenExtensibility={onOpenExtensibility}
+      />
+
+      {/* Espaceur inférieur qui se rétracte fluidement pour faire descendre le Composer en bas */}
+      <div
+        aria-hidden="true"
+        className={`transition-[flex-grow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          isEmpty ? "flex-[1.15]" : "grow-0 basis-0"
+        }`}
       />
     </main>
   );
