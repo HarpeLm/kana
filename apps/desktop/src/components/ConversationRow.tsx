@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import type { Conversation } from "../lib/conversations";
 import type { ConversationActions } from "./conversationActions";
@@ -13,6 +13,10 @@ interface ConversationRowProps {
   actions: ConversationActions;
 }
 
+type MenuAnchorState =
+  | { kind: "button"; initial: DOMRect }
+  | { kind: "context"; initial: DOMRect; rightInset: number; topOffset: number };
+
 export default function ConversationRow({
   conversation,
   selected,
@@ -20,7 +24,9 @@ export default function ConversationRow({
   sections,
   actions,
 }: ConversationRowProps) {
-  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const [menuAnchor, setMenuAnchor] = useState<MenuAnchorState | null>(null);
   const menuOpen = menuAnchor !== null;
   const closeMenu = () => setMenuAnchor(null);
 
@@ -36,6 +42,7 @@ export default function ConversationRow({
 
   return (
     <div
+      ref={rowRef}
       className="group relative"
       draggable
       onDragStart={(e) => {
@@ -44,9 +51,16 @@ export default function ConversationRow({
         e.dataTransfer.effectAllowed = "move";
       }}
       onContextMenu={(e) => {
-        // Clic droit ou clic à deux doigts : le menu s'ouvre à l'endroit du curseur.
+        // Clic droit ou clic à deux doigts : le menu s'ouvre à l'endroit du curseur et suit la ligne.
         e.preventDefault();
-        setMenuAnchor(new DOMRect(e.clientX, e.clientY, 0, 0));
+        const rowRect = rowRef.current?.getBoundingClientRect();
+        const initial = new DOMRect(e.clientX, e.clientY, 0, 0);
+        setMenuAnchor({
+          kind: "context",
+          initial,
+          rightInset: rowRect ? Math.max(0, rowRect.right - e.clientX) : 0,
+          topOffset: rowRect ? e.clientY - rowRect.top : 0,
+        });
       }}
     >
       <button
@@ -68,9 +82,14 @@ export default function ConversationRow({
       )}
 
       <button
+        ref={moreBtnRef}
         title="Plus"
         onClick={(e) =>
-          setMenuAnchor(menuOpen ? null : e.currentTarget.getBoundingClientRect())
+          setMenuAnchor(
+            menuOpen
+              ? null
+              : { kind: "button", initial: e.currentTarget.getBoundingClientRect() },
+          )
         }
         className={`absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[#c4c3bc] transition hover:bg-[#383835] ${
           selected || menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -84,7 +103,17 @@ export default function ConversationRow({
           conversation={conversation}
           sections={sections}
           actions={actions}
-          anchor={menuAnchor}
+          anchor={menuAnchor.initial}
+          getAnchor={() => {
+            if (menuAnchor.kind === "button") {
+              return moreBtnRef.current?.getBoundingClientRect() ?? menuAnchor.initial;
+            }
+            const rowRect = rowRef.current?.getBoundingClientRect();
+            if (!rowRect) return menuAnchor.initial;
+            const x = Math.max(rowRect.left, rowRect.right - menuAnchor.rightInset);
+            const y = rowRect.top + menuAnchor.topOffset;
+            return new DOMRect(x, y, 0, 0);
+          }}
           canMarkUnread={!selected}
           onClose={closeMenu}
         />
