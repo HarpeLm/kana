@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Check,
@@ -52,7 +53,7 @@ function ModalShell({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-[2px]"
       onMouseDown={(event) => {
@@ -63,9 +64,9 @@ function ModalShell({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-[85vh] w-full ${maxWidth} flex-col overflow-hidden rounded-2xl border border-[#383834] bg-[#1f1f1d] shadow-[0_24px_64px_rgba(0,0,0,0.65)]`}
+        className={`flex max-h-[85vh] w-full ${maxWidth} flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#1e1f22]/85 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_64px_rgba(0,0,0,0.65)]`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[#2d2d2a] px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-white/[0.07] px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#383834] bg-[#252523] text-[#60a5fa]">
               {icon}
@@ -86,7 +87,8 @@ function ModalShell({
         </div>
         <div className="overflow-y-auto px-5 py-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
