@@ -284,8 +284,11 @@ pub async fn install_adapter_cache(agent_id: String) -> Result<AdapterCacheInfo,
     std::fs::create_dir_all(&cache_dir)
         .map_err(|e| format!("impossible de créer le dossier de cache : {e}"))?;
 
-    let npm_cmd = if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" };
-    let mut cmd = tokio::process::Command::new(npm_cmd);
+    let npm_name = if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" };
+    let path_env = crate::agent_spec::enriched_path();
+    let npm_cmd = crate::agent_spec::resolve_command(npm_name, &path_env);
+    let mut cmd = tokio::process::Command::new(&npm_cmd);
+    cmd.env("PATH", &path_env);
     cmd.args([
         "install",
         "--prefix",
