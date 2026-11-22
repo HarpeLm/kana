@@ -1072,7 +1072,7 @@ export default function SettingsModal({
         role="dialog"
         aria-modal="true"
         aria-label={tr("Paramètres", "Settings", locale)}
-        className="flex h-[640px] max-h-[88vh] w-full max-w-[820px] overflow-hidden rounded-2xl border border-[#383834] bg-[#1f1f1d] text-[#ecebe4] shadow-2xl"
+        className="flex h-[640px] max-h-[88vh] w-full max-w-[820px] overflow-hidden rounded-2xl border border-white/[0.09] bg-[#1e1f22]/85 text-[#ecebe4] backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_64px_rgba(0,0,0,0.65)]"
       >
         {/* Barre latérale gauche */}
         <aside className="flex w-[210px] shrink-0 flex-col border-r border-[#2d2d2a] bg-[#1a1a18] p-3">
