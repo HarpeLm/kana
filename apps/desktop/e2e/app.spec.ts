@@ -708,11 +708,8 @@ test("recherche plein texte des messages et coûts estimés en $ dans SessionPan
 
   await page.getByRole("button", { name: "Plan et tâches" }).click();
   const panel = page.locator("aside").last();
-  await expect(panel.getByText("Coût session")).toBeVisible();
-  await expect(panel.getByText("Cache (lecture / écriture)")).toBeVisible();
-  await expect(panel.getByText("Coût projet")).toBeVisible();
-  await expect(panel.getByText("$0.0042").first()).toBeVisible();
-  await expect(panel.getByText("Coût du jour")).toBeVisible();
+  await expect(panel.getByText("Coût session")).toHaveCount(0);
+  await expect(panel.getByText("Coût du jour")).toHaveCount(0);
 
   await nav(page).getByRole("button", { name: "Rechercher" }).click();
   const dialog = page.getByRole("dialog", { name: "Rechercher" });
