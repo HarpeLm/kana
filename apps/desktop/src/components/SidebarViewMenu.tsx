@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronRight } from "lucide-react";
 import { useClickOutside } from "../hooks/useClickOutside";
 import {
@@ -61,11 +62,11 @@ export default function SidebarViewMenu({ anchor, view, onChange, onReset, onNew
 
   const plain = "flex w-full items-center rounded-lg px-3 py-1.5 text-left text-[13px] hover:bg-[#333331]";
 
-  return (
+  return createPortal(
     <div
       ref={root}
       style={{ left: Math.max(8, anchor.left - 4), top: anchor.bottom + 6 }}
-      className="fixed z-50 w-[280px] rounded-2xl border border-[#343432] bg-[#2a2a28] p-1 shadow-2xl"
+      className="fixed z-50 w-[280px] rounded-2xl border border-white/[0.09] bg-[#1e1f22]/90 p-1 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_16px_44px_rgba(0,0,0,0.6)]"
       onClick={(e) => e.stopPropagation()}
     >
       {row(
@@ -104,6 +105,7 @@ export default function SidebarViewMenu({ anchor, view, onChange, onReset, onNew
       <button className={`${plain} text-[#ecebe4]`} onMouseEnter={() => setOpen(null)} onClick={onShowAll}>
         Tout afficher
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
