@@ -259,8 +259,12 @@ export default function SessionPanel({
   const commits = summary?.commits ?? [];
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col p-3">
-      <div className={`flex min-h-0 flex-col overflow-hidden rounded-2xl bg-[#232321] ${anyFilled ? "flex-1" : ""}`}>
+    <aside className="flex w-[360px] shrink-0 flex-col p-2 pl-1">
+      <div
+        className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1e1f22]/75 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_32px_rgba(0,0,0,0.42)] ${
+          anyFilled ? "flex-1" : ""
+        }`}
+      >
         <div className={`flex min-h-0 flex-col overflow-y-auto p-4 ${anyFilled ? "flex-1" : ""}`}>
           <Section title="Environnement" compact>
             <SessionEnvironmentCard
