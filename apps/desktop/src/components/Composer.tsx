@@ -692,8 +692,10 @@ export default function Composer({
         )}
 
         <div
-          className={`flex items-end gap-2 rounded-[24px] border bg-[#232322] py-2 pl-2.5 pr-2.5 transition focus-within:border-[#454542] ${
-            dragging ? "border-dashed border-[#2f6bd8] bg-[#232a38]" : "border-[#2f2f2d]"
+          className={`flex items-end gap-2 rounded-[24px] border py-2 pl-2.5 pr-2.5 backdrop-blur-xl transition ${
+            dragging
+              ? "border-dashed border-[#3b82f6] bg-[#1e293b]/75"
+              : "border-white/[0.09] bg-[#1f2024]/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_28px_rgba(0,0,0,0.36)] focus-within:border-[#3b82f6]/55 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_0_1px_rgba(59,130,246,0.18),0_12px_32px_rgba(0,0,0,0.45)]"
           }`}
         >
           <PlusMenu
