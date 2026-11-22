@@ -53,12 +53,7 @@ export const DEFAULT_AGENT = "opencode";
 export const PINNED_GROUP = "Épinglés";
 export const ARCHIVED_GROUP = "Archivées";
 
-const SEED: Conversation[] = [
-  { id: "c1", title: "feat/acp-client", project: DEFAULT_PROJECT, agentId: "codex", pinned: false },
-  { id: "c2", title: "fix/failover-router", project: DEFAULT_PROJECT, agentId: "claude", pinned: false },
-  { id: "c3", title: "feat/sqlite-store", project: DEFAULT_PROJECT, agentId: "gemini", pinned: false },
-  { id: "c4", title: "chore/opencode-test", project: DEFAULT_PROJECT, agentId: "opencode", pinned: false },
-];
+const SEED: Conversation[] = [];
 
 export function makeConversation(project: string, agentId: string): Conversation {
   const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
