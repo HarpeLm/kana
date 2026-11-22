@@ -10,7 +10,7 @@ interface ConversationGroupProps {
   /** Nouvelle conversation directement dans ce dossier (bouton « + » au survol). */
   onCreate?: () => void;
   /** Ouvre le menu d'affichage de la liste (bouton au survol). */
-  onOpenViewMenu?: (anchor: DOMRect) => void;
+  onOpenViewMenu?: (anchor: DOMRect, anchorEl?: HTMLElement | null) => void;
   /** Le menu d'affichage, posé sous l'en-tête quand il est ouvert. */
   menu?: ReactNode;
   /** Reçoit des conversations glissées dessus. */
@@ -94,7 +94,7 @@ export default function ConversationGroup({
             data-nodrag
             title="Affichage"
             aria-label="Affichage de la liste"
-            onClick={(e) => onOpenViewMenu(e.currentTarget.getBoundingClientRect())}
+            onClick={(e) => onOpenViewMenu(e.currentTarget.getBoundingClientRect(), e.currentTarget)}
             className="flex h-6 w-6 items-center justify-center rounded-md text-[#8a8982] opacity-0 transition hover:bg-[#2b2b29] hover:text-[#ecebe4] group-hover/header:opacity-100 focus:opacity-100"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.7} />
