@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { artifactTitle } from "./artifactRefs";
 import type { Conversation } from "./conversations";
 import { loadFileList, loadFilePreview } from "./files";
-import { NO_PROJECT } from "./projects";
+import { NO_PROJECT, scratchDir } from "./projects";
 
 /** Une page d'artéfact trouvée dans le dossier `artefacts/` d'une conversation. */
 export interface ArtifactEntry {
@@ -23,21 +23,33 @@ const PAGE = /(^|\/)artefacts\/[^/]+\.html?$/i;
 const PER_ROOT = 40;
 
 /** Les dossiers où chercher : celui de chaque conversation, avec la conversation qui le représente. */
-function rootsOf(conversations: Conversation[]): Map<string, Conversation> {
+async function rootsOf(conversations: Conversation[]): Promise<Map<string, Conversation>> {
   const roots = new Map<string, Conversation>();
+  let scratchConversation: Conversation | undefined;
   for (const c of conversations) {
     if (c.archived) continue;
     const root = c.worktree ?? c.projectPath;
-    if (!root || root === NO_PROJECT || roots.has(root)) continue;
+    if (!root || root === NO_PROJECT) {
+      if (!scratchConversation) scratchConversation = c;
+      continue;
+    }
+    if (roots.has(root)) continue;
     roots.set(root, c);
+  }
+  if (scratchConversation) {
+    const scratch = await scratchDir().catch(() => undefined);
+    if (scratch && !roots.has(scratch)) {
+      roots.set(scratch, scratchConversation);
+    }
   }
   return roots;
 }
 
 async function scan(conversations: Conversation[]): Promise<ArtifactEntry[]> {
   const found: ArtifactEntry[] = [];
+  const roots = await rootsOf(conversations);
   await Promise.all(
-    [...rootsOf(conversations)].map(async ([root, conversation]) => {
+    [...roots].map(async ([root, conversation]) => {
       try {
         const list = await loadFileList(root);
         const pages = list.files.filter((f) => PAGE.test(f)).slice(0, PER_ROOT);
