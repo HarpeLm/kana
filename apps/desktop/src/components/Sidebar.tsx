@@ -64,7 +64,7 @@ export default function Sidebar({
   onOpenSignIn,
 }: SidebarProps) {
   const [listView, setListView] = useState<SidebarView>(loadView);
-  const [menuFor, setMenuFor] = useState<{ name: string; anchor: DOMRect } | null>(null);
+  const [menuFor, setMenuFor] = useState<{ name: string; anchor: DOMRect; anchorEl?: HTMLElement | null } | null>(null);
   const [expandSignal, setExpandSignal] = useState(0);
   const [newSection, setNewSection] = useState(false);
   const changeView = (next: SidebarView) => {
@@ -134,11 +134,14 @@ export default function Sidebar({
               lifted={movable.includes(group.name) && sectionDrag.styleOf(group.name).lifted}
               onDropConversation={isFolder(group.name) ? (id) => actions.onMoveToSection(id, group.name) : undefined}
               onCreate={isFolder(group.name) ? () => actions.onCreateIn(group.name) : undefined}
-              onOpenViewMenu={(anchor) => setMenuFor((open) => (open?.name === group.name ? null : { name: group.name, anchor }))}
+              onOpenViewMenu={(anchor, anchorEl) =>
+                setMenuFor((open) => (open?.name === group.name ? null : { name: group.name, anchor, anchorEl }))
+              }
               menu={
                 menuFor?.name === group.name ? (
                   <SidebarViewMenu
                     anchor={menuFor.anchor}
+                    anchorEl={menuFor.anchorEl}
                     view={listView}
                     onChange={changeView}
                     onReset={() => changeView(DEFAULT_VIEW)}
