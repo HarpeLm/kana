@@ -1,6 +1,6 @@
 import { makeConversation, SEED_CONVERSATIONS, type Conversation, DEFAULT_AGENT } from "./conversations";
 import { inTauri } from "./env";
-import { launchProject, loadProjects, saveProjects, type Project } from "./projects";
+import { launchProject, loadProjects, NO_PROJECT, saveProjects, type Project } from "./projects";
 import {
   hydrateSharedSettings,
   loadLocalConversations,
@@ -47,8 +47,8 @@ export async function loadInitial(): Promise<Startup> {
   const fresh: Conversation = reusable
     ? { ...reusable, project: lastUsed?.name ?? reusable.project, projectPath: lastUsed?.path ?? reusable.projectPath }
     : {
-        ...makeConversation(lastUsed?.name ?? "kana", DEFAULT_AGENT),
-        projectPath: lastUsed?.path,
+        ...makeConversation(lastUsed?.name ?? "Sans dossier", DEFAULT_AGENT),
+        projectPath: lastUsed?.path ?? NO_PROJECT,
       };
   const list = [fresh, ...conversations.filter((c) => c.id !== fresh.id)];
   await saveStoredConversations(list).catch(() => {});
