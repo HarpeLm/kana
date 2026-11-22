@@ -188,8 +188,8 @@ export default function App({ startup }: { startup: Startup }) {
 
   // Le dossier où se trouve le travail de la conversation : son worktree, sinon son projet.
   const workPath = selected.worktree ?? (selected.projectPath !== NO_PROJECT ? selected.projectPath : undefined);
-  // Le résumé se relit quand l'agent finit un tour (`chat.busy` repasse à faux).
-  const sessionSummary = useSessionSummary(docks.showPlan && chat.messages.length > 0, workPath, chat.busy);
+  // Le résumé se relit dès que le panneau est ouvert (pour afficher la branche active immédiatement) et à la fin d'un tour.
+  const sessionSummary = useSessionSummary(docks.showPlan, workPath, chat.busy);
   const artifactPaths = (sessionSummary.summary?.changed ?? [])
     .filter((f) => isArtifactPath(f.path) || (f.status === "added" && /\.(html?|svg|png|jpe?g|gif|webp|pdf)$/i.test(f.path)))
     .map((f) => f.path);
