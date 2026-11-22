@@ -63,27 +63,75 @@ pub struct FilePreview {
     pub text: String,
 }
 
-/// Les fichiers suivis et non suivis du dépôt, sans ceux que `.gitignore` écarte.
-pub fn list_files(repo: &Path) -> Result<FileList, GitError> {
-    let root = repo_root(repo)?;
-    let out = git(&root, &["ls-files", "-z", "--cached", "--others", "--exclude-standard"], &[])?;
+/// Racine d'un dossier de travail : la racine Git s'il s'agit d'un dépôt, sinon le dossier lui-même
+/// (permet aux dossiers ordinaires et à `~/.kana/scratch` d'ouvrir et modifier leurs fichiers et artéfacts).
+fn workspace_root(dir: &Path) -> Result<PathBuf, GitError> {
+    if let Ok(root) = repo_root(dir) {
+        return Ok(root);
+    }
+    if dir.is_dir() {
+        return fs::canonicalize(dir).map_err(|e| GitError::Read(e.to_string()));
+    }
+    Err(GitError::NotARepository(dir.display().to_string()))
+}
 
-    let mut files: Vec<String> = out
-        .split('\0')
-        .filter(|path| !path.is_empty())
-        // Un fichier suivi mais supprimé du disque n'a rien à montrer.
-        .filter(|path| root.join(path).is_file())
-        .map(str::to_owned)
-        .collect();
+fn walk_plain_dir(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
+    if depth > 8 || out.len() > MAX_FILES {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        if out.len() > MAX_FILES {
+            return;
+        }
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if matches!(name_str.as_ref(), ".git" | "node_modules" | "target" | ".DS_Store") {
+            continue;
+        }
+        if path.is_dir() {
+            walk_plain_dir(root, &path, depth + 1, out);
+        } else if path.is_file()
+            && let Ok(rel) = path.strip_prefix(root)
+        {
+            out.push(rel.to_string_lossy().replace('\\', "/"));
+        }
+    }
+}
+
+/// Les fichiers suivis et non suivis du dépôt (sans `.gitignore`), ou les fichiers d'un dossier ordinaire.
+pub fn list_files(repo: &Path) -> Result<FileList, GitError> {
+    if let Ok(root) = repo_root(repo) {
+        let out = git(&root, &["ls-files", "-z", "--cached", "--others", "--exclude-standard"], &[])?;
+
+        let mut files: Vec<String> = out
+            .split('\0')
+            .filter(|path| !path.is_empty())
+            // Un fichier suivi mais supprimé du disque n'a rien à montrer.
+            .filter(|path| root.join(path).is_file())
+            .map(str::to_owned)
+            .collect();
+        files.sort();
+        files.dedup();
+
+        let truncated = files.len() > MAX_FILES;
+        files.truncate(MAX_FILES);
+        // Les modifications sont un plus : un échec ne doit pas empêcher d'afficher les fichiers.
+        let changes = changed_files(&root).unwrap_or_default();
+        let symbols = extract_symbols(&root, &files);
+        return Ok(FileList { root: root.display().to_string(), files, truncated, changes, symbols });
+    }
+
+    let root = workspace_root(repo)?;
+    let mut files = Vec::new();
+    walk_plain_dir(&root, &root, 0, &mut files);
     files.sort();
     files.dedup();
-
     let truncated = files.len() > MAX_FILES;
     files.truncate(MAX_FILES);
-    // Les modifications sont un plus : un échec ne doit pas empêcher d'afficher les fichiers.
-    let changes = changed_files(&root).unwrap_or_default();
     let symbols = extract_symbols(&root, &files);
-    Ok(FileList { root: root.display().to_string(), files, truncated, changes, symbols })
+    Ok(FileList { root: root.display().to_string(), files, truncated, changes: Vec::new(), symbols })
 }
 
 fn is_code_file(path: &str) -> bool {
@@ -207,9 +255,9 @@ fn resolve_inside(root: &Path, relative: &str) -> Result<PathBuf, GitError> {
     Ok(full)
 }
 
-/// Met un fichier du dépôt à la corbeille (macOS : `~/.Trash`, on peut le récupérer) ; ailleurs, il est supprimé.
+/// Met un fichier du dépôt ou dossier à la corbeille (macOS : `~/.Trash`, on peut le récupérer) ; ailleurs, il est supprimé.
 pub fn trash_file(repo: &Path, relative: &str) -> Result<(), GitError> {
-    let root = repo_root(repo)?;
+    let root = workspace_root(repo)?;
     let full = resolve_inside(&root, relative)?;
     let trash = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".Trash")).filter(|t| t.is_dir());
     if let (true, Some(trash)) = (cfg!(target_os = "macos"), trash) {
@@ -240,9 +288,9 @@ fn modified_ms(path: &Path) -> Result<u64, GitError> {
     Ok(modified.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64))
 }
 
-/// Lit le début d'un fichier du dépôt.
+/// Lit le début d'un fichier du dépôt ou dossier.
 pub fn read_preview(repo: &Path, relative: &str) -> Result<FilePreview, GitError> {
-    let root = repo_root(repo)?;
+    let root = workspace_root(repo)?;
     let full = resolve_inside(&root, relative)?;
 
     let size = fs::metadata(&full).map_err(|e| GitError::Read(e.to_string()))?.len();
@@ -276,7 +324,7 @@ pub fn write_text(
     if content.len() > MAX_WRITE_BYTES {
         return Err(GitError::Write(format!("fichier trop volumineux (max {} Mo)", MAX_WRITE_BYTES / 1024 / 1024)));
     }
-    let root = repo_root(repo)?;
+    let root = workspace_root(repo)?;
     let full = resolve_inside(&root, relative)?;
 
     if let Some(expected) = expected_modified
@@ -828,5 +876,25 @@ apps/desktop/src/components/FilesDock.tsx:62:11 - error TS2551: Property 'openFi
         assert_eq!(diags[2].code.as_deref(), Some("TS2322"));
         assert_eq!(diags[3].file, "apps/desktop/src/components/FilesDock.tsx");
         assert_eq!(diags[3].code.as_deref(), Some("TS2551"));
+    }
+
+    #[test]
+    fn lists_reads_and_writes_in_non_git_folder() {
+        let dir = std::env::temp_dir().join(format!("kana-plain-folder-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("artefacts")).unwrap();
+        fs::write(dir.join("artefacts/jeu.html"), "<h1>Bonjour</h1>").unwrap();
+
+        let listed = list_files(&dir).unwrap();
+        assert_eq!(listed.files, vec!["artefacts/jeu.html"]);
+
+        let preview = read_preview(&dir, "artefacts/jeu.html").unwrap();
+        assert_eq!(preview.text, "<h1>Bonjour</h1>");
+
+        write_text(&dir, "artefacts/jeu.html", "<h1>Modifié</h1>", Some(preview.modified)).unwrap();
+        let updated = read_preview(&dir, "artefacts/jeu.html").unwrap();
+        assert_eq!(updated.text, "<h1>Modifié</h1>");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
