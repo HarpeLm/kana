@@ -69,6 +69,39 @@ pub fn describe_folder(path: String) -> ProjectInfo {
     info(PathBuf::from(path))
 }
 
+/// Ouvre un dossier ou sélectionne un fichier dans le Finder (macOS), l'explorateur (Windows) ou xdg-open (Linux).
+#[tauri::command]
+pub fn reveal_in_finder(path: String) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || trimmed == "none" {
+        return Err("aucun dossier à afficher".into());
+    }
+    let target = PathBuf::from(trimmed);
+    if !target.exists() {
+        return Err(format!("chemin introuvable : {trimmed}"));
+    }
+    #[cfg(target_os = "macos")]
+    let status = {
+        let mut cmd = std::process::Command::new("open");
+        if target.is_dir() {
+            cmd.arg(&target);
+        } else {
+            cmd.arg("-R").arg(&target);
+        }
+        cmd.status()
+    };
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("explorer").arg(&target).status();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = std::process::Command::new("xdg-open").arg(&target).status();
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        Ok(s) => Err(format!("impossible d'ouvrir le Finder (code {:?})", s.code())),
+        Err(e) => Err(format!("impossible d'ouvrir le Finder : {e}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
