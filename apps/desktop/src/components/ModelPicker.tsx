@@ -146,6 +146,9 @@ export default function ModelPicker({
                   <p className="max-w-[260px] text-[12px] leading-relaxed text-[#8c8b83]">
                     Connecte un fournisseur ou une clé d'API pour choisir tes modèles.
                   </p>
+                  <p className="max-w-[300px] truncate font-mono text-[11px] text-[#73726b]" title={error}>
+                    {error}
+                  </p>
                   {onOpenProviders && (
                     <button
                       type="button"
