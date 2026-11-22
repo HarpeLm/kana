@@ -1,7 +1,7 @@
 //! Commandes Tauri de l'écran Réglages : connexion des agents et clés d'API.
 
 use kana_acp::{
-    AcpClient, AcpError, AdapterCacheInfo, AgentModels, AuthMethod, adapter_cache_dir,
+    AcpClient, AcpError, AdapterCacheInfo, AgentModels, AuthMethod, ModelInfo, adapter_cache_dir,
     inspect_adapter_cache,
 };
 use serde::Serialize;
@@ -58,6 +58,122 @@ pub fn delete_api_key(agent: String) -> Result<(), String> {
     secrets::delete_api_key(&agent)
 }
 
+/// Extrait les modèles conversationnels (dont la gamme Gemini 4 Carbon / Neon / Hydrogen / Argon)
+/// depuis la réponse JSON de `GET /v1beta/models` de l'API Google Generative Language.
+pub(crate) fn parse_gemini_api_models(json_body: &str) -> Vec<ModelInfo> {
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(json_body) else {
+        return Vec::new();
+    };
+    let Some(items) = val.get("models").and_then(|m| m.as_array()) else {
+        return Vec::new();
+    };
+
+    let mut parsed: Vec<ModelInfo> = items
+        .iter()
+        .filter_map(|item| {
+            let raw_name = item.get("name")?.as_str()?;
+            let id = raw_name.strip_prefix("models/").unwrap_or(raw_name).trim();
+            let lower = id.to_lowercase();
+            if !lower.starts_with("gemini-") {
+                return None;
+            }
+            if lower.contains("embedding")
+                || lower.contains("imagen")
+                || lower.contains("veo")
+                || lower.contains("tts")
+                || lower.contains("aqa")
+                || lower.contains("robotics")
+            {
+                return None;
+            }
+            let methods = item.get("supportedGenerationMethods").and_then(|m| m.as_array());
+            let supports_generate = methods
+                .map(|arr| arr.iter().any(|m| m.as_str() == Some("generateContent")))
+                .unwrap_or(true);
+            if !supports_generate {
+                return None;
+            }
+            let display = item
+                .get("displayName")
+                .and_then(|d| d.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(id);
+            Some(ModelInfo {
+                id: id.to_string(),
+                name: display.to_string(),
+            })
+        })
+        .collect();
+
+    // Place les modèles Gemini 4 (Carbon, Neon, Hydrogen, Argon…) en tête de liste.
+    parsed.sort_by_key(|m| {
+        let l = m.id.to_lowercase();
+        let rank = if l.starts_with("gemini-4-carbon") {
+            0
+        } else if l.starts_with("gemini-4-neon") {
+            1
+        } else if l.starts_with("gemini-4-hydrogen") {
+            2
+        } else if l.starts_with("gemini-4-argon") {
+            3
+        } else if l.starts_with("gemini-4") {
+            4
+        } else if l.starts_with("gemini-3") {
+            5
+        } else if l.starts_with("gemini-2.5") {
+            6
+        } else {
+            7
+        };
+        (rank, m.id.clone())
+    });
+
+    parsed
+}
+
+async fn fetch_gemini_api_models(api_key: &str) -> Vec<ModelInfo> {
+    let mut cmd = tokio::process::Command::new("curl");
+    cmd.args([
+        "-fsSL",
+        "--max-time",
+        "6",
+        "-H",
+        &format!("x-goog-api-key: {api_key}"),
+        "https://generativelanguage.googleapis.com/v1beta/models?pageSize=100",
+    ])
+    .stdin(std::process::Stdio::null())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .kill_on_drop(true);
+
+    let Ok(Ok(out)) = tokio::time::timeout(std::time::Duration::from_secs(8), cmd.output()).await else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    parse_gemini_api_models(&String::from_utf8_lossy(&out.stdout))
+}
+
+fn merge_extra_models(models: &mut AgentModels, extras: Vec<ModelInfo>) {
+    if extras.is_empty() {
+        return;
+    }
+    // Insère les modèles live (ex. Gemini 4) juste après « Auto » s'il est en tête, sans doublon.
+    let insert_at = models
+        .available
+        .first()
+        .is_some_and(|m| m.id.eq_ignore_ascii_case("auto")) as usize;
+    let mut to_insert = Vec::new();
+    for extra in extras {
+        if !models.available.iter().any(|m| m.id.eq_ignore_ascii_case(&extra.id)) {
+            to_insert.push(extra);
+        }
+    }
+    models.available.splice(insert_at..insert_at, to_insert);
+}
+
 /// Les modèles qu'un agent propose. Lance l'agent un instant : à appeler à l'ouverture du sélecteur,
 /// l'interface garde le résultat en mémoire.
 #[tauri::command]
@@ -66,7 +182,16 @@ pub async fn list_models(agent: String) -> Result<AgentModels, String> {
     let dir = project_dir();
     let started = tokio::time::timeout(std::time::Duration::from_secs(45), AcpClient::spawn(&spec, &dir));
     match started.await {
-        Ok(Ok((client, _events))) => Ok(client.models().clone()),
+        Ok(Ok((client, _events))) => {
+            let mut models = client.models().clone();
+            if agent == "gemini"
+                && let Some(key) = secrets::get_api_key("gemini")
+            {
+                let live_models = fetch_gemini_api_models(&key).await;
+                merge_extra_models(&mut models, live_models);
+            }
+            Ok(models)
+        }
         Ok(Err(AcpError::AuthRequired(_))) => Err("connexion requise : ouvre les Réglages".into()),
         Ok(Err(error)) => Err(error.to_string()),
         Err(_) => Err("l'agent met trop de temps à répondre".into()),
@@ -289,13 +414,14 @@ pub async fn install_adapter_cache(agent_id: String) -> Result<AdapterCacheInfo,
     let npm_cmd = crate::agent_spec::resolve_command(npm_name, &path_env);
     let mut cmd = tokio::process::Command::new(&npm_cmd);
     cmd.env("PATH", &path_env);
+    let pkg_latest = format!("{}@latest", info.package);
     cmd.args([
         "install",
         "--prefix",
         &cache_dir.to_string_lossy(),
         "--no-audit",
         "--no-fund",
-        &info.package,
+        &pkg_latest,
     ])
     .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::piped())
@@ -707,6 +833,59 @@ mod tests {
         assert!(content.contains(".kana/daemon.log"));
 
         let _ = std::fs::remove_dir_all(&tmp_home);
+    }
+
+    #[test]
+    fn parses_gemini_4_models_and_prioritizes_carbon_neon_hydrogen() {
+        let sample = r#"{
+            "models": [
+                {
+                    "name": "models/gemini-2.5-pro",
+                    "displayName": "Gemini 2.5 Pro",
+                    "supportedGenerationMethods": ["generateContent"]
+                },
+                {
+                    "name": "models/text-embedding-004",
+                    "displayName": "Embedding",
+                    "supportedGenerationMethods": ["embedContent"]
+                },
+                {
+                    "name": "models/gemini-4-hydrogen",
+                    "displayName": "Gemini 4 Hydrogen",
+                    "supportedGenerationMethods": ["generateContent"]
+                },
+                {
+                    "name": "models/gemini-4-carbon",
+                    "displayName": "Gemini 4 Carbon",
+                    "supportedGenerationMethods": ["generateContent"]
+                },
+                {
+                    "name": "models/gemini-4-neon",
+                    "displayName": "Gemini 4 Neon",
+                    "supportedGenerationMethods": ["generateContent"]
+                }
+            ]
+        }"#;
+        let parsed = parse_gemini_api_models(sample);
+        let ids: Vec<&str> = parsed.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["gemini-4-carbon", "gemini-4-neon", "gemini-4-hydrogen", "gemini-2.5-pro"]);
+
+        let mut agent_models = AgentModels {
+            config_id: None,
+            current: Some("auto".into()),
+            available: vec![
+                ModelInfo { id: "auto".into(), name: "Auto".into() },
+                ModelInfo { id: "gemini-2.5-pro".into(), name: "gemini-2.5-pro".into() },
+            ],
+            effort: None,
+            modes: None,
+        };
+        merge_extra_models(&mut agent_models, parsed);
+        let merged_ids: Vec<&str> = agent_models.available.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(
+            merged_ids,
+            vec!["auto", "gemini-4-carbon", "gemini-4-neon", "gemini-4-hydrogen", "gemini-2.5-pro"]
+        );
     }
 
     #[test]
