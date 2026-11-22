@@ -574,6 +574,7 @@ export default function App({ startup }: { startup: Startup }) {
                           modelId={selected.modelId}
                           canSwitchProvider={!chat.busy}
                           onSelect={chooseModel}
+                          onOpenProviders={() => setSettingsOpen(true)}
                         />
                         <EffortPicker
                           agentId={selected.agentId}
