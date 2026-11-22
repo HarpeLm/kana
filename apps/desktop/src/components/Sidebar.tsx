@@ -85,16 +85,16 @@ export default function Sidebar({
     <div
       style={{ width: open ? width : 0 }}
       inert={!open}
-      className={`shrink-0 overflow-hidden motion-reduce:transition-none ${
+      className={`relative shrink-0 overflow-hidden motion-reduce:transition-none ${
         dragging ? "" : "transition-[width] duration-200 ease-out"
       }`}
     >
-      <aside
-        style={{ width }}
-        className={`relative flex h-full flex-col border-r border-[#2b2b28] bg-[#21211f] transition-opacity duration-200 ease-out motion-reduce:transition-none ${
-          open ? "opacity-100" : "opacity-0"
-        }`}
-      >
+      <div style={{ width }} className="relative h-full p-2 pr-1">
+        <aside
+          className={`flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1e1f22]/75 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_32px_rgba(0,0,0,0.42)] transition-opacity duration-200 ease-out motion-reduce:transition-none ${
+            open ? "opacity-100" : "opacity-0"
+          }`}
+        >
         <div className="flex h-[44px] shrink-0 items-center px-3">
           <NavButtons {...nav} />
         </div>
@@ -209,9 +209,10 @@ export default function Sidebar({
           onOpenSettings={onOpenSettings}
           onOpenSignIn={onOpenSignIn}
         />
+        </aside>
 
         <SidebarResizer dragging={dragging} onPointerDown={onResizeStart} />
-      </aside>
+      </div>
     </div>
   );
 }
