@@ -153,7 +153,7 @@ export default function AccountMenu({
             role="menu"
             aria-label={tr("Menu du compte", "Account menu", locale)}
             style={{ left: anchor.left, bottom: anchor.bottom }}
-            className="fixed z-50 w-[240px] rounded-2xl border border-[#3a3a36] bg-[#252523] p-1.5 text-[#ecebe4] shadow-[0_16px_44px_rgba(0,0,0,0.6)]"
+            className="fixed z-50 w-[240px] rounded-2xl border border-white/[0.09] bg-[#1e1f22]/85 p-1.5 text-[#ecebe4] backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_16px_44px_rgba(0,0,0,0.6)]"
           >
             <div className="px-2.5 py-1.5 text-[11.5px] font-medium text-[#8c8b83]">
               <span className="block truncate">
@@ -261,7 +261,7 @@ export default function AccountMenu({
                   <div
                     role="menu"
                     aria-label={tr("En savoir plus", "Learn more", locale)}
-                    className="w-[210px] rounded-2xl border border-[#3a3a36] bg-[#252523] p-1.5 shadow-[0_16px_44px_rgba(0,0,0,0.6)]"
+                    className="w-[210px] rounded-2xl border border-white/[0.09] bg-[#1e1f22]/85 p-1.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_16px_44px_rgba(0,0,0,0.6)]"
                   >
                     <button
                       type="button"
