@@ -1,5 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
+import { inTauri } from "../lib/env";
 import { useClickOutside } from "../hooks/useClickOutside";
 import ConversationMenuItem, { MenuDivider } from "./ConversationMenuItem";
 import {
@@ -238,8 +240,9 @@ export default function SessionPanel({
     setTimeout(() => setNotice(""), durationMs);
   };
 
-  const noProject = conversation.projectPath === NO_PROJECT;
   const projectPath = conversation.projectPath && conversation.projectPath !== NO_PROJECT ? conversation.projectPath : undefined;
+  const activeDir = workPath ?? projectPath;
+  const noProject = !activeDir;
   const tools: ToolCall[] = messages.flatMap((m) => m.tools);
   const running = tools.filter((t) => t.status === "pending" || t.status === "in_progress").length;
   const recent = tools.slice(-6).reverse();
@@ -288,23 +291,49 @@ export default function SessionPanel({
                 {conversation.projectPath && !noProject && <span className="text-[#8c8b83]"> · {home(conversation.projectPath)}</span>}
               </Row>
               {folderMenu && (
-                <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-[#41413d] bg-[#2b2b29] p-1 shadow-xl">
+                <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-xl border border-white/[0.09] bg-[#1e1f22]/95 p-1 backdrop-blur-2xl shadow-xl">
                   <ConversationMenuItem
                     label="Afficher dans le Finder"
                     onClick={() => {
                       setFolderMenu(false);
-                      const dir = workPath ?? conversation.projectPath;
-                      if (dir) void revealItemInDir(dir).catch(() => {});
+                      if (!activeDir) {
+                        showNotice("Aucun dossier associé à cette conversation.");
+                        return;
+                      }
+                      if (inTauri) {
+                        void invoke("reveal_in_finder", { path: activeDir }).catch((err) => {
+                          void revealItemInDir(activeDir).catch(() =>
+                            showNotice(`Impossible d'ouvrir le Finder : ${String(err)}`),
+                          );
+                        });
+                      } else {
+                        showNotice(`Dossier : ${activeDir}`);
+                      }
                     }}
                   />
                   <ConversationMenuItem
                     label="Ouvrir sur GitHub / GitLab / Forge"
                     onClick={() => {
                       setFolderMenu(false);
-                      void forgeUrl(workPath ?? conversation.projectPath).then((url) => {
-                        if (url) void openUrl(url).catch(() => {});
-                        else showNotice("Ce dossier n'a pas de dépôt distant.");
-                      });
+                      if (!activeDir) {
+                        showNotice("Aucun dossier associé à cette conversation.");
+                        return;
+                      }
+                      void forgeUrl(activeDir)
+                        .then((url) => {
+                          if (!url) {
+                            showNotice("Ce dossier n'a pas de dépôt distant.");
+                            return;
+                          }
+                          if (inTauri) {
+                            void openUrl(url).catch((err) =>
+                              showNotice(`Impossible d'ouvrir le lien : ${String(err)}`),
+                            );
+                          } else {
+                            window.open(url, "_blank", "noopener,noreferrer");
+                          }
+                        })
+                        .catch(() => showNotice("Ce dossier n'a pas de dépôt distant."));
                     }}
                   />
                   <MenuDivider />
@@ -312,8 +341,18 @@ export default function SessionPanel({
                     label="Copier le chemin"
                     onClick={() => {
                       setFolderMenu(false);
-                      const dir = workPath ?? conversation.projectPath;
-                      if (dir) void navigator.clipboard?.writeText(dir).catch(() => {});
+                      if (!activeDir) {
+                        showNotice("Aucun dossier associé à cette conversation.");
+                        return;
+                      }
+                      if (navigator.clipboard?.writeText) {
+                        void navigator.clipboard
+                          .writeText(activeDir)
+                          .then(() => showNotice("Chemin copié dans le presse-papiers.", 3000))
+                          .catch(() => showNotice(`Chemin : ${activeDir}`, 4000));
+                      } else {
+                        showNotice(`Chemin : ${activeDir}`, 4000);
+                      }
                     }}
                   />
                   <ConversationMenuItem
@@ -321,7 +360,14 @@ export default function SessionPanel({
                     disabled={!canAddFolder}
                     onClick={() => {
                       setFolderMenu(false);
-                      void pickFiles(true).then(([path]) => path && onAddFolder(path)).catch(() => {});
+                      void pickFiles(true)
+                        .then(([path]) => {
+                          if (path) {
+                            onAddFolder(path);
+                            showNotice("Dossier ajouté à la session.", 3000);
+                          }
+                        })
+                        .catch((err) => showNotice(`Impossible d'ajouter un dossier : ${String(err)}`));
                     }}
                   />
                   <MenuDivider />
