@@ -12,13 +12,9 @@ import { contextWindowFor, useModelWindowsVersion } from "../../lib/contextWindo
 import { AGENTS } from "../../data";
 import { tr, useLocale } from "../../lib/i18n";
 import {
-  EMPTY_USAGE,
   formatCostUsd,
   formatTokens,
   problemOf,
-  totalCostTodayUsd,
-  usageForProject,
-  usageForSession,
   usageToday,
   useUsageVersion,
 } from "../../lib/usage";
@@ -135,38 +131,6 @@ export default function SessionMemoryUsageCard({
             />
           </div>
         </div>
-        {(() => {
-          const sessionUsage = usageForSession(conversation.id);
-          const projectUsage = projectPath ? usageForProject(projectPath) : EMPTY_USAGE;
-          const todayCost = totalCostTodayUsd();
-          const hasCache = sessionUsage.cacheReadTokens > 0 || sessionUsage.cacheWriteTokens > 0;
-          return (
-            <div className="mb-2 space-y-1 rounded-xl border border-[#2f2f2c] bg-[#1b1b19] px-2.5 py-2 text-[12px]">
-              <div className="flex items-center justify-between text-[#dcdbd3]">
-                <span>{tr("Coût session", "Session cost", locale)}</span>
-                <span className="font-mono text-[#ecebe4]">{formatCostUsd(sessionUsage.costUsd)}</span>
-              </div>
-              {hasCache && (
-                <div className="flex items-center justify-between text-[11.5px] text-[#8c8b83]">
-                  <span>{tr("Cache (lecture / écriture)", "Cache (read / write)", locale)}</span>
-                  <span className="font-mono">
-                    {formatTokens(sessionUsage.cacheReadTokens)} / {formatTokens(sessionUsage.cacheWriteTokens)}
-                  </span>
-                </div>
-              )}
-              {projectPath && (
-                <div className="flex items-center justify-between text-[#8c8b83]">
-                  <span>{tr("Coût projet", "Project cost", locale)}</span>
-                  <span className="font-mono text-[#c4c3bc]">{formatCostUsd(projectUsage.costUsd)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-[#8c8b83]">
-                <span>{tr("Coût du jour", "Today's cost", locale)}</span>
-                <span className="font-mono text-[#c4c3bc]">{formatCostUsd(todayCost)}</span>
-              </div>
-            </div>
-          );
-        })()}
         <div className="flex items-center gap-3 px-1 pb-2">
           <span className="min-w-0 flex-1 truncate text-[12.5px] text-[#8c8b83]">
             {compacted
