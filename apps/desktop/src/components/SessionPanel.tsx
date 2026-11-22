@@ -387,12 +387,32 @@ export default function SessionPanel({
                 <span className="text-[#8c8b83]"> · ajouté</span>
               </Row>
             ))}
-            {(summary?.base ?? summary?.branch) && (
+            {!noProject && (summary?.branch ?? summary?.base ?? conversation.branch) && (
               <Row
                 icon={<GitBranch className="h-4 w-4" strokeWidth={1.7} />}
-                title={summary?.branch && summary.branch !== summary.base ? `Le travail est sur la branche ${summary.branch}` : undefined}
+                onClick={() => {
+                  if (!activeDir) return;
+                  void forgeUrl(activeDir)
+                    .then((url) => {
+                      if (!url) {
+                        showNotice("Ce dossier n'a pas de dépôt distant.");
+                        return;
+                      }
+                      if (inTauri) {
+                        void openUrl(url).catch((err) => showNotice(`Impossible d'ouvrir le lien : ${String(err)}`));
+                      } else {
+                        window.open(url, "_blank", "noopener,noreferrer");
+                      }
+                    })
+                    .catch(() => showNotice("Ce dossier n'a pas de dépôt distant."));
+                }}
+                title={
+                  summary?.branch && summary.branch !== summary.base
+                    ? `Branche active : ${summary.branch} (cliquer pour ouvrir le dépôt)`
+                    : "Cliquer pour ouvrir le dépôt GitHub / GitLab"
+                }
               >
-                {summary?.base ?? summary?.branch}
+                {summary?.branch ?? summary?.base ?? conversation.branch}
               </Row>
             )}
             <SessionHandoffControls
