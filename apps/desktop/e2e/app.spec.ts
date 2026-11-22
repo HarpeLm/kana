@@ -1165,15 +1165,15 @@ test("écran d'accueil nouvelle session : mise en page épurée centrée (style 
   await expect(page.getByRole("heading", { name: "Que voulez-vous créer ?" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
 
-  // Actions rapides discrètes sur une ligne sous le Composer
-  await expect(page.getByRole("button", { name: "Corriger & tester", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Cross-Review", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Vérifier dans Globe", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "/advisor", exact: true })).toBeVisible();
+  // Les 4 anciennes bulles d'amorce ne doivent plus encombrer l'écran d'accueil
+  await expect(page.getByRole("button", { name: "Corriger & tester", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cross-Review", exact: true })).toHaveCount(0);
 
-  // Cliquer sur « Corriger & tester » lance immédiatement la conversation
-  await page.getByRole("button", { name: "Corriger & tester", exact: true }).click();
-  await expect(page.getByText(/Analyse les erreurs récentes du dépôt/).first()).toBeVisible();
+  // Envoyer un message fait glisser le Composer vers le bas et masque l'accroche
+  const composer = page.getByRole("textbox", { name: "Message" });
+  await composer.fill("Bonjour depuis la transition fluide");
+  await composer.press("Enter");
+  await expect(page.getByText("Bonjour depuis la transition fluide").first()).toBeVisible();
 
   expect(errors).toEqual([]);
 });
