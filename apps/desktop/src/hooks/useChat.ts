@@ -109,6 +109,9 @@ export function useChat(
   const saved = useRef(new Map<string, ChatMessage[]>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const threadPathsRef = useRef(new Map<string, { cwd?: string; projectPath?: string }>());
+  /** Compteur d'annulation par fil : abandonne un `startAgent` encore en cours si l'utilisateur clique Arrêter. */
+  const cancelGenRef = useRef(new Map<string, number>());
+  const stopTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const prepareRef = useRef(prepare);
   useEffect(() => {
     prepareRef.current = prepare;
@@ -220,10 +223,20 @@ export function useChat(
           void runMatchingHooks("PostToolUse", target, paths?.cwd, paths?.projectPath);
         }
       } else if (event.kind === "done") {
+        const pendingStop = stopTimersRef.current.get(event.threadId);
+        if (pendingStop) {
+          clearTimeout(pendingStop);
+          stopTimersRef.current.delete(event.threadId);
+        }
         const paths = threadPathsRef.current.get(event.threadId);
         void runMatchingHooks("Stop", event.stop_reason || "done", paths?.cwd, paths?.projectPath);
         watch?.onDone?.(event.threadId);
       } else if (event.kind === "error") {
+        const pendingStop = stopTimersRef.current.get(event.threadId);
+        if (pendingStop) {
+          clearTimeout(pendingStop);
+          stopTimersRef.current.delete(event.threadId);
+        }
         watch?.onError?.(event.threadId, event.message);
         update(event.threadId, (chat) =>
           applyEvent(chat, { ...event, message: translateRustError(redactSecrets(event.message)) }),
@@ -265,13 +278,16 @@ export function useChat(
       if (text.trim() === "/compact" && chatsRef.current[targetThreadId]?.context) {
         userMessage.contextBefore = chatsRef.current[targetThreadId].context!.used;
       }
+      const turnGen = cancelGenRef.current.get(targetThreadId) ?? 0;
       update(targetThreadId, (chat) => addUserMessage(chat, text, userMessage));
       try {
         const { cwd, projectPath, preface, carried, model, effort, acpSessionId, environment, mcpServers } =
           await prepareRef.current(targetThreadId);
+        if ((cancelGenRef.current.get(targetThreadId) ?? 0) !== turnGen) return;
         threadPathsRef.current.set(targetThreadId, { cwd, projectPath });
         if (!targetThreadId.startsWith("side:")) {
           const checkpoint = await createCheckpoint(userMessage.id, cwd ?? projectPath).catch(() => null);
+          if ((cancelGenRef.current.get(targetThreadId) ?? 0) !== turnGen) return;
           if (checkpoint) {
             saveThreadCheckpoint(targetThreadId, userMessage.id, checkpoint);
             update(targetThreadId, (chat) => attachCheckpointToMessage(chat, userMessage.id, checkpoint));
@@ -287,15 +303,21 @@ export function useChat(
           environment,
           mcpServers,
         );
+        if ((cancelGenRef.current.get(targetThreadId) ?? 0) !== turnGen) {
+          void stopAgent(targetThreadId).catch(() => {});
+          return;
+        }
         observerRef.current?.onSession?.(targetThreadId, started.sessionId);
         const activeMode = modeOverride ?? modeRef.current;
         // En plan, l'agent passe dans son propre mode lecture seule quand il en a un ; sinon Kana refuse les modifications (voir autoAnswer).
         await setPlanMode(targetThreadId, activeMode === "plan").catch(() => false);
+        if ((cancelGenRef.current.get(targetThreadId) ?? 0) !== turnGen) return;
         const resume = !started.resumed && !carried ? buildResumeContext(priorMessages) : "";
         const prefix = !started.resumed ? `${preface ?? ""}${resume}` : carried ? (preface ?? "") : "";
         const expanded = expandSkillCommand(text, projectPath);
         await sendPrompt(targetThreadId, promptFor(activeMode, `${prefix}${expanded}`), imagePathsIn(expanded));
       } catch (error) {
+        if ((cancelGenRef.current.get(targetThreadId) ?? 0) !== turnGen) return;
         const raw = String(error);
         update(targetThreadId, (chat) => addError(chat, translateRustError(redactSecrets(raw))));
         observerRef.current?.onError?.(targetThreadId, raw);
@@ -317,12 +339,49 @@ export function useChat(
     [threadId, update],
   );
 
+  /** Force l'arrêt propre d'un tour bloqué (agent qui ne répond pas à `session/cancel` ou encore en démarrage). */
+  const forceStopThread = useCallback(
+    (id: string) => {
+      const pending = stopTimersRef.current.get(id);
+      if (pending) {
+        clearTimeout(pending);
+        stopTimersRef.current.delete(id);
+      }
+      void stopAgent(id).catch(() => {});
+      update(id, (chat) => (chat.busy ? applyEvent(chat, { kind: "done", stop_reason: "cancelled" }) : chat));
+    },
+    [update],
+  );
+
+  /** Demande l'annulation ACP, puis force l'arrêt si l'agent échoue ou ne libère pas `busy` sous 700 ms. */
+  const interruptThread = useCallback(
+    (id: string) => {
+      cancelGenRef.current.set(id, (cancelGenRef.current.get(id) ?? 0) + 1);
+      // Un second clic sur Arrêter pendant le délai de grâce coupe immédiatement sans attendre.
+      if (stopTimersRef.current.has(id)) {
+        forceStopThread(id);
+        return;
+      }
+      const timer = setTimeout(() => {
+        stopTimersRef.current.delete(id);
+        if (chatsRef.current[id]?.busy) {
+          forceStopThread(id);
+        }
+      }, 700);
+      stopTimersRef.current.set(id, timer);
+      cancelPrompt(id).catch(() => {
+        forceStopThread(id);
+      });
+    },
+    [forceStopThread],
+  );
+
   const steerQueued = useCallback(
     (index: number) => {
       update(threadId, (chat) => prioritizeQueuedMessage(chat, index));
-      cancelPrompt(threadId).catch(() => {});
+      interruptThread(threadId);
     },
-    [threadId, update],
+    [threadId, update, interruptThread],
   );
 
   // Dès que le tour courant s'achève, le message suivant en file d'attente part automatiquement.
@@ -344,8 +403,8 @@ export function useChat(
   }, [threadId, activeBusy, queuedCount, send, update]);
 
   const stop = useCallback(() => {
-    cancelPrompt(threadId).catch(() => {});
-  }, [threadId]);
+    interruptThread(threadId);
+  }, [threadId, interruptThread]);
 
   const answer = useCallback(
     (requestId: string, optionId: string | null) => {
